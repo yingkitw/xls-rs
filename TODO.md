@@ -6,17 +6,17 @@
 
 ## Parity work (library ↔ CLI ↔ MCP)
 
-- [ ] Define a single “capability catalog” (operations + I/O formats + options) and track parity gaps.
+- [x] Define a single “capability catalog” (operations + I/O formats + options) and track parity gaps. (`src/capability_catalog.rs`)
 - [ ] Ensure every CLI command maps 1:1 to a library entry point (no hidden behavior in CLI).
 - [ ] Ensure every MCP tool maps 1:1 to a library entry point (no bespoke MCP-only logic).
 - [ ] Normalize error surface:
   - [ ] Stable error codes/messages for CLI + MCP (same root causes, same wording)
   - [ ] Structured MCP error payloads with actionable fields (file, sheet, range, row/col)
-- [ ] Add parity tests that run the same use case through:
-  - [ ] library API
-  - [ ] CLI command
-  - [ ] MCP tool
-  - and compare outputs (or normalized equivalence)
+- [~] Add parity tests that run the same use case through:
+  - [x] library API
+  - [x] CLI command (smoke) (`tests/test_parity_smoke.rs`)
+  - [ ] MCP tool (needs harness)
+  - [ ] compare normalized outputs for deterministic parity
 
 ## XLS/XLSX manipulation (core)
 
@@ -47,20 +47,21 @@
 
 ## CLI UX & reliability
 
-- [ ] Add `--config <path>` to override config discovery.
-- [ ] Add `xls-rs examples generate` (or similar) to generate `examples/` artifacts deterministically.
+- [x] Add `--config <path>` to override config discovery.
+- [x] Add `--quiet` and `--verbose` modes.
+- [x] Add guardrails for destructive overwrites (`--overwrite` required).
+- [x] Add `xls-rs examples-generate` to generate `examples/` artifacts deterministically.
 - [ ] Add `--format` defaults that are consistent with config + subcommands.
 - [ ] Improve output consistency:
   - [ ] data output goes to stdout
   - [ ] progress/logs go to stderr
-- [ ] Add `--quiet` and `--verbose` modes.
 
 ## MCP server (tooling completeness)
 
 - [ ] Tool naming: consistent verbs and nouns (read/write/convert/sort/filter/…).
 - [ ] Add missing tools for advanced operations (validation/profile/chart/encrypt/batch/stream) if not already exposed.
 - [ ] Ensure MCP tools accept the same option schema as CLI flags (sheet, range, format, etc.).
-- [ ] Add an MCP “capabilities” tool that returns the supported operations + formats at runtime.
+- [x] Add an MCP “capabilities” tool that returns the supported operations + formats at runtime.
 
 ## Performance & large files
 
@@ -73,11 +74,10 @@
 
 - [ ] Keep CSV formula-injection sanitization consistent across all write paths.
 - [ ] Path validation rules consistent for CLI commands that write files.
-- [ ] Add guardrails for destructive overwrites (`--overwrite` required).
 
 ## Testing & fixtures
 
-- [ ] Consolidate example/fixture generation in one place and make it deterministic.
+- [x] Consolidate example/fixture generation in one place and make it deterministic (CLI `examples-generate` + test fixtures).
 - [ ] Add golden-file tests for XLSX writer output structure (beyond current smoke checks).
 - [ ] Add property-like tests for range parsing and column name resolution.
 
