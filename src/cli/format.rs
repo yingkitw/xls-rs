@@ -1,5 +1,6 @@
 //! Output format options for the read command
 
+use anyhow::Result;
 use clap::ValueEnum;
 
 /// Output format for read command
@@ -22,6 +23,35 @@ pub enum OutputFormat {
 }
 
 impl OutputFormat {
+    /// Parse values allowed in `default_format` (config) or CLI strings.
+    pub fn from_config_str(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "csv" => Some(Self::Csv),
+            "json" => Some(Self::Json),
+            "jsonl" | "ndjson" => Some(Self::Jsonl),
+            "markdown" | "md" => Some(Self::Markdown),
+            _ => None,
+        }
+    }
+
+    /// If `explicit` is set, use it; otherwise `default_format` from config, else CSV.
+    pub fn resolve_for_read(explicit: Option<Self>) -> Result<Self> {
+        if let Some(f) = explicit {
+            return Ok(f);
+        }
+        let cfg = crate::cli::runtime::load_cli_config()?;
+        if let Some(ref s) = cfg.default_format {
+            if let Some(f) = Self::from_config_str(s) {
+                return Ok(f);
+            }
+            anyhow::bail!(
+                "Invalid default_format in config: {:?}. Use csv, json, jsonl, or markdown.",
+                s
+            );
+        }
+        Ok(Self::Csv)
+    }
+
     /// Get the file extension for this format
     pub fn extension(&self) -> &'static str {
         match self {

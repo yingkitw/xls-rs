@@ -3,7 +3,7 @@
 use crate::config::Config;
 use crate::csv_handler::CellRange;
 use crate::traits::{DataReader, DataWriteOptions, DataWriter, FileHandler};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use tokio::runtime::Runtime;
 
 /// Handler for Google Sheets operations
@@ -140,6 +140,57 @@ impl GoogleSheetsHandler {
             range_str
         }
     }
+
+    /// List sheet titles for a spreadsheet using the Google Sheets API.
+    ///
+    /// Requires `google_sheets.api_key` in [`Config`] (suitable for public spreadsheets when the
+    /// Sheets API is enabled for the key).
+    pub fn list_sheet_titles(&self, spreadsheet_ref: &str) -> Result<Vec<String>> {
+        let api_key = self.config.google_sheets.api_key.as_deref().ok_or_else(|| {
+            anyhow!(
+                "google_sheets.api_key is not set in config; required to list sheet titles via the API"
+            )
+        })?;
+
+        let id = self.parse_spreadsheet_id(spreadsheet_ref)?;
+        let url = format!(
+            "https://sheets.googleapis.com/v4/spreadsheets/{id}?fields=sheets.properties.title&key={api_key}"
+        );
+
+        let resp = ureq::get(&url)
+            .call()
+            .map_err(|e| anyhow!("Google Sheets request failed: {}", e))?;
+
+        let status = resp.status();
+        let body = resp
+            .into_string()
+            .map_err(|e| anyhow!("Failed to read Sheets API response: {}", e))?;
+
+        if status != 200 {
+            anyhow::bail!("Google Sheets API returned HTTP {}: {}", status, body);
+        }
+
+        let v: serde_json::Value =
+            serde_json::from_str(&body).with_context(|| "Invalid JSON from Sheets API")?;
+
+        let sheets = v
+            .get("sheets")
+            .and_then(|s| s.as_array())
+            .ok_or_else(|| anyhow!("Sheets API response missing 'sheets' array"))?;
+
+        let mut titles = Vec::new();
+        for sheet in sheets {
+            if let Some(title) = sheet
+                .get("properties")
+                .and_then(|p| p.get("title"))
+                .and_then(|t| t.as_str())
+            {
+                titles.push(title.to_string());
+            }
+        }
+
+        Ok(titles)
+    }
 }
 
 impl Default for GoogleSheetsHandler {
@@ -155,8 +206,7 @@ impl DataReader for GoogleSheetsHandler {
         let _spreadsheet_id = self.parse_spreadsheet_id(path)?;
         let _sheet_name = self.parse_sheet_name(path);
 
-        // TODO: Implement actual Google Sheets API call
-        // For now, return sample data
+        // Full read/write requires OAuth or service-account auth; not implemented here.
         Ok(vec![
             vec!["Column1".to_string(), "Column2".to_string()],
             vec!["Value1".to_string(), "Value2".to_string()],
@@ -172,7 +222,7 @@ impl DataReader for GoogleSheetsHandler {
         let _sheet_name = self.parse_sheet_name(path);
         let _range_str = self.cell_range_to_a1(range, _sheet_name.as_deref());
 
-        // TODO: Implement actual Google Sheets API call for range
+        // Same as [`Self::read`]: live API access is not wired for this path yet.
         Ok(vec![vec![
             "RangeValue1".to_string(),
             "RangeValue2".to_string(),
@@ -199,7 +249,7 @@ impl DataWriter for GoogleSheetsHandler {
         let spreadsheet_id = self.parse_spreadsheet_id(path)?;
         let sheet_name = options.sheet_name.or_else(|| self.parse_sheet_name(path));
 
-        // TODO: Implement actual Google Sheets API call to write data
+        // Live API write not implemented; logs intent only.
         println!("Writing to Google Sheets: {}", spreadsheet_id);
         if let Some(name) = &sheet_name {
             println!("Sheet: {}", name);
@@ -220,7 +270,7 @@ impl DataWriter for GoogleSheetsHandler {
         let sheet_name = self.parse_sheet_name(path);
         let start_a1 = self.row_col_to_a1(start_row, start_col);
 
-        // TODO: Implement actual Google Sheets API call to write range
+        // Live API write not implemented; logs intent only.
         println!("Writing range to Google Sheets: {}", spreadsheet_id);
         if let Some(name) = &sheet_name {
             println!("Sheet: {}", name);
@@ -235,7 +285,7 @@ impl DataWriter for GoogleSheetsHandler {
         let spreadsheet_id = self.parse_spreadsheet_id(path)?;
         let sheet_name = self.parse_sheet_name(path);
 
-        // TODO: Implement actual Google Sheets API call to append data
+        // Live API append not implemented; logs intent only.
         println!("Appending to Google Sheets: {}", spreadsheet_id);
         if let Some(name) = &sheet_name {
             println!("Sheet: {}", name);

@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use crate::capabilities::{CapabilityRegistry, SortCapability, FilterCapability, WorkflowCapability};
+use crate::capabilities::{
+    CapabilityRegistry, ConvertCapability, FilterCapability, SortCapability, WorkflowCapability,
+};
 use rmcp::handler::server::tool::ToolRouter;
 use crate::capability_catalog;
 
@@ -29,6 +31,16 @@ pub struct SortRequest {
     pub column: String,
     #[schemars(description = "Sort in ascending order (default: true)")]
     pub ascending: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ConvertRequest {
+    #[schemars(description = "Input file path")]
+    pub input: String,
+    #[schemars(description = "Output file path")]
+    pub output: String,
+    #[schemars(description = "Optional sheet name when reading Excel or ODS")]
+    pub sheet: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -55,10 +67,14 @@ pub struct ExecuteWorkflowRequest {
 pub struct CapabilitiesRequest {}
 
 fn make_error(msg: String) -> McpError {
+    let detail = msg.clone();
     McpError {
         code: ErrorCode::INTERNAL_ERROR,
         message: Cow::from(msg),
-        data: None,
+        data: Some(serde_json::json!({
+            "kind": "xls_rs_error",
+            "detail": detail,
+        })),
     }
 }
 
@@ -70,6 +86,7 @@ impl XlsRsMcpServer {
         // Register capabilities
         registry.register(Arc::new(SortCapability));
         registry.register(Arc::new(FilterCapability));
+        registry.register(Arc::new(ConvertCapability));
         registry.register(Arc::new(WorkflowCapability::new()));
         
         Self {
@@ -88,6 +105,18 @@ impl XlsRsMcpServer {
         match self.registry.execute("sort", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
             Err(e) => Err(make_error(format!("Failed to sort: {}", e))),
+        }
+    }
+
+    #[tool(description = "Convert a spreadsheet file to another format (csv, xlsx, parquet, avro, ods, …)")]
+    async fn convert_data(
+        &self,
+        request: Parameters<ConvertRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
+        match self.registry.execute("convert", args) {
+            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
+            Err(e) => Err(make_error(format!("Failed to convert: {}", e))),
         }
     }
 
@@ -154,7 +183,7 @@ impl ServerHandler for XlsRsMcpServer {
             server_info: Implementation::from_build_env(),
             instructions: Some(
                 "A spreadsheet tool for reading, writing, converting CSV and Excel files with formula support. \
-                Use sort_data to sort files, filter_data to filter rows, and execute_workflow to run complex pipelines."
+                Use convert_data to change formats, sort_data / filter_data for row operations, and execute_workflow for pipelines."
                     .to_string(),
             ),
         }

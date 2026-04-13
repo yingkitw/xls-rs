@@ -43,6 +43,21 @@ fn test_read_excel_sales_example() {
 }
 
 #[test]
+fn test_read_missing_sheet_name_lists_available() {
+    ensure_examples();
+    let handler = ExcelHandler::new();
+    let path = common::example_path("sales.xlsx");
+    let err = handler
+        .read_with_sheet(&path, Some("NoSuchSheet"))
+        .unwrap_err();
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("NoSuchSheet") && msg.contains("Available sheets"),
+        "{msg}"
+    );
+}
+
+#[test]
 fn test_read_excel_employees_example() {
     ensure_examples();
     let handler = ExcelHandler::new();

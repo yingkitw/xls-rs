@@ -1,11 +1,10 @@
 //! Workflow capability
 
 use crate::capabilities::{Capability, CapabilityMetadata};
-use crate::workflow::{WorkflowExecutor, WorkflowConfig};
+use crate::workflow::{WorkflowConfig, WorkflowExecutor};
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tempfile::Builder;
 
 pub struct WorkflowCapability {
     executor: Arc<WorkflowExecutor>,
@@ -61,17 +60,8 @@ impl Capability for WorkflowCapability {
         // Validate workflow structure
         let config: WorkflowConfig = serde_json::from_value(workflow_json.clone())
             .context("Invalid workflow configuration format")?;
-            
-        // Write to temp file because WorkflowExecutor currently expects a file path
-        // TODO: Refactor WorkflowExecutor to accept config object directly
-        let temp_file = Builder::new()
-            .suffix(".json")
-            .tempfile()?;
-        let temp_path = temp_file.path().to_str().unwrap();
-        
-        std::fs::write(temp_path, serde_json::to_string(&config)?)?;
-        
-        self.executor.execute(temp_path)?;
+
+        self.executor.execute_config(&config)?;
         
         Ok(json!({
             "status": "success",

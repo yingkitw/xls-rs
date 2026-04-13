@@ -93,11 +93,20 @@ impl ParquetHandler {
         data: &[Vec<String>],
         column_names: Option<&[String]>,
     ) -> Result<()> {
-        if data.is_empty() {
-            anyhow::bail!("Cannot write empty data to Parquet");
-        }
+        let num_cols = match column_names {
+            Some(names) if names.is_empty() => {
+                anyhow::bail!("Column names cannot be empty");
+            }
+            Some(names) => names.len(),
+            None if data.is_empty() => {
+                anyhow::bail!("Cannot write empty data to Parquet");
+            }
+            None => max_column_count(data),
+        };
 
-        let num_cols = max_column_count(data);
+        if num_cols == 0 {
+            anyhow::bail!("Cannot write Parquet with zero columns");
+        }
 
         // Generate column names if not provided
         let col_names: Vec<String> = column_names
@@ -216,7 +225,14 @@ impl DataReader for ParquetHandler {
 
 impl DataWriter for ParquetHandler {
     fn write(&self, path: &str, data: &[Vec<String>], options: DataWriteOptions) -> Result<()> {
-        self.write(path, data, options.column_names.as_deref())
+        if let Some(ref names) = options.column_names {
+            return self.write(path, data, Some(names.as_slice()));
+        }
+        if options.include_headers && !data.is_empty() {
+            let body = data.get(1..).unwrap_or(&[]);
+            return self.write(path, body, Some(&data[0]));
+        }
+        self.write(path, data, None)
     }
 
     fn write_range(

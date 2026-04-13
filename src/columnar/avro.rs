@@ -75,11 +75,20 @@ impl AvroHandler {
         data: &[Vec<String>],
         field_names: Option<&[String]>,
     ) -> Result<()> {
-        if data.is_empty() {
-            anyhow::bail!("Cannot write empty data to Avro");
-        }
+        let num_cols = match field_names {
+            Some(names) if names.is_empty() => {
+                anyhow::bail!("Field names cannot be empty");
+            }
+            Some(names) => names.len(),
+            None if data.is_empty() => {
+                anyhow::bail!("Cannot write empty data to Avro");
+            }
+            None => max_column_count(data),
+        };
 
-        let num_cols = max_column_count(data);
+        if num_cols == 0 {
+            anyhow::bail!("Cannot write Avro with zero fields");
+        }
 
         // Generate field names if not provided
         let names: Vec<String> = field_names
@@ -200,7 +209,14 @@ impl DataReader for AvroHandler {
 
 impl DataWriter for AvroHandler {
     fn write(&self, path: &str, data: &[Vec<String>], options: DataWriteOptions) -> Result<()> {
-        self.write(path, data, options.column_names.as_deref())
+        if let Some(ref names) = options.column_names {
+            return self.write(path, data, Some(names.as_slice()));
+        }
+        if options.include_headers && !data.is_empty() {
+            let body = data.get(1..).unwrap_or(&[]);
+            return self.write(path, body, Some(&data[0]));
+        }
+        self.write(path, data, None)
     }
 
     fn write_range(

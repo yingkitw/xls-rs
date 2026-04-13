@@ -48,7 +48,7 @@ impl TransformCommandHandler {
         // Write output
         converter.write_any_data(&output, &data, None)?;
         if output != "-" {
-            eprintln!("Sorted by {column} ({order:?}); wrote {output}");
+            crate::cli::runtime::log(format!("Sorted by {column} ({order:?}); wrote {output}"));
         }
 
         Ok(())
@@ -83,7 +83,11 @@ impl TransformCommandHandler {
 
         converter.write_any_data(&output, &filtered, None)?;
         if output != "-" {
-            eprintln!("Filtered to {} rows; wrote {}", filtered.len(), output);
+            crate::cli::runtime::log(format!(
+                "Filtered to {} rows; wrote {}",
+                filtered.len(),
+                output
+            ));
         }
 
         Ok(())
@@ -117,7 +121,9 @@ impl TransformCommandHandler {
                     }
                 }
             }
-            println!("Replaced {count} occurrences in column '{col_name}'");
+            crate::cli::runtime::log(format!(
+                "Replaced {count} occurrences in column '{col_name}'"
+            ));
         } else {
             // Replace in all cells
             let mut count = 0;
@@ -129,11 +135,11 @@ impl TransformCommandHandler {
                     }
                 }
             }
-            println!("Replaced {count} occurrences in all cells");
+            crate::cli::runtime::log(format!("Replaced {count} occurrences in all cells"));
         }
 
         converter.write_any_data(&output, &data, None)?;
-        println!("Wrote {output}");
+        crate::cli::runtime::log(format!("Wrote {output}"));
 
         Ok(())
     }
@@ -176,11 +182,11 @@ impl TransformCommandHandler {
         };
 
         converter.write_any_data(&output, &deduped, None)?;
-        println!(
+        crate::cli::runtime::log(format!(
             "Removed {} duplicates; wrote {}",
             data.len() - deduped.len(),
             output
-        );
+        ));
 
         Ok(())
     }
@@ -196,14 +202,14 @@ impl TransformCommandHandler {
         let transposed = ops.transpose(&data);
 
         converter.write_any_data(&output, &transposed, None)?;
-        println!(
+        crate::cli::runtime::log(format!(
             "Transposed {}x{} to {}x{}; wrote {}",
             data.len(),
             data.first().map(|r| r.len()).unwrap_or(0),
             transposed.len(),
             transposed.first().map(|r| r.len()).unwrap_or(0),
             output
-        );
+        ));
 
         Ok(())
     }
@@ -222,7 +228,11 @@ impl TransformCommandHandler {
         let selected = ops.select_columns_by_name(&data, &col_names)?;
 
         converter.write_any_data(&output, &selected, None)?;
-        println!("Selected {} columns; wrote {}", col_names.len(), output);
+        crate::cli::runtime::log(format!(
+            "Selected {} columns; wrote {}",
+            col_names.len(),
+            output
+        ));
 
         Ok(())
     }
@@ -244,7 +254,7 @@ impl TransformCommandHandler {
         ops.rename_columns(&mut data, &[(from.as_str(), to.as_str())])?;
 
         converter.write_any_data(&output, &data, None)?;
-        println!("Renamed column '{from}' to '{to}'; wrote {output}");
+        crate::cli::runtime::log(format!("Renamed column '{from}' to '{to}'; wrote {output}"));
 
         Ok(())
     }
@@ -266,7 +276,11 @@ impl TransformCommandHandler {
         let dropped = ops.drop_columns(&data, &col_indices);
 
         converter.write_any_data(&output, &dropped, None)?;
-        println!("Dropped {} columns; wrote {}", col_indices.len(), output);
+        crate::cli::runtime::log(format!(
+            "Dropped {} columns; wrote {}",
+            col_indices.len(),
+            output
+        ));
 
         Ok(())
     }
@@ -303,16 +317,16 @@ impl TransformCommandHandler {
                     }
                 }
             }
-            println!("Filled {} cells in specified columns", count);
+            crate::cli::runtime::log(format!("Filled {count} cells in specified columns"));
         } else {
             // Fill all columns
             let ops = DataOperations::new();
             ops.fillna(&mut data, &value);
-            println!("Filled all empty cells with '{value}'");
+            crate::cli::runtime::log(format!("Filled all empty cells with '{value}'"));
         }
 
         converter.write_any_data(&output, &data, None)?;
-        println!("Wrote {output}");
+        crate::cli::runtime::log(format!("Wrote {output}"));
 
         Ok(())
     }
@@ -328,11 +342,11 @@ impl TransformCommandHandler {
         let filtered = ops.dropna(&data);
 
         converter.write_any_data(&output, &filtered, None)?;
-        println!(
+        crate::cli::runtime::log(format!(
             "Dropped {} rows with empty values; wrote {}",
             data.len() - filtered.len(),
             output
-        );
+        ));
 
         Ok(())
     }
@@ -373,7 +387,9 @@ impl TransformCommandHandler {
         }
 
         converter.write_any_data(&output, &data, None)?;
-        println!("Added column '{column}' with formula '{formula}'; wrote {output}");
+        crate::cli::runtime::log(format!(
+            "Added column '{column}' with formula '{formula}'; wrote {output}"
+        ));
 
         Ok(())
     }
@@ -407,7 +423,9 @@ impl TransformCommandHandler {
         let converted = ops.astype(&mut data, col_idx, &target_type)?;
 
         converter.write_any_data(&output, &data, None)?;
-        println!("Converted {converted} cells to type '{target_type}'; wrote {output}");
+        crate::cli::runtime::log(format!(
+            "Converted {converted} cells to type '{target_type}'; wrote {output}"
+        ));
 
         Ok(())
     }

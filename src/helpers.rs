@@ -163,3 +163,35 @@ pub fn validate_column_index(data: &[Vec<String>], col: usize) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::filter_by_range;
+    use crate::csv_handler::CellRange;
+
+    #[test]
+    fn filter_by_range_a1_b2() {
+        let data = vec![
+            vec!["a".into(), "b".into(), "c".into()],
+            vec!["d".into(), "e".into(), "f".into()],
+            vec!["g".into(), "h".into(), "i".into()],
+        ];
+        let r = CellRange::parse("A1:B2").unwrap();
+        let out = filter_by_range(&data, &r);
+        assert_eq!(
+            out,
+            vec![
+                vec!["a".to_string(), "b".to_string()],
+                vec!["d".to_string(), "e".to_string()],
+            ]
+        );
+    }
+
+    #[test]
+    fn filter_by_range_single_cell() {
+        let data = vec![vec!["x".into(), "y".into()]];
+        let r = CellRange::parse("B1").unwrap();
+        let out = filter_by_range(&data, &r);
+        assert_eq!(out, vec![vec!["y".to_string()]]);
+    }
+}
+

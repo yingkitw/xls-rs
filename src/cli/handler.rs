@@ -8,6 +8,7 @@ use crate::cli::{
         io::IoCommandHandler, pandas::PandasCommandHandler, transform::TransformCommandHandler,
         AdvancedCommandHandler,
     },
+    format::OutputFormat,
     Commands,
 };
 use anyhow::{Context, Result};
@@ -50,7 +51,10 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 sheet,
                 range,
                 format,
-            } => self.io.handle_read(input, sheet, range, format),
+            } => {
+                let format = OutputFormat::resolve_for_read(format)?;
+                self.io.handle_read(input, sheet, range, format)
+            }
 
             Commands::Write { output, csv, sheet } => self.io.handle_write(output, csv, sheet),
 
@@ -72,7 +76,10 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
 
             Commands::Sheets { input } => self.io.handle_sheets(input),
 
-            Commands::ReadAll { input, format } => self.io.handle_read_all(input, format),
+            Commands::ReadAll { input, format } => {
+                let format = OutputFormat::resolve_for_read(format)?;
+                self.io.handle_read_all(input, format)
+            }
 
             Commands::WriteRange {
                 input,

@@ -182,6 +182,34 @@ fn test_select_columns_by_name() {
     assert_eq!(selected[0][1], "Salary");
 }
 
+#[test]
+fn test_select_columns_by_name_column_order_follows_request() {
+    let ops = DataOperations::new();
+    let data = read_example_csv("sales");
+
+    let selected = ops
+        .select_columns_by_name(&data, &["Price", "Product"])
+        .unwrap();
+
+    assert_eq!(selected[0], vec!["Price", "Product"]);
+    assert!(selected.len() > 1);
+}
+
+#[test]
+fn test_select_columns_by_name_missing_column_errors() {
+    let ops = DataOperations::new();
+    let data = read_example_csv("lookup");
+
+    let err = ops
+        .select_columns_by_name(&data, &["Code", "NoSuchCol"])
+        .unwrap_err();
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("NoSuchCol") || msg.contains("not found"),
+        "{msg}"
+    );
+}
+
 // ============ Drop Columns Tests ============
 
 #[test]

@@ -33,9 +33,12 @@ impl Capability for SortCapability {
         let ascending = args["ascending"].as_bool().unwrap_or(true);
 
         let converter = Converter::new();
-        let mut data = converter.read_any_data(input, None)?;
+        let data = converter.read_any_data(input, None)?;
+        if data.is_empty() {
+            anyhow::bail!("Input has no rows");
+        }
 
-        // Find column index
+        // Find column index from header; sort data rows only (keep header first).
         let header = &data[0];
         let col_idx = header.iter().position(|h| h == column)
             .or_else(|| column.parse::<usize>().ok())
@@ -43,10 +46,14 @@ impl Capability for SortCapability {
 
         let ops = DataOperations::new();
         let order = if ascending { SortOrder::Ascending } else { SortOrder::Descending };
-        
-        ops.sort_by_column(&mut data, col_idx, order)?;
-        
-        converter.write_any_data(output, &data, None)?;
+
+        let mut body: Vec<Vec<String>> = data[1..].to_vec();
+        ops.sort_by_column(&mut body, col_idx, order)?;
+        let mut out = Vec::with_capacity(1 + body.len());
+        out.push(data[0].clone());
+        out.extend(body);
+
+        converter.write_any_data(output, &out, None)?;
 
         Ok(json!({
             "status": "success",

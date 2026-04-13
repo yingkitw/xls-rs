@@ -60,8 +60,9 @@ pub enum Commands {
         sheet: Option<String>,
         #[arg(short, long)]
         range: Option<String>,
-        #[arg(short = 'f', long, default_value = "csv")]
-        format: OutputFormat,
+        /// If omitted, uses `default_format` from config (or csv).
+        #[arg(short = 'f', long)]
+        format: Option<OutputFormat>,
     },
 
     /// Write data to a file
@@ -173,8 +174,9 @@ pub enum Commands {
     ReadAll {
         #[arg(short, long)]
         input: String,
-        #[arg(short = 'f', long, default_value = "csv")]
-        format: OutputFormat,
+        /// If omitted, uses `default_format` from config (or csv).
+        #[arg(short = 'f', long)]
+        format: Option<OutputFormat>,
     },
 
     /// Write data to specific cell range

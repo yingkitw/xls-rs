@@ -276,6 +276,24 @@ fn test_streaming_large_file() {
     fs::remove_file(&path).ok();
 }
 
+#[test]
+fn test_csv_write_from_csv_sanitizes_formula_like_cells() {
+    let handler = CsvHandler::new();
+    let input_path = unique_path("inj_in");
+    let output_path = unique_path("inj_out");
+    fs::write(&input_path, "=cmd|\"\" /c calc\n").unwrap();
+    handler
+        .write_from_csv(&input_path, &output_path)
+        .unwrap();
+    let content = fs::read_to_string(&output_path).unwrap();
+    assert!(
+        content.contains("'=cmd"),
+        "expected leading apostrophe neutralization, got: {content:?}"
+    );
+    fs::remove_file(&input_path).ok();
+    fs::remove_file(&output_path).ok();
+}
+
 // ============ Edge Cases ============
 
 #[test]

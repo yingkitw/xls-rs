@@ -3,7 +3,7 @@
 use xls_rs::{
     config::Config,
     converter::Converter,
-    excel::{ExcelHandler, WriteOptions},
+    excel::{CellStyle, ExcelHandler, WriteOptions},
 };
 use anyhow::{Context, Result};
 use clap::CommandFactory;
@@ -62,13 +62,11 @@ pub fn handle_export_styled(input: String, output: String, style: Option<String>
     let converter = Converter::new();
     let data = converter.read_any_data(&input, None)?;
 
-    let options = WriteOptions::default();
-
-    // Apply predefined style if specified
-    if let Some(_style_name) = style {
-        // TODO: Implement style presets
-        println!("Style presets not yet implemented");
-    }
+    let options = if let Some(ref name) = style {
+        write_options_for_preset(name)?
+    } else {
+        WriteOptions::default()
+    };
 
     let handler = ExcelHandler::new();
     handler.write_styled(&output, &data, &options)?;
@@ -76,4 +74,49 @@ pub fn handle_export_styled(input: String, output: String, style: Option<String>
     println!("Exported styled Excel file: {}", output);
 
     Ok(())
+}
+
+fn write_options_for_preset(name: &str) -> Result<WriteOptions> {
+    let key = name.trim().to_lowercase();
+    match key.as_str() {
+        "default" => Ok(WriteOptions::default()),
+        "minimal" => Ok(WriteOptions {
+            sheet_name: None,
+            style_header: false,
+            header_style: CellStyle::default(),
+            column_styles: None,
+            freeze_header: false,
+            auto_filter: false,
+            auto_fit: true,
+        }),
+        "report" => Ok(WriteOptions {
+            sheet_name: None,
+            style_header: true,
+            header_style: CellStyle::header(),
+            column_styles: None,
+            freeze_header: true,
+            auto_filter: true,
+            auto_fit: true,
+        }),
+        "executive" | "corporate" => Ok(WriteOptions {
+            sheet_name: None,
+            style_header: true,
+            header_style: CellStyle {
+                bold: true,
+                bg_color: Some("203764".to_string()),
+                font_color: Some("FFFFFF".to_string()),
+                border: true,
+                align: Some("center".to_string()),
+                ..Default::default()
+            },
+            column_styles: None,
+            freeze_header: true,
+            auto_filter: true,
+            auto_fit: true,
+        }),
+        _ => anyhow::bail!(
+            "Unknown style preset {:?}. Use: default, minimal, report, executive.",
+            name.trim()
+        ),
+    }
 }

@@ -1,6 +1,7 @@
 //! Formula evaluator
 
 use super::types::{CellRange, FormulaResult};
+use crate::csv_handler::sanitize_csv_row;
 use crate::excel::ExcelHandler;
 use anyhow::{Context, Result};
 use calamine::{open_workbook, Reader, Xlsx};
@@ -122,7 +123,8 @@ impl FormulaEvaluator {
                 .with_context(|| format!("Failed to create CSV file: {}", output))?;
 
             for record in records {
-                writer.write_record(&record)?;
+                let safe = sanitize_csv_row(&record);
+                writer.write_record(&safe)?;
             }
             writer.flush()?;
         }

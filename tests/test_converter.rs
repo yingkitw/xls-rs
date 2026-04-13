@@ -19,6 +19,72 @@ fn ensure_examples() {
 // ============ CSV to Excel Conversion ============
 
 #[test]
+fn test_roundtrip_csv_xlsx_csv_data_preserved() {
+    ensure_examples();
+    let converter = Converter::new();
+    let csv_path = common::example_path("lookup.csv");
+    let xlsx_path = unique_path("rt_lookup", "xlsx");
+    let out_csv = unique_path("rt_lookup_out", "csv");
+
+    converter.convert(&csv_path, &xlsx_path, None).unwrap();
+    converter.convert(&xlsx_path, &out_csv, None).unwrap();
+
+    let original = converter.read_any_data(&csv_path, None).unwrap();
+    let roundtrip = converter.read_any_data(&out_csv, None).unwrap();
+    assert_eq!(
+        original, roundtrip,
+        "CSV → XLSX → CSV should preserve tabular data"
+    );
+
+    fs::remove_file(&xlsx_path).ok();
+    fs::remove_file(&out_csv).ok();
+}
+
+#[test]
+fn test_roundtrip_xlsx_parquet_csv_preserves_grid() {
+    ensure_examples();
+    let converter = Converter::new();
+    let csv_path = common::example_path("lookup.csv");
+    let xlsx_path = unique_path("rt_xlsx_pq", "xlsx");
+    let pq_path = unique_path("rt_xlsx_pq", "parquet");
+    let out_csv = unique_path("rt_xlsx_pq_out", "csv");
+
+    converter.convert(&csv_path, &xlsx_path, None).unwrap();
+    converter.convert(&xlsx_path, &pq_path, None).unwrap();
+    converter.convert(&pq_path, &out_csv, None).unwrap();
+
+    let expected = converter.read_any_data(&csv_path, None).unwrap();
+    let got = converter.read_any_data(&out_csv, None).unwrap();
+    assert_eq!(expected, got, "XLSX → Parquet → CSV should preserve cells");
+
+    fs::remove_file(&xlsx_path).ok();
+    fs::remove_file(&pq_path).ok();
+    fs::remove_file(&out_csv).ok();
+}
+
+#[test]
+fn test_roundtrip_xlsx_avro_csv_preserves_grid() {
+    ensure_examples();
+    let converter = Converter::new();
+    let csv_path = common::example_path("lookup.csv");
+    let xlsx_path = unique_path("rt_xlsx_avro", "xlsx");
+    let avro_path = unique_path("rt_xlsx_avro", "avro");
+    let out_csv = unique_path("rt_xlsx_avro_out", "csv");
+
+    converter.convert(&csv_path, &xlsx_path, None).unwrap();
+    converter.convert(&xlsx_path, &avro_path, None).unwrap();
+    converter.convert(&avro_path, &out_csv, None).unwrap();
+
+    let expected = converter.read_any_data(&csv_path, None).unwrap();
+    let got = converter.read_any_data(&out_csv, None).unwrap();
+    assert_eq!(expected, got, "XLSX → Avro → CSV should preserve cells");
+
+    fs::remove_file(&xlsx_path).ok();
+    fs::remove_file(&avro_path).ok();
+    fs::remove_file(&out_csv).ok();
+}
+
+#[test]
 fn test_convert_csv_to_xlsx() {
     ensure_examples();
     let converter = Converter::new();

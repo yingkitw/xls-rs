@@ -1,4 +1,4 @@
-use crate::csv_handler::CsvHandler;
+use crate::csv_handler::{sanitize_csv_row, CsvHandler};
 use crate::excel::ExcelHandler;
 use crate::format_detector::DefaultFormatDetector;
 use crate::handler_registry::HandlerRegistry;
@@ -104,7 +104,8 @@ impl Converter {
                 .flexible(true)
                 .from_writer(std::io::stdout());
             for record in data {
-                writer.write_record(record)?;
+                let safe = sanitize_csv_row(record);
+                writer.write_record(&safe)?;
             }
             writer.flush().context("Failed to flush stdout")?;
             return Ok(());
@@ -124,8 +125,9 @@ impl Converter {
                     }
                 };
 
-                // Write to temp CSV
-                self.csv_handler.write_records(&temp_csv, data.to_vec())
+                // Write to temp CSV (sanitized like other CSV write paths)
+                self.csv_handler
+                    .write_records_safe(&temp_csv, data.to_vec())
                     .with_context(|| format!("Failed to write temp CSV file: {}", temp_csv))?;
 
                 // Convert to Excel
@@ -139,6 +141,14 @@ impl Converter {
                         Err(e).context(format!("Failed to convert CSV to Excel: {}", path))
                     }
                 }
+            }
+            "parquet" | "avro" => {
+                let options = DataWriteOptions {
+                    sheet_name: sheet_name.map(|s| s.to_string()),
+                    include_headers: true,
+                    ..Default::default()
+                };
+                self.registry.write(path, data, options)
             }
             _ => {
                 // Use registry for other formats

@@ -69,6 +69,31 @@ impl ExcelHandler {
         }
     }
 
+    /// Resolve sheet name: use the first sheet if `requested` is `None`, otherwise require an exact
+    /// match so users get a clear error instead of a low-level calamine failure.
+    fn resolve_sheet_selection(requested: Option<&str>, available: &[String]) -> Result<String> {
+        match requested {
+            Some(name) => {
+                if available.iter().any(|s| s == name) {
+                    Ok(name.to_string())
+                } else {
+                    let list = if available.is_empty() {
+                        "(none)".to_string()
+                    } else {
+                        available.join(", ")
+                    };
+                    anyhow::bail!(
+                        "Sheet '{name}' not found in workbook. Available sheets: {list}"
+                    );
+                }
+            }
+            None => available
+                .first()
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook")),
+        }
+    }
+
     /// Get or load Excel metadata with caching
     fn get_metadata(&self, path: &str) -> Result<ExcelMetadata> {
         // Check cache first
@@ -104,13 +129,11 @@ impl ExcelHandler {
             open_workbook(path).with_context(|| format!("Failed to open Excel file: {path}"))?;
 
         let metadata = self.get_metadata(path)?;
-        let sheet_name = sheet_name
-            .or_else(|| metadata.sheet_names.first().map(|s| s.as_str()))
-            .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook"))?;
+        let sheet_name = Self::resolve_sheet_selection(sheet_name, &metadata.sheet_names)?;
 
         let range = workbook
-            .worksheet_range(sheet_name)
-            .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
+            .worksheet_range(&sheet_name)
+            .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
 
         // Pre-allocate string capacity based on estimated size
         let mut output = String::with_capacity(range.height() * range.width() * 10);
@@ -162,13 +185,11 @@ impl ExcelHandler {
             open_workbook(path).with_context(|| format!("Failed to open Excel file: {path}"))?;
 
         let metadata = self.get_metadata(path)?;
-        let sheet_name = sheet_name
-            .or_else(|| metadata.sheet_names.first().map(|s| s.as_str()))
-            .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook"))?;
+        let sheet_name = Self::resolve_sheet_selection(sheet_name, &metadata.sheet_names)?;
 
         let ws_range = workbook
-            .worksheet_range(sheet_name)
-            .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
+            .worksheet_range(&sheet_name)
+            .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
 
         let estimated_rows = range.end_row.saturating_sub(range.start_row) + 1;
         let estimated_cols = range.end_col.saturating_sub(range.start_col) + 1;
@@ -200,13 +221,11 @@ impl ExcelHandler {
             open_workbook(path).with_context(|| format!("Failed to open Excel file: {path}"))?;
 
         let metadata = self.get_metadata(path)?;
-        let sheet_name = sheet_name
-            .or_else(|| metadata.sheet_names.first().map(|s| s.as_str()))
-            .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook"))?;
+        let sheet_name = Self::resolve_sheet_selection(sheet_name, &metadata.sheet_names)?;
 
         let range = workbook
-            .worksheet_range(sheet_name)
-            .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
+            .worksheet_range(&sheet_name)
+            .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
 
         let mut rows: Vec<Vec<String>> = Vec::with_capacity(range.height());
         for row in range.rows() {
@@ -258,14 +277,12 @@ impl ExcelHandler {
         let mut workbook: Ods<_> =
             open_workbook(path).with_context(|| format!("Failed to open ODS file: {path}"))?;
 
-        let sheet_names = workbook.sheet_names();
-        let sheet_name = sheet_name
-            .or_else(|| sheet_names.first().map(|s| s.as_str()))
-            .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook"))?;
+        let sheet_names: Vec<String> = workbook.sheet_names().to_vec();
+        let sheet_name = Self::resolve_sheet_selection(sheet_name, &sheet_names)?;
 
         let range = workbook
-            .worksheet_range(sheet_name)
-            .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
+            .worksheet_range(&sheet_name)
+            .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
 
         let mut output = String::new();
         for row in range.rows() {
@@ -282,14 +299,12 @@ impl ExcelHandler {
         let mut workbook: Ods<_> =
             open_workbook(path).with_context(|| format!("Failed to open ODS file: {path}"))?;
 
-        let sheet_names = workbook.sheet_names();
-        let sheet_name = sheet_name
-            .or_else(|| sheet_names.first().map(|s| s.as_str()))
-            .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook"))?;
+        let sheet_names: Vec<String> = workbook.sheet_names().to_vec();
+        let sheet_name = Self::resolve_sheet_selection(sheet_name, &sheet_names)?;
 
         let range = workbook
-            .worksheet_range(sheet_name)
-            .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
+            .worksheet_range(&sheet_name)
+            .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
 
         let mut rows: Vec<Vec<String>> = Vec::new();
         for row in range.rows() {

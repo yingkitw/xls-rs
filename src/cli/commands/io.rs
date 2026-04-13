@@ -10,6 +10,8 @@ use xls_rs::{
     formula::FormulaEvaluator,
     google_sheets::GoogleSheetsHandler,
     handler_registry::HandlerRegistry,
+    helpers::filter_by_range,
+    CellRange,
 };
 use anyhow::{Context, Result};
 
@@ -220,14 +222,27 @@ impl IoCommandHandler {
 
     /// Handle the GSheetsList command
     pub fn handle_gsheets_list(&self, spreadsheet: String) -> Result<()> {
-        let _handler = GoogleSheetsHandler::new();
-        
-        // TODO: Implement actual API call to list sheets
-        println!("Listing sheets in Google Sheets: {}", spreadsheet);
-        println!("Sheet1");
-        println!("Sheet2");
-        println!("Sheet3");
-        
+        let config_path = crate::cli::runtime::get()
+            .config_path
+            .clone()
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|p| p.join(".xls-rs.toml"))
+                    .unwrap_or_else(|| ".xls-rs.toml".into())
+            });
+
+        let config = if config_path.exists() {
+            Config::load_from(&config_path.to_string_lossy())?
+        } else {
+            Config::default()
+        };
+
+        let handler = GoogleSheetsHandler::with_config(config);
+        let titles = handler.list_sheet_titles(&spreadsheet)?;
+        for title in titles {
+            println!("{title}");
+        }
+
         Ok(())
     }
 
@@ -333,10 +348,9 @@ impl IoCommandHandler {
     }
 
     /// Apply a cell range filter to data
-    fn apply_range(&self, data: &[Vec<String>], _range: &str) -> Result<Vec<Vec<String>>> {
-        // Simple range implementation for now (e.g., "A1:C10")
-        // This is a placeholder - full implementation would parse the range properly
-        Ok(data.to_vec())
+    fn apply_range(&self, data: &[Vec<String>], range: &str) -> Result<Vec<Vec<String>>> {
+        let cell = CellRange::parse(range)?;
+        Ok(filter_by_range(data, &cell))
     }
 
     /// Print data as CSV

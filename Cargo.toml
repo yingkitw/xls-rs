@@ -1,6 +1,6 @@
 [package]
 name = "xls-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/yingkitw/xls-rs"
@@ -50,6 +50,7 @@ dirs = "5.0"
 glob = "0.3.3"
 rayon = "1.10"
 anyrepair = "0.2.1"
+ureq = "2.12"
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5.65"
 axum = { version = "0.7", optional = true }
@@ -63,6 +64,13 @@ ctrlc = { version = "3", optional = true }
 default = ["watch"]
 api = ["axum", "tower", "tower-http"]
 watch = ["dep:notify", "dep:ctrlc"]
+
+# Smaller `target/` and fewer incremental rename failures when the disk is almost full.
+[profile.dev]
+incremental = false
+
+[profile.test]
+incremental = false
 
 [dev-dependencies]
 tempfile = "3.12"

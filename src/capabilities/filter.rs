@@ -48,14 +48,21 @@ impl Capability for FilterCapability {
             .context(format!("Column '{}' not found", column))?;
 
         let ops = DataOperations::new();
-        
-        // Parse condition (simple mapping for now, should ideally reuse logic from operations)
-        // Since we don't have direct access to parse_filter_condition if it's private or not exported in a way we want,
-        // we can construct FilterCondition manually or use the public `filter_rows` which takes strings.
-        // `filter_rows` takes `operator` and `value` as strings.
-        
-        let filtered = ops.filter_rows(&data, col_idx, operator, value)?;
-        
+
+        if data.len() <= 1 {
+            converter.write_any_data(output, &data, None)?;
+            return Ok(json!({
+                "status": "success",
+                "message": format!("Filtered data where {} {} '{}' and wrote to '{}'. Rows: {}", column, operator, value, output, data.len())
+            }));
+        }
+
+        let header = data[0].clone();
+        let filtered_body = ops.filter_rows(&data[1..], col_idx, operator, value)?;
+        let mut filtered = Vec::with_capacity(1 + filtered_body.len());
+        filtered.push(header);
+        filtered.extend(filtered_body);
+
         converter.write_any_data(output, &filtered, None)?;
 
         Ok(json!({

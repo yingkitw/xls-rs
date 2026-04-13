@@ -33,6 +33,9 @@ use tower_http::{
     limit::RequestBodyLimitLayer,
 };
 
+#[cfg(feature = "api")]
+use anyhow::Context;
+
 /// API server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiConfig {
@@ -142,10 +145,6 @@ impl ApiServer {
     /// Start the API server (requires the "api" feature)
     #[cfg(feature = "api")]
     pub async fn start(&self) -> Result<()> {
-        use crate::converter::Converter;
-        use crate::operations::DataOperations;
-        use crate::profiling::DataProfiler;
-
         // Build our application with routes
         let app = Router::new()
             .route("/api/read", post(handle_read))
@@ -210,6 +209,8 @@ impl IntoResponse for ApiError {
 #[cfg(feature = "api")]
 async fn handle_read(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>, ApiError> {
     use crate::converter::Converter;
+    use crate::csv_handler::CellRange;
+    use crate::helpers::filter_by_range;
 
     let converter = Converter::new();
 
@@ -218,16 +219,16 @@ async fn handle_read(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>, A
         _ => return Err(ApiError(anyhow::anyhow!("Invalid request"))),
     };
 
-    let data = converter
+    let mut data = converter
         .read_any_data(&input, sheet.as_deref())
         .map_err(ApiError)?;
 
-    let response = if range.is_some() {
-        // TODO: Implement range filtering
-        ApiResponse::success(serde_json::json!({ "data": data }))
-    } else {
-        ApiResponse::success(serde_json::json!({ "data": data }))
-    };
+    if let Some(ref range_str) = range {
+        let cell = CellRange::parse(range_str).map_err(ApiError)?;
+        data = filter_by_range(&data, &cell);
+    }
+
+    let response = ApiResponse::success(serde_json::json!({ "data": data }));
 
     Ok(Json(response))
 }
@@ -235,7 +236,7 @@ async fn handle_read(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>, A
 /// Handler for /api/write
 #[cfg(feature = "api")]
 async fn handle_write(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>, ApiError> {
-    use crate::traits::DataWriteOptions;
+    use crate::traits::{DataWriteOptions, DataWriter};
 
     let (output, data, sheet) = match req {
         ApiRequest::Write { output, data, sheet } => (output, data, sheet),
@@ -272,15 +273,35 @@ async fn handle_write(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>, 
         "parquet" => {
             use crate::columnar::ParquetHandler;
             let handler = ParquetHandler::new();
+            let (col_names, body): (Option<&[String]>, &[Vec<String>]) =
+                if options.include_headers && !data.is_empty() {
+                    (Some(&data[0]), data.get(1..).unwrap_or_default())
+                } else {
+                    (None, &data)
+                };
+            if body.is_empty() {
+                return Err(ApiError(anyhow::anyhow!(
+                    "Cannot write empty data to Parquet"
+                )));
+            }
             handler
-                .write(&output, &data, options)
+                .write(&output, body, col_names)
                 .map_err(ApiError)?;
         }
         "avro" => {
             use crate::columnar::AvroHandler;
             let handler = AvroHandler::new();
+            let (field_names, body): (Option<&[String]>, &[Vec<String>]) =
+                if options.include_headers && !data.is_empty() {
+                    (Some(&data[0]), data.get(1..).unwrap_or_default())
+                } else {
+                    (None, &data)
+                };
+            if body.is_empty() {
+                return Err(ApiError(anyhow::anyhow!("Cannot write empty data to Avro")));
+            }
             handler
-                .write(&output, &data, options)
+                .write(&output, body, field_names)
                 .map_err(ApiError)?;
         }
         _ => {
@@ -339,20 +360,20 @@ async fn handle_profile(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>
         profiler = profiler.with_sample_size(size);
     }
 
-    let profile = profiler
-        .analyze_dataset(&data)
-        .map_err(ApiError)?;
+    let profile = profiler.profile(&data, &input).map_err(ApiError)?;
 
-    Ok(Json(ApiResponse::success(serde_json::to_value(profile).map_err(
-        |e| ApiError(anyhow::anyhow!("Failed to serialize profile: {}", e)),
-    )?)))
+    let value = serde_json::to_value(profile).map_err(|e| {
+        ApiError(anyhow::anyhow!("Failed to serialize profile: {}", e))
+    })?;
+
+    Ok(Json(ApiResponse::success(value)))
 }
 
 /// Handler for /api/validate
 #[cfg(feature = "api")]
 async fn handle_validate(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>, ApiError> {
     use crate::converter::Converter;
-    use crate::validation::ValidationRule;
+    use crate::validation::{DataValidator, ValidationConfig};
 
     let (input, rules) = match req {
         ApiRequest::Validate { input, rules } => (input, rules),
@@ -364,20 +385,16 @@ async fn handle_validate(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse
         .read_any_data(&input, None)
         .map_err(ApiError)?;
 
-    // Parse validation rules from JSON
-    let validation_rules: Vec<ValidationRule> =
-        serde_json::from_str(&rules).map_err(ApiError)?;
+    let config: ValidationConfig = serde_json::from_str(&rules)
+        .map_err(|e| ApiError(anyhow::anyhow!("Invalid validation config JSON: {}", e)))?;
 
-    let mut results = Vec::new();
-    for rule in validation_rules {
-        let result = rule.validate(&data);
-        results.push(result);
-    }
+    let validator = DataValidator::new(config);
+    let result = validator.validate(&data).map_err(ApiError)?;
 
-    Ok(Json(ApiResponse::success(serde_json::json!({
-        "valid": results.iter().all(|r| r.is_valid),
-        "results": results
-    }))))
+    let value = serde_json::to_value(result)
+        .map_err(|e| ApiError(anyhow::anyhow!("Failed to serialize validation result: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(value)))
 }
 
 /// Handler for /api/filter
@@ -395,12 +412,12 @@ async fn handle_filter(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>,
     };
 
     let converter = Converter::new();
-    let mut data = converter.read_any_data(&input, None).map_err(ApiError)?;
+    let data = converter.read_any_data(&input, None).map_err(ApiError)?;
 
     let ops = DataOperations::new();
-    ops.filter(&mut data, &where_clause).map_err(ApiError)?;
+    let filtered = ops.query(&data, &where_clause).map_err(ApiError)?;
 
-    Ok(Json(ApiResponse::success(serde_json::json!({ "data": data }))))
+    Ok(Json(ApiResponse::success(serde_json::json!({ "data": filtered }))))
 }
 
 /// Handler for /api/sort
@@ -408,6 +425,7 @@ async fn handle_filter(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>,
 async fn handle_sort(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>, ApiError> {
     use crate::converter::Converter;
     use crate::operations::DataOperations;
+    use crate::traits::SortOperator;
 
     let (input, column, ascending) = match req {
         ApiRequest::Sort {

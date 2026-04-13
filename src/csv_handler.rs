@@ -104,7 +104,8 @@ impl CsvHandler {
 
         for result in reader.records() {
             let record = result?;
-            writer.write_record(&record)?;
+            let row: Vec<String> = record.iter().map(|s| s.to_string()).collect();
+            writer.write_record(sanitize_csv_row(&row))?;
         }
 
         writer.flush()?;
@@ -252,7 +253,7 @@ impl CsvHandler {
             }
         }
 
-        self.write_records(path, existing)
+        self.write_records_safe(path, existing)
     }
 }
 
@@ -363,7 +364,8 @@ impl StreamingCsvWriter {
     }
 
     pub fn write_row(&mut self, row: &[String]) -> Result<()> {
-        self.writer.write_record(row)?;
+        let safe = sanitize_csv_row(row);
+        self.writer.write_record(&safe)?;
         self.rows_written += 1;
         Ok(())
     }
@@ -427,7 +429,7 @@ impl DataReader for CsvHandler {
 
 impl DataWriter for CsvHandler {
     fn write(&self, path: &str, data: &[Vec<String>], _options: DataWriteOptions) -> Result<()> {
-        self.write_records(path, data.to_vec())
+        self.write_records_safe(path, data.to_vec())
     }
 
     fn write_range(
@@ -441,7 +443,7 @@ impl DataWriter for CsvHandler {
     }
 
     fn append(&self, path: &str, data: &[Vec<String>]) -> Result<()> {
-        self.append_records(path, data)
+        self.append_records_safe(path, data)
     }
 
     fn supports_format(&self, path: &str) -> bool {

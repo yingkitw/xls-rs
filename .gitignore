@@ -1,3 +1,12 @@
 target/
 *.bak
 .DS_Store
+
+# Converter temp artifacts
+*.tmp.csv
+
+# Generated under examples/ by `xls-rs examples-generate` (not tracked as source)
+examples/*.xlsx
+examples/*.xls
+examples/*.parquet
+examples/*.avro

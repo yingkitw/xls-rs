@@ -52,7 +52,7 @@ pub struct DataWriteOptions {
     pub sheet_name: Option<String>,
     /// Column names (for Parquet/Avro files)
     pub column_names: Option<Vec<String>>,
-    /// Whether to include headers
+    /// For Parquet/Avro: when true, `data[0]` is column/field names and `data[1..]` are rows.
     pub include_headers: bool,
 }
 

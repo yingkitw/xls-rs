@@ -171,7 +171,9 @@ impl PandasCommandHandler {
         let grouped = ops.groupby(&data, by_idx, &aggregations)?;
 
         converter.write_any_data(&output, &grouped, None)?;
-        println!("Grouped by '{by}' with '{agg}' aggregation; wrote {output}");
+        crate::cli::runtime::log(format!(
+            "Grouped by '{by}' with '{agg}' aggregation; wrote {output}"
+        ));
 
         Ok(())
     }
@@ -207,7 +209,9 @@ impl PandasCommandHandler {
         let joined = ops.join(&left_data, &right_data, left_col, right_col, join_type)?;
 
         converter.write_any_data(&output, &joined, None)?;
-        println!("Joined {left} and {right} on '{on}' ({how} join); wrote {output}");
+        crate::cli::runtime::log(format!(
+            "Joined {left} and {right} on '{on}' ({how} join); wrote {output}"
+        ));
 
         Ok(())
     }
@@ -225,7 +229,9 @@ impl PandasCommandHandler {
                 .filter_map(|entry| match entry {
                     Ok(path) => Some(path),
                     Err(e) => {
-                        eprintln!("Warning: glob error for pattern '{}': {}", inputs, e);
+                        crate::cli::runtime::log(format!(
+                            "Warning: glob error for pattern '{inputs}': {e}"
+                        ));
                         None
                     }
                 })
@@ -251,7 +257,11 @@ impl PandasCommandHandler {
         let concatenated = ops.concat(&datasets);
 
         converter.write_any_data(&output, &concatenated, None)?;
-        println!("Concatenated {} files; wrote {}", input_files.len(), output);
+        crate::cli::runtime::log(format!(
+            "Concatenated {} files; wrote {}",
+            input_files.len(),
+            output
+        ));
 
         Ok(())
     }
@@ -390,7 +400,7 @@ impl PandasCommandHandler {
         let pivoted = ops.pivot(&data, index_idx, cols_idx, vals_idx, agg_func)?;
 
         converter.write_any_data(&output, &pivoted, None)?;
-        println!("Created pivot table; wrote {}", output);
+        crate::cli::runtime::log(format!("Created pivot table; wrote {output}"));
 
         Ok(())
     }
@@ -428,9 +438,9 @@ impl PandasCommandHandler {
         };
 
         converter.write_any_data(&output, &data, None)?;
-        println!(
+        crate::cli::runtime::log(format!(
             "Rolling {agg_lower} with window={window}; added column '{new_name}'; wrote {output}"
-        );
+        ));
 
         Ok(())
     }
@@ -455,7 +465,7 @@ impl PandasCommandHandler {
         let out = ops.crosstab(&data, row_idx, col_idx)?;
 
         converter.write_any_data(&output, &out, None)?;
-        println!("Crosstab '{rows}' × '{cols}'; wrote {output}");
+        crate::cli::runtime::log(format!("Crosstab '{rows}' × '{cols}'; wrote {output}"));
 
         Ok(())
     }
@@ -482,7 +492,7 @@ impl PandasCommandHandler {
         let melted = ops.melt(&data, &id_indices, &value_indices)?;
 
         converter.write_any_data(&output, &melted, None)?;
-        println!("Melt; wrote {output}");
+        crate::cli::runtime::log(format!("Melt; wrote {output}"));
 
         Ok(())
     }

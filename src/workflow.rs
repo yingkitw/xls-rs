@@ -5,7 +5,7 @@
 use crate::handler_registry::HandlerRegistry;
 use crate::operations::DataOperations;
 use crate::traits::DataWriteOptions;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -47,6 +47,11 @@ impl WorkflowExecutor {
             .or_else(|_| serde_json::from_str(&config_str))
             .with_context(|| "Failed to parse workflow config. Expected TOML or JSON")?;
 
+        self.execute_config(&config)
+    }
+
+    /// Execute workflow from an in-memory configuration (same semantics as [`Self::execute`]).
+    pub fn execute_config(&self, config: &WorkflowConfig) -> Result<()> {
         println!("Executing workflow: {}", config.name);
 
         let mut current_data: Option<Vec<Vec<String>>> = None;
@@ -69,7 +74,11 @@ impl WorkflowExecutor {
 
             // Save output if specified
             if let Some(ref output) = step.output {
-                let options = DataWriteOptions::default();
+                let mut options = DataWriteOptions::default();
+                let out = output.to_lowercase();
+                if out.ends_with(".parquet") || out.ends_with(".avro") {
+                    options.include_headers = true;
+                }
                 self.registry.write(output, &output_data, options)?;
                 println!("  Output saved to: {}", output);
             }
@@ -193,5 +202,3 @@ impl WorkflowExecutor {
         }
     }
 }
-
-use anyhow::Context;
