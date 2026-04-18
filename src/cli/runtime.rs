@@ -55,6 +55,22 @@ pub fn ensure_can_write(path: &str) -> anyhow::Result<()> {
     if path.as_bytes().contains(&0) {
         anyhow::bail!("Invalid output path: embedded null byte");
     }
+
+    // Block directory traversal attempts
+    let normalized = Path::new(path);
+    if let Some(parent) = normalized.parent() {
+        for component in parent.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    anyhow::bail!(
+                        "Invalid output path: directory traversal (..) not allowed for security reasons"
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+
     let p = Path::new(path);
     if p.exists() && !get().overwrite {
         anyhow::bail!(
@@ -62,6 +78,31 @@ pub fn ensure_can_write(path: &str) -> anyhow::Result<()> {
             p.display()
         );
     }
+    Ok(())
+}
+
+/// Validate input path for security (prevent directory traversal)
+pub fn ensure_safe_input(path: &str) -> anyhow::Result<()> {
+    if path.is_empty() {
+        anyhow::bail!("Input path must not be empty");
+    }
+    if path.as_bytes().contains(&0) {
+        anyhow::bail!("Invalid input path: embedded null byte");
+    }
+
+    // Block directory traversal attempts
+    let normalized = Path::new(path);
+    for component in normalized.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                anyhow::bail!(
+                    "Invalid input path: directory traversal (..) not allowed for security reasons"
+                );
+            }
+            _ => {}
+        }
+    }
+
     Ok(())
 }
 

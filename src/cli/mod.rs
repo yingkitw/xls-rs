@@ -686,6 +686,66 @@ pub enum Commands {
         style: Option<String>,
     },
 
+    /// Add chart to Excel file
+    AddChart {
+        #[arg(short, long)]
+        input: String,
+        #[arg(short, long)]
+        output: String,
+        #[arg(short, long)]
+        chart_type: String,
+        #[arg(short, long)]
+        title: Option<String>,
+        #[arg(short, long)]
+        category_column: Option<usize>,
+        #[arg(short, long)]
+        value_columns: Option<Vec<usize>>,
+    },
+
+    /// Add sparkline to Excel file
+    AddSparkline {
+        #[arg(short, long)]
+        output: String,
+        #[arg(short, long)]
+        data_range: String,
+        #[arg(short, long)]
+        sparkline_cell: String,
+        #[arg(short, long)]
+        sheet: Option<String>,
+    },
+
+    /// Add conditional formatting to Excel range
+    ConditionalFormat {
+        #[arg(short, long)]
+        output: String,
+        #[arg(short, long)]
+        range: String,
+        #[arg(short, long)]
+        condition: String,
+        #[arg(short, long)]
+        bg_color: Option<String>,
+        #[arg(short, long)]
+        font_color: Option<String>,
+        #[arg(short = 'b', long)]
+        bold: Option<bool>,
+        #[arg(short, long)]
+        sheet: Option<String>,
+    },
+
+    /// Apply formula to range in Excel file
+    ApplyFormulaRange {
+        #[arg(short, long)]
+        input: String,
+        #[arg(short, long)]
+        output: String,
+        #[arg(short, long)]
+        formula: String,
+        #[arg(short, long)]
+        range: String,
+        #[arg(short, long)]
+        sheet: Option<String>,
+    },
+
     /// List sheets in Google Sheets
     GSheetsList {
         #[arg(short, long)]

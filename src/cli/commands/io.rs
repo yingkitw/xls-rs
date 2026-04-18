@@ -35,6 +35,7 @@ impl IoCommandHandler {
         range: Option<String>,
         format: OutputFormat,
     ) -> Result<()> {
+        crate::cli::runtime::ensure_safe_input(&input)?;
         let converter = Converter::new();
 
         // Read data
@@ -74,6 +75,7 @@ impl IoCommandHandler {
 
         // Read from CSV if provided, otherwise stdin
         let data = if let Some(csv_path) = csv {
+            crate::cli::runtime::ensure_safe_input(&csv_path)?;
             converter.read_any_data(&csv_path, None)?
         } else {
             // Read from stdin
@@ -105,6 +107,7 @@ impl IoCommandHandler {
         output: String,
         sheet: Option<String>,
     ) -> Result<()> {
+        crate::cli::runtime::ensure_safe_input(&input)?;
         crate::cli::runtime::ensure_can_write(&output)?;
         let converter = Converter::new();
         converter.convert(&input, &output, sheet.as_deref())?;
@@ -125,6 +128,8 @@ impl IoCommandHandler {
         cell: String,
         sheet: Option<String>,
     ) -> Result<()> {
+        crate::cli::runtime::ensure_safe_input(&input)?;
+        crate::cli::runtime::ensure_can_write(&output)?;
         let evaluator = FormulaEvaluator::new();
 
         if input.ends_with(".csv") {
@@ -169,6 +174,7 @@ impl IoCommandHandler {
     ///
     /// Reads all sheets from an Excel file.
     pub fn handle_read_all(&self, input: String, format: OutputFormat) -> Result<()> {
+        crate::cli::runtime::ensure_safe_input(&input)?;
         let handler = ExcelHandler::new();
         let sheets = handler.list_sheets(&input)?;
 
@@ -206,6 +212,8 @@ impl IoCommandHandler {
 
     /// Handle the append command
     pub fn handle_append(&self, source: String, target: String) -> Result<()> {
+        crate::cli::runtime::ensure_safe_input(&source)?;
+        crate::cli::runtime::ensure_safe_input(&target)?;
         let converter = Converter::new();
 
         // Read source data

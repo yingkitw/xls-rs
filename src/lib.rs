@@ -33,6 +33,7 @@ pub mod profiling_handler;
 pub mod quality;
 pub mod regex_cache;
 pub mod streaming;
+pub mod streaming_ops;
 pub mod string_utils;
 pub mod text_analysis;
 pub mod text_analysis_handler;
@@ -59,9 +60,10 @@ pub use error_traits::{
     ToTraitBasedError, TraitBasedError, UserFriendlyError,
 };
 pub use excel::{
-    CellData, CellStyle, ChartConfig, ConditionalFormat, ConditionalRule, DataChartType,
-    ExcelHandler, RowData, Sparkline, SparklineGroup, SparklineType, StreamingXlsxWriter,
-    WriteOptions, XlsxWriter,
+    add_cell_to_row, add_cells_to_row, classify_cell, CellData, CellStyle, ChartConfig,
+    ConditionalFormat, ConditionalRule, DataChartType, ExcelHandler, FeatureDetector,
+    FeatureSeverity, RowData, Sparkline, SparklineGroup, SparklineType, StreamingXlsxWriter,
+    UnsupportedFeature, WriteMode, WriteOptions, XlsxWriter,
 };
 pub use format_detector::DefaultFormatDetector;
 pub use formula::{FormulaEvaluator, FormulaResult};
@@ -85,6 +87,7 @@ pub use quality::{IssueSeverity, QualityIssue, QualityReport, QualityReportGener
 pub use streaming::{
     DataChunk, StreamingChannel, StreamingDataReader, StreamingDataWriter, StreamingProcessor,
 };
+pub use streaming_ops::{get_info, head, infer_schema, tail, ColumnType, Schema};
 pub use string_utils::{
     join_cell_reference, join_with_capacity, string_with_capacity, StringBuilder,
     estimate_csv_row_capacity, estimate_json_array_capacity,
@@ -92,6 +95,7 @@ pub use string_utils::{
 pub use text_analysis::{KeywordResult, LanguageResult, SentimentResult, TextAnalyzer, TextStats};
 pub use timeseries::{
     ResampleInterval, RollingWindow, TimeSeriesAgg, TimeSeriesPoint, TimeSeriesProcessor,
+    TrendDirection,
 };
 pub use traits::{
     CellRangeProvider, DataOperator, DataReader, DataWriteOptions, DataWriter, FileHandler,

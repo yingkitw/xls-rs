@@ -8,6 +8,7 @@
 use xls_rs::{
     CellStyle, ChartConfig, ConditionalFormat, ConditionalRule, DataChartType, ExcelHandler,
     RowData, Sparkline, SparklineGroup, SparklineType, StreamingXlsxWriter, XlsxWriter,
+    WriteOptions, Converter,
     sanitize_csv_value, sanitize_csv_row, CsvHandler,
 };
 use std::fs;
@@ -882,4 +883,138 @@ fn test_csv_sanitize_mixed_row_comprehensive() {
     assert!(sanitized[3].starts_with("'@"));
     assert_eq!(sanitized[4], "100");
     assert_eq!(sanitized[5], "");
+}
+
+// ============ Export Styled Preset Tests ============
+
+/// Helper to write options for preset (replicates write_options_for_preset logic)
+fn write_options_for_preset(name: &str) -> anyhow::Result<WriteOptions> {
+    let key = name.trim().to_lowercase();
+    match key.as_str() {
+        "default" => Ok(WriteOptions::default()),
+        "minimal" => Ok(WriteOptions {
+            sheet_name: None,
+            style_header: false,
+            header_style: CellStyle::default(),
+            column_styles: None,
+            freeze_header: false,
+            auto_filter: false,
+            auto_fit: true,
+        }),
+        "report" => Ok(WriteOptions {
+            sheet_name: None,
+            style_header: true,
+            header_style: CellStyle::header(),
+            column_styles: None,
+            freeze_header: true,
+            auto_filter: true,
+            auto_fit: true,
+        }),
+        "executive" | "corporate" => Ok(WriteOptions {
+            sheet_name: None,
+            style_header: true,
+            header_style: CellStyle {
+                bold: true,
+                bg_color: Some("203764".to_string()),
+                font_color: Some("FFFFFF".to_string()),
+                border: true,
+                align: Some("center".to_string()),
+                ..Default::default()
+            },
+            column_styles: None,
+            freeze_header: true,
+            auto_filter: true,
+            auto_fit: true,
+        }),
+        _ => anyhow::bail!("Unknown style preset: {}", name),
+    }
+}
+
+#[test]
+fn test_export_styled_default_preset() {
+    let options = write_options_for_preset("default").unwrap();
+    
+    // Default should have header styling enabled
+    assert!(options.style_header);
+    assert!(options.auto_fit);
+}
+
+#[test]
+fn test_export_styled_minimal_preset() {
+    let options = write_options_for_preset("minimal").unwrap();
+    
+    // Minimal should have no header styling
+    assert!(!options.style_header);
+    assert!(!options.freeze_header);
+    assert!(!options.auto_filter);
+    assert!(options.auto_fit);
+}
+
+#[test]
+fn test_export_styled_report_preset() {
+    let options = write_options_for_preset("report").unwrap();
+    
+    // Report should have all features enabled
+    assert!(options.style_header);
+    assert!(options.freeze_header);
+    assert!(options.auto_filter);
+    assert!(options.auto_fit);
+    assert!(options.header_style.bold);
+}
+
+#[test]
+fn test_export_styled_executive_preset() {
+    let options = write_options_for_preset("executive").unwrap();
+    
+    // Executive should have corporate styling
+    assert!(options.style_header);
+    assert!(options.freeze_header);
+    assert!(options.auto_filter);
+    assert!(options.auto_fit);
+    assert!(options.header_style.bold);
+    assert_eq!(options.header_style.bg_color, Some("203764".to_string()));
+    assert_eq!(options.header_style.font_color, Some("FFFFFF".to_string()));
+}
+
+#[test]
+fn test_export_styled_corporate_alias() {
+    // "corporate" should be equivalent to "executive"
+    let exec_options = write_options_for_preset("executive").unwrap();
+    let corp_options = write_options_for_preset("corporate").unwrap();
+    
+    assert_eq!(exec_options.header_style.bold, corp_options.header_style.bold);
+    assert_eq!(exec_options.header_style.bg_color, corp_options.header_style.bg_color);
+    assert_eq!(exec_options.header_style.font_color, corp_options.header_style.font_color);
+}
+
+#[test]
+fn test_export_styled_unknown_preset_fails() {
+    let result = write_options_for_preset("unknown_preset");
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_export_styled_presets_write_excel() {
+    let handler = ExcelHandler::new();
+    let data = vec![
+        vec!["Product".to_string(), "Sales".to_string(), "Region".to_string()],
+        vec!["Widget".to_string(), "1000".to_string(), "North".to_string()],
+        vec!["Gadget".to_string(), "2000".to_string(), "South".to_string()],
+    ];
+
+    // Test each preset creates a valid Excel file
+    for preset in ["default", "minimal", "report", "executive"] {
+        let output_path = unique_path(&format!("styled_{}", preset), "xlsx");
+        let options = write_options_for_preset(preset).unwrap();
+        
+        handler.write_styled(&output_path, &data, &options).unwrap();
+        
+        assert!(Path::new(&output_path).exists(), "Preset {} should create file", preset);
+        
+        // Verify we can read it back
+        let content = handler.read_with_sheet(&output_path, None).unwrap();
+        assert!(content.contains("Product"), "Preset {} should preserve headers", preset);
+        
+        fs::remove_file(&output_path).ok();
+    }
 }

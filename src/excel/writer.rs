@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use calamine::{open_workbook, Reader, Xlsx};
 use std::fs::File;
 use std::io::BufWriter;
 
@@ -6,6 +7,23 @@ use super::reader::ExcelHandler;
 use super::types::WriteOptions;
 use super::xlsx_writer::{CellData, RowData, XlsxWriter};
 use crate::traits::{DataWriteOptions, DataWriter};
+
+/// Write mode for range operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WriteMode {
+    /// Expand sheet bounds as needed
+    Expand,
+    /// Preserve existing cells outside the range
+    Preserve,
+    /// Overwrite all cells with new data
+    Overwrite,
+}
+
+impl Default for WriteMode {
+    fn default() -> Self {
+        Self::Expand
+    }
+}
 
 impl ExcelHandler {
     pub fn write_from_csv(
@@ -176,7 +194,154 @@ impl ExcelHandler {
         path: &str,
         data: &[Vec<String>],
         start_row: u32,
-        _start_col: u16,
+        start_col: u16,
+        sheet_name: Option<&str>,
+    ) -> Result<()> {
+        self.write_range_with_mode(path, data, start_row, start_col, sheet_name, WriteMode::Expand)
+    }
+
+    /// Write data to a specific range with specified write mode
+    pub fn write_range_with_mode(
+        &self,
+        path: &str,
+        data: &[Vec<String>],
+        start_row: u32,
+        start_col: u16,
+        sheet_name: Option<&str>,
+        mode: WriteMode,
+    ) -> Result<()> {
+        match mode {
+            WriteMode::Expand => self.write_range_expand(path, data, start_row, start_col, sheet_name),
+            WriteMode::Preserve => self.write_range_preserve(path, data, start_row, start_col, sheet_name),
+            WriteMode::Overwrite => self.write_range_overwrite(path, data, start_row, start_col, sheet_name),
+        }
+    }
+
+    fn write_range_expand(
+        &self,
+        path: &str,
+        data: &[Vec<String>],
+        start_row: u32,
+        start_col: u16,
+        sheet_name: Option<&str>,
+    ) -> Result<()> {
+        let mut writer = XlsxWriter::new();
+        let name = sheet_name.unwrap_or("Sheet1");
+        writer.add_sheet(name)?;
+
+        // Add empty rows for offset
+        for _ in 0..start_row {
+            writer.add_row(RowData::new());
+        }
+
+        // Add empty cells for column offset
+        for row in data {
+            let mut row_data = RowData::new();
+
+            // Add empty cells for column offset
+            for _ in 0..start_col {
+                row_data.add_empty();
+            }
+
+            for cell in row {
+                if let Ok(num) = cell.parse::<f64>() {
+                    row_data.add_number(num);
+                } else if !cell.is_empty() {
+                    row_data.add_string(cell);
+                } else {
+                    row_data.add_empty();
+                }
+            }
+            writer.add_row(row_data);
+        }
+
+        let file = File::create(path)?;
+        let mut buf_writer = BufWriter::new(file);
+        writer.save(&mut buf_writer)?;
+
+        Ok(())
+    }
+
+    fn write_range_preserve(
+        &self,
+        path: &str,
+        data: &[Vec<String>],
+        start_row: u32,
+        start_col: u16,
+        sheet_name: Option<&str>,
+    ) -> Result<()> {
+        let name = sheet_name.unwrap_or("Sheet1");
+
+        // Read existing data if file exists
+        let mut existing_data: Vec<Vec<String>> = Vec::new();
+
+        if std::path::Path::new(path).exists() {
+            let mut workbook: Xlsx<_> = open_workbook(path)
+                .with_context(|| format!("Failed to open Excel file: {path}"))?;
+
+            let sheet_names = workbook.sheet_names();
+            let sheet_name = sheet_names
+                .first()
+                .map(|s| s.as_str())
+                .unwrap_or("Sheet1");
+
+            if let Ok(range) = workbook.worksheet_range(sheet_name) {
+                for row in range.rows() {
+                    existing_data.push(row.iter().map(|c| c.to_string()).collect());
+                }
+            }
+        }
+
+        // Ensure existing data is large enough
+        let required_rows = (start_row as usize + data.len()).max(existing_data.len());
+        let max_cols = existing_data
+            .iter()
+            .map(|r| r.len())
+            .max()
+            .unwrap_or(0)
+            .max((start_col as usize) + data.iter().map(|r| r.len()).max().unwrap_or(0));
+
+        // Expand existing data if needed
+        while existing_data.len() < required_rows {
+            existing_data.push(vec![String::new(); max_cols]);
+        }
+        for row in &mut existing_data {
+            while row.len() < max_cols {
+                row.push(String::new());
+            }
+        }
+
+        // Write new data, preserving existing cells outside the range
+        for (data_row_idx, data_row) in data.iter().enumerate() {
+            let target_row_idx = start_row as usize + data_row_idx;
+            for (data_col_idx, cell) in data_row.iter().enumerate() {
+                let target_col_idx = start_col as usize + data_col_idx;
+                if target_row_idx < existing_data.len()
+                    && target_col_idx < existing_data[target_row_idx].len()
+                {
+                    existing_data[target_row_idx][target_col_idx] = cell.clone();
+                }
+            }
+        }
+
+        // Write everything back
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet(name)?;
+        writer.add_data(&existing_data);
+
+        let file = File::create(path)?;
+        let mut buf_writer = BufWriter::new(file);
+        writer.save(&mut buf_writer)?;
+
+        Ok(())
+    }
+
+    fn write_range_overwrite(
+        &self,
+        path: &str,
+        data: &[Vec<String>],
+        start_row: u32,
+        start_col: u16,
         sheet_name: Option<&str>,
     ) -> Result<()> {
         let mut writer = XlsxWriter::new();
@@ -190,6 +355,12 @@ impl ExcelHandler {
 
         for row in data {
             let mut row_data = RowData::new();
+
+            // Add empty cells for column offset
+            for _ in 0..start_col {
+                row_data.add_empty();
+            }
+
             for cell in row {
                 if let Ok(num) = cell.parse::<f64>() {
                     row_data.add_number(num);

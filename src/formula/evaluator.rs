@@ -22,8 +22,8 @@ impl FormulaEvaluator {
         &self,
         input: &str,
         output: &str,
-        _formula: &str,
-        _cell: &str,
+        formula: &str,
+        cell: &str,
         sheet_name: Option<&str>,
     ) -> Result<()> {
         let mut workbook: Xlsx<_> = open_workbook(input)
@@ -39,30 +39,96 @@ impl FormulaEvaluator {
             .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
 
         use crate::excel::xlsx_writer::XlsxWriter;
+        use crate::excel::xlsx_writer::{CellData, RowData};
 
         let mut writer = XlsxWriter::new();
         writer.add_sheet(sheet_name)?;
 
-        // Read all data from the existing workbook
-        let mut all_data: Vec<Vec<String>> = Vec::new();
-        for row in range.rows() {
-            all_data.push(row.iter().map(|c| c.to_string()).collect());
+        let (target_row, target_col) = self.parse_cell_reference(cell)?;
+
+        for (row_idx, row) in range.rows().enumerate() {
+            let mut row_data = RowData::new();
+            for (col_idx, cell) in row.iter().enumerate() {
+                if row_idx as u32 == target_row && col_idx as u16 == target_col {
+                    row_data.add_formula(formula);
+                } else {
+                    let cell_str = cell.to_string();
+                    if let Ok(num) = cell_str.parse::<f64>() {
+                        row_data.add_number(num);
+                    } else if !cell_str.is_empty() {
+                        row_data.add_string(&cell_str);
+                    } else {
+                        row_data.add_empty();
+                    }
+                }
+            }
+            writer.add_row(row_data);
         }
-
-        // Add all data to the writer
-        writer.add_data(&all_data);
-
-        // Note: Excel formulas require special cell type with formula attribute
-        // The custom XLSX writer supports formulas via CellData::Formula
-        // However, we need to add the formula to a specific cell
-        // For now, this is a limitation - formulas require modifying existing cells
-        // which is complex with the current architecture
 
         let file = std::fs::File::create(output)?;
         let mut buf_writer = std::io::BufWriter::new(file);
         writer.save(&mut buf_writer)?;
 
         Ok(())
+    }
+
+    pub fn apply_to_range(
+        &self,
+        input: &str,
+        output: &str,
+        formula: &str,
+        target_range: &crate::csv_handler::CellRange,
+        sheet_name: Option<&str>,
+    ) -> Result<usize> {
+        let mut workbook: Xlsx<_> = open_workbook(input)
+            .with_context(|| format!("Failed to open Excel file: {}", input))?;
+
+        let sheet_names = workbook.sheet_names();
+        let sheet_name = sheet_name
+            .or_else(|| sheet_names.first().map(|s| s.as_str()))
+            .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook"))?;
+
+        let range = workbook
+            .worksheet_range(sheet_name)
+            .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
+
+        use crate::excel::xlsx_writer::XlsxWriter;
+        use crate::excel::xlsx_writer::RowData;
+
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet(sheet_name)?;
+
+        let mut cells_affected = 0usize;
+
+        for (row_idx, row) in range.rows().enumerate() {
+            let mut row_data = RowData::new();
+            for (col_idx, cell) in row.iter().enumerate() {
+                if row_idx >= target_range.start_row as usize
+                    && row_idx <= target_range.end_row as usize
+                    && col_idx >= target_range.start_col as usize
+                    && col_idx <= target_range.end_col as usize
+                {
+                    row_data.add_formula(formula);
+                    cells_affected += 1;
+                } else {
+                    let cell_str = cell.to_string();
+                    if let Ok(num) = cell_str.parse::<f64>() {
+                        row_data.add_number(num);
+                    } else if !cell_str.is_empty() {
+                        row_data.add_string(&cell_str);
+                    } else {
+                        row_data.add_empty();
+                    }
+                }
+            }
+            writer.add_row(row_data);
+        }
+
+        let file = std::fs::File::create(output)?;
+        let mut buf_writer = std::io::BufWriter::new(file);
+        writer.save(&mut buf_writer)?;
+
+        Ok(cells_affected)
     }
 
     pub fn apply_to_csv(&self, input: &str, output: &str, formula: &str, cell: &str) -> Result<()> {

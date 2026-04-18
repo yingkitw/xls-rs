@@ -7,6 +7,29 @@
 
 Supported formats include CSV, Excel (`.xlsx`, `.xls`), ODS, Parquet, and Avro, with formula evaluation and a growing set of pandas-style operations.
 
+## What's New
+
+- **MCP Server**: New `XlsRsMcpServer` exposes all capabilities to AI agents and automation tools via the Model Context Protocol
+- **Styled Excel Export**: New presets (`default`, `minimal`, `report`, `executive`) for professional spreadsheet formatting with charts, conditional formatting, and sparklines
+- **Workflow Engine**: Config-driven batch operations via `WorkflowExecutor` — no temp JSON files needed
+- **Streaming Mode**: Memory-efficient processing for large CSV and Excel files (chunked reads/writes)
+- **Time Series & Geospatial**: Built-in support for temporal analysis and location-based data
+
+## Why xls-rs?
+
+Unlike single-purpose libraries, xls-rs provides a **unified surface** across library, CLI, and MCP server — the same operations work identically everywhere.
+
+**Key differentiators:**
+
+- **Production Safety**: CSV formula-injection sanitization on all write paths; overwrite guards (`--overwrite` required)
+- **Advanced Excel Features**: Charts, conditional formatting, sparklines, and styling — not just raw cell values
+- **Data Quality Built-in**: Validation rules, profiling, anomaly detection, and data lineage tracking
+- **Pandas-Style Ops**: `head`, `tail`, `describe`, `sort`, `filter`, `dedupe`, `transpose`, `select`, `join`, `concat`
+- **Formula Evaluation**: Built-in evaluator for Excel formulas (not just reading stored values)
+- **Encryption**: File-level encryption support for sensitive data
+- **Parquet & Avro**: Native columnar format support with schema inference from headers
+- **Google Sheets**: List and prepare for OAuth integration (API key support today)
+
 ## Format support (high level)
 
 | Format | Read (library / CLI) | Write (library / CLI) | Notes |

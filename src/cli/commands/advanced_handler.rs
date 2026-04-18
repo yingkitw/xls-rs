@@ -137,4 +137,62 @@ impl AdvancedCommandHandler {
     pub fn handle_examples_generate(&self) -> Result<()> {
         advanced::handle_examples_generate()
     }
+
+    /// Handle the add_chart command
+    pub fn handle_add_chart(
+        &self,
+        input: String,
+        output: String,
+        chart_type: String,
+        title: Option<String>,
+        category_column: Option<usize>,
+        value_columns: Option<Vec<usize>>,
+    ) -> Result<()> {
+        advanced::handle_add_chart(input, output, chart_type, title, category_column, value_columns)
+    }
+
+    /// Handle the add_sparkline command
+    pub fn handle_add_sparkline(
+        &self,
+        output: String,
+        data_range: String,
+        sparkline_cell: String,
+        sheet: Option<String>,
+    ) -> Result<()> {
+        advanced::handle_add_sparkline(output, data_range, sparkline_cell, sheet)
+    }
+
+    /// Handle the conditional_format command
+    pub fn handle_conditional_format(
+        &self,
+        output: String,
+        range: String,
+        condition: String,
+        bg_color: Option<String>,
+        font_color: Option<String>,
+        bold: Option<bool>,
+        sheet: Option<String>,
+    ) -> Result<()> {
+        advanced::handle_conditional_format(
+            output,
+            range,
+            condition,
+            bg_color,
+            font_color,
+            bold,
+            sheet,
+        )
+    }
+
+    /// Handle the apply_formula_range command
+    pub fn handle_apply_formula_range(
+        &self,
+        input: String,
+        output: String,
+        formula: String,
+        range: String,
+        sheet: Option<String>,
+    ) -> Result<()> {
+        advanced::handle_apply_formula_range(input, output, formula, range, sheet)
+    }
 }

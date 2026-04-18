@@ -1,14 +1,20 @@
 //! Excel file handling module
 
-mod chart;
+mod cell_typer;
+pub mod chart;
+mod feature_detector;
 mod reader;
-mod types;
+pub mod types;
 mod writer;
 pub mod xlsx_writer;
 
 #[allow(unused_imports)]
+pub use cell_typer::{add_cell_to_row, add_cells_to_row, classify_cell};
+#[allow(unused_imports)]
 pub use chart::{ChartConfig, DataChartType};
+pub use feature_detector::{FeatureDetector, FeatureSeverity, UnsupportedFeature};
 pub use reader::ExcelHandler;
+pub use writer::WriteMode;
 #[allow(unused_imports)]
 pub use types::{CellStyle, WriteOptions};
 pub use xlsx_writer::{

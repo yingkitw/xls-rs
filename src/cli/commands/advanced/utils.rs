@@ -3,7 +3,11 @@
 use xls_rs::{
     config::Config,
     converter::Converter,
-    excel::{CellStyle, ExcelHandler, WriteOptions},
+    excel::{
+        chart::{ChartConfig, DataChartType},
+        types::CellStyle,
+        ExcelHandler, WriteOptions,
+    },
 };
 use anyhow::{Context, Result};
 use clap::CommandFactory;
@@ -119,4 +123,114 @@ fn write_options_for_preset(name: &str) -> Result<WriteOptions> {
             name.trim()
         ),
     }
+}
+
+pub fn handle_add_chart(
+    input: String,
+    output: String,
+    chart_type: String,
+    title: Option<String>,
+    category_column: Option<usize>,
+    value_columns: Option<Vec<usize>>,
+) -> Result<()> {
+    let converter = Converter::new();
+    let data = converter.read_any_data(&input, None)?;
+
+    let chart_type_parsed = DataChartType::from_str(&chart_type)?;
+
+    let mut chart_config = ChartConfig {
+        chart_type: chart_type_parsed,
+        ..Default::default()
+    };
+
+    if let Some(t) = title {
+        chart_config.title = Some(t);
+    }
+    if let Some(cat_col) = category_column {
+        chart_config.category_column = cat_col;
+    }
+    if let Some(val_cols) = value_columns {
+        chart_config.value_columns = val_cols;
+    }
+
+    let handler = ExcelHandler::new();
+    handler.write_with_chart(&output, &data, &chart_config)?;
+
+    crate::cli::runtime::log(format!("Added chart to {}", output));
+
+    Ok(())
+}
+
+pub fn handle_add_sparkline(
+    output: String,
+    data_range: String,
+    sparkline_cell: String,
+    sheet: Option<String>,
+) -> Result<()> {
+    let handler = ExcelHandler::new();
+    handler.add_sparkline_formula(
+        &output,
+        &data_range,
+        &sparkline_cell,
+        sheet.as_deref(),
+    )?;
+
+    crate::cli::runtime::log(format!("Added sparkline to {}", output));
+
+    Ok(())
+}
+
+pub fn handle_conditional_format(
+    output: String,
+    range: String,
+    condition: String,
+    bg_color: Option<String>,
+    font_color: Option<String>,
+    bold: Option<bool>,
+    sheet: Option<String>,
+) -> Result<()> {
+    let cell_style = CellStyle {
+        bg_color,
+        font_color,
+        bold: bold.unwrap_or(true),
+        ..Default::default()
+    };
+
+    let handler = ExcelHandler::new();
+    handler.apply_conditional_format_formula(
+        &output,
+        &range,
+        &condition,
+        &cell_style,
+        None,
+        sheet.as_deref(),
+    )?;
+
+    crate::cli::runtime::log(format!("Applied conditional formatting to {}", output));
+
+    Ok(())
+}
+
+pub fn handle_apply_formula_range(
+    input: String,
+    output: String,
+    formula: String,
+    range_str: String,
+    sheet: Option<String>,
+) -> Result<()> {
+    use xls_rs::csv_handler::CellRange;
+    use xls_rs::formula::FormulaEvaluator;
+
+    let cell_range = CellRange::parse(&range_str)?;
+    let evaluator = FormulaEvaluator::new();
+    let cells_affected =
+        evaluator.apply_to_range(&input, &output, &formula, &cell_range, sheet.as_deref())?;
+
+    crate::cli::runtime::log(format!(
+        "Applied formula to {} cell(s) in {}",
+        cells_affected,
+        output
+    ));
+
+    Ok(())
 }

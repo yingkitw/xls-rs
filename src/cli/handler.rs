@@ -332,6 +332,54 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 style,
             } => self.advanced.handle_export_styled(input, output, style),
 
+            Commands::AddChart {
+                input,
+                output,
+                chart_type,
+                title,
+                category_column,
+                value_columns,
+            } => self
+                .advanced
+                .handle_add_chart(input, output, chart_type, title, category_column, value_columns),
+
+            Commands::AddSparkline {
+                output,
+                data_range,
+                sparkline_cell,
+                sheet,
+            } => self
+                .advanced
+                .handle_add_sparkline(output, data_range, sparkline_cell, sheet),
+
+            Commands::ConditionalFormat {
+                output,
+                range,
+                condition,
+                bg_color,
+                font_color,
+                bold,
+                sheet,
+            } => self.advanced.handle_conditional_format(
+                output,
+                range,
+                condition,
+                bg_color,
+                font_color,
+                bold,
+                sheet,
+            ),
+
+            Commands::ApplyFormulaRange {
+                input,
+                output,
+                formula,
+                range,
+                sheet,
+            } => self
+                .advanced
+                .handle_apply_formula_range(input, output, formula, range, sheet),
+
             // Google Sheets commands
             Commands::GSheetsList { spreadsheet } => self.io.handle_gsheets_list(spreadsheet),
             Commands::GSheetsAuth => self.io.handle_gsheets_auth(),
