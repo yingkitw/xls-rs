@@ -135,24 +135,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
-name = "anyrepair"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51a4110e75715bd85634a4c237ca5e06f2c1d66d77237c6fce42b24e8c0b653f"
-dependencies = [
- "clap",
- "csv",
- "ini",
- "quick-xml 0.36.2",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 1.0.69",
- "toml",
-]
-
-[[package]]
 name = "apache-avro"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -482,7 +464,7 @@ dependencies = [
  "codepage",
  "encoding_rs",
  "log",
- "quick-xml 0.31.0",
+ "quick-xml",
  "serde",
  "zip",
 ]
@@ -598,12 +580,6 @@ name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
-
-[[package]]
-name = "configparser"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe1d7dcda7d1da79e444bdfba1465f2f849a58b07774e1df473ee77030cb47a7"
 
 [[package]]
 name = "const-random"
@@ -1410,15 +1386,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ini"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a9271a5dfd4228fa56a78d7508a35c321639cc71f783bb7a5723552add87bce"
-dependencies = [
- "configparser",
-]
-
-[[package]]
 name = "inotify"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2017,15 +1984,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "quick-xml"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7649a7b4df05aed9ea7ec6f628c67c9953a43869b8bc50929569b2999d443fe"
-dependencies = [
- "memchr",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2436,19 +2394,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
 ]
 
 [[package]]
@@ -2901,12 +2846,6 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
-
-[[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "untrusted"
@@ -3432,7 +3371,6 @@ name = "xls-rs"
 version = "0.1.2"
 dependencies = [
  "anyhow",
- "anyrepair",
  "apache-avro",
  "arrow-array",
  "arrow-schema",
