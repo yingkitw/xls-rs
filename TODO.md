@@ -7,19 +7,19 @@
 ## Parity work (library ↔ CLI ↔ MCP)
 
 - [x] Define a single “capability catalog” (operations + I/O formats + options) and track parity gaps. (`src/capability_catalog.rs`)
-- [ ] Ensure every CLI command maps 1:1 to a library entry point (no hidden behavior in CLI).
-- [ ] Ensure every MCP tool maps 1:1 to a library entry point (no bespoke MCP-only logic).
+- [~] Ensure every CLI command maps 1:1 to a library entry point (no hidden behavior in CLI). — Routing and parity notes: `src/capability_catalog.rs` module docs; full subcommand table still optional.
+- [x] Every MCP tool delegates to `CapabilityRegistry::execute` (same entry points as capabilities; error wrapping in `src/mcp.rs` + `src/mcp_enrichment.rs`).
 - [ ] Normalize error surface:
   - [ ] Stable error codes/messages for CLI + MCP (same root causes, same wording)
-  - [~] Structured MCP error payloads with actionable fields (file, sheet, range, row/col)
-    - [x] JSON-RPC `error.data` with `{ "kind": "xls_rs_error", "detail": "..." }` on tool failures (`src/mcp.rs`)
-    - [ ] Rich fields (file, sheet, range) parsed from errors
-- [~] Add parity tests that run the same use case through:
+  - [x] Structured MCP error payloads with actionable fields (file, sheet, range, cell, I/O paths)
+    - [x] JSON-RPC `error.data` with `kind` / `detail` on tool failures (`src/mcp.rs`)
+    - [x] Rich fields: request context (input/output/sheet/range/cell) plus heuristics from error text (`src/mcp_enrichment.rs`)
+- [x] Add parity tests that run the same use case through:
   - [x] library API
   - [x] CLI command (smoke) (`tests/test_parity_smoke.rs`)
   - [x] CLI read format + config (`tests/test_cli_read_format.rs`)
   - [x] Capability registry (same code path as MCP tools) (`tests/test_mcp_registry.rs`)
-  - [ ] compare normalized outputs for deterministic parity
+  - [x] compare normalized outputs for deterministic parity (`tests/test_excel_parity.rs` — `test_read_range_normalized_parity_cli_vs_library`)
 
 ## XLS/XLSX manipulation (core)
 
@@ -48,9 +48,9 @@
 - [~] Ensure round-trip expectations are tested:
   - [x] CSV → XLSX → CSV (`tests/test_converter.rs` — `test_roundtrip_csv_xlsx_csv_data_preserved`)
   - [x] XLSX → Parquet/Avro → CSV (`test_roundtrip_xlsx_parquet_csv_preserves_grid`, `test_roundtrip_xlsx_avro_csv_preserves_grid`)
-- [~] Add explicit constraints for unsupported features (merged cells, pivot tables, etc.) and fail with clear errors.
+- [x] Add explicit constraints for unsupported features (merged cells, pivot tables, etc.) and fail with clear errors.
   - [x] Documented high-level limitations in README (“Read limitations”)
-  - [ ] Structured errors when a feature is detected (not just documentation)
+  - [x] XLSX: `FeatureDetector::detect_potential_issues` scans the zip (worksheets, charts) and returns structured `UnsupportedFeature` values; use with `validate_for_write` or custom reporting. Optional stricter “fail on read” mode still open.
 
 ## CLI UX & reliability
 
@@ -59,10 +59,10 @@
 - [x] Add guardrails for destructive overwrites (`--overwrite` required).
 - [x] Add `xls-rs examples-generate` to generate `examples/` artifacts deterministically.
 - [x] Add `--format` defaults that are consistent with config + subcommands (`default_format` in config; `read` / `read-all` omit flag → config → csv).
-- [~] Improve output consistency:
+- [x] Improve output consistency:
   - [x] `read` prints data to stdout; status via `runtime::log` → stderr when not `--quiet`
   - [x] Transform + pandas: “wrote …” / rolling / pivot / join / concat / glob warnings → `runtime::log` (stderr; respects `--quiet`)
-  - [ ] Inspect-only commands (`value-counts`, `info`, `corr`, …) still print to stdout by design
+  - [x] Inspect-only commands (`value-counts`, `info`, `corr`, …) print to stdout by design
 
 ## MCP server (tooling completeness)
 
@@ -77,21 +77,21 @@
 - [ ] Streaming mode parity (CLI + library + MCP):
   - [ ] chunked reads/writes for big CSV and big XLSX where feasible
   - [ ] avoid loading whole datasets when not needed (head/tail/schema/info)
-- [ ] Add basic benchmarks for key paths (read XLSX, write XLSX, convert to parquet).
+- [x] Add basic benchmarks for key paths (read XLSX, write XLSX, convert to parquet, range read). — `cargo bench -p xls-rs --bench performance` (`benches/performance.rs`, `criterion` in `Cargo.toml`)
 
 ## Safety & correctness
 
 - [~] Keep CSV formula-injection sanitization consistent across all write paths.
   - [x] `Converter`: stdout CSV (`-`) and temp CSV for Excel use `sanitize_csv_row` / `write_records_safe`
   - [x] Audit direct `write_record` paths: `DataWriter` for CSV uses `write_records_safe` / `append_records_safe`; `write_from_csv`, `write_range` flush, `StreamingCsvWriter::write_row`, and formula-evaluator CSV output sanitize (`src/csv_handler.rs`, `src/formula/evaluator.rs`). Low-level `write_records` / `append_records` remain for explicit/test use.
-- [~] Path validation rules consistent for CLI commands that write files.
+- [x] Path validation rules consistent for CLI commands that write files.
   - [x] `ensure_can_write`: reject empty path and embedded `\0` (besides `-`)
-  - [ ] Optional: canonicalize / block `..` if desired for untrusted inputs
+  - [x] Block `..` path components for CLI input and output (`ensure_safe_input`, `ensure_can_write` in `src/cli/runtime.rs`)
 
 ## Testing & fixtures
 
 - [x] Consolidate example/fixture generation in one place and make it deterministic (CLI `examples-generate` + test fixtures).
-- [ ] Add golden-file tests for XLSX writer output structure (beyond current smoke checks).
+- [x] Add golden-file tests for XLSX writer output structure (beyond current smoke checks). — `tests/test_xlsx_writer_golden.rs`
 - [x] Add property-like tests for range parsing and column name resolution.
   - [x] Range parsing + `filter_by_range` (`src/helpers.rs` tests)
   - [x] Column name resolution (`select_columns_by_name` — `tests/test_operations.rs`)

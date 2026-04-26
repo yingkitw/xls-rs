@@ -16,6 +16,25 @@ use crate::capabilities::{
 };
 use rmcp::handler::server::tool::ToolRouter;
 use crate::capability_catalog;
+use crate::mcp_enrichment::{mcp_error_data, McpErrorContext};
+
+fn tool_error(context: &str, e: anyhow::Error, ctx: McpErrorContext) -> McpError {
+    let full = format!("{context}: {e:#}");
+    McpError {
+        code: ErrorCode::INTERNAL_ERROR,
+        message: Cow::from(full.clone()),
+        data: Some(mcp_error_data(&full, ctx)),
+    }
+}
+
+fn serde_err(e: serde_json::Error) -> McpError {
+    let s = e.to_string();
+    McpError {
+        code: ErrorCode::INTERNAL_ERROR,
+        message: Cow::from(s.clone()),
+        data: Some(mcp_error_data(&s, McpErrorContext::default())),
+    }
+}
 
 #[derive(Clone)]
 pub struct XlsRsMcpServer {
@@ -171,18 +190,6 @@ pub struct ApplyFormulaRequest {
     pub sheet: Option<String>,
 }
 
-fn make_error(msg: String) -> McpError {
-    let detail = msg.clone();
-    McpError {
-        code: ErrorCode::INTERNAL_ERROR,
-        message: Cow::from(msg),
-        data: Some(serde_json::json!({
-            "kind": "xls_rs_error",
-            "detail": detail,
-        })),
-    }
-}
-
 #[tool_router]
 impl XlsRsMcpServer {
     pub fn new() -> Self {
@@ -219,11 +226,16 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<SortRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
-        
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            output: Some(request.0.output.clone()),
+            ..Default::default()
+        };
         match self.registry.execute("sort", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to sort: {}", e))),
+            Err(e) => Err(tool_error("Failed to sort", e, ctx)),
         }
     }
 
@@ -232,10 +244,17 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<ConvertRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            output: Some(request.0.output.clone()),
+            sheet: request.0.sheet.clone(),
+            ..Default::default()
+        };
         match self.registry.execute("convert", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to convert: {}", e))),
+            Err(e) => Err(tool_error("Failed to convert", e, ctx)),
         }
     }
 
@@ -244,11 +263,16 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<FilterRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
-        
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            output: Some(request.0.output.clone()),
+            ..Default::default()
+        };
         match self.registry.execute("filter", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to filter: {}", e))),
+            Err(e) => Err(tool_error("Failed to filter", e, ctx)),
         }
     }
 
@@ -257,11 +281,10 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<ExecuteWorkflowRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
-        
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
         match self.registry.execute("execute_workflow", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to execute workflow: {}", e))),
+            Err(e) => Err(tool_error("Failed to execute workflow", e, McpErrorContext::default())),
         }
     }
 
@@ -297,10 +320,16 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<WriteStyledRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.output.clone()),
+            output: Some(request.0.output.clone()),
+            sheet: request.0.sheet_name.clone(),
+            ..Default::default()
+        };
         match self.registry.execute("write_styled", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to write styled: {}", e))),
+            Err(e) => Err(tool_error("Failed to write styled", e, ctx)),
         }
     }
 
@@ -309,10 +338,15 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<AddChartRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.output.clone()),
+            output: Some(request.0.output.clone()),
+            ..Default::default()
+        };
         match self.registry.execute("add_chart", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to add chart: {}", e))),
+            Err(e) => Err(tool_error("Failed to add chart", e, ctx)),
         }
     }
 
@@ -321,10 +355,18 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<AddSparklineRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.output.clone()),
+            output: Some(request.0.output.clone()),
+            range: Some(request.0.data_range.clone()),
+            cell: Some(request.0.sparkline_cell.clone()),
+            sheet: request.0.sheet_name.clone(),
+            ..Default::default()
+        };
         match self.registry.execute("add_sparkline", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to add sparkline: {}", e))),
+            Err(e) => Err(tool_error("Failed to add sparkline", e, ctx)),
         }
     }
 
@@ -333,10 +375,17 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<ConditionalFormatRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.output.clone()),
+            output: Some(request.0.output.clone()),
+            range: Some(request.0.range.clone()),
+            sheet: request.0.sheet_name.clone(),
+            ..Default::default()
+        };
         match self.registry.execute("conditional_format", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to apply conditional format: {}", e))),
+            Err(e) => Err(tool_error("Failed to apply conditional format", e, ctx)),
         }
     }
 
@@ -345,10 +394,15 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<ListSheetsRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            ..Default::default()
+        };
         match self.registry.execute("list_sheets", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to list sheets: {}", e))),
+            Err(e) => Err(tool_error("Failed to list sheets", e, ctx)),
         }
     }
 
@@ -357,10 +411,17 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<ReadExcelRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            sheet: request.0.sheet.clone(),
+            range: request.0.range.clone(),
+            ..Default::default()
+        };
         match self.registry.execute("read_excel", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to read Excel: {}", e))),
+            Err(e) => Err(tool_error("Failed to read Excel", e, ctx)),
         }
     }
 
@@ -369,10 +430,15 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<ReadAllSheetsRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            ..Default::default()
+        };
         match self.registry.execute("read_all_sheets", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to read all sheets: {}", e))),
+            Err(e) => Err(tool_error("Failed to read all sheets", e, ctx)),
         }
     }
 
@@ -381,10 +447,19 @@ impl XlsRsMcpServer {
         &self,
         request: Parameters<ApplyFormulaRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let args = serde_json::to_value(&request.0).map_err(|e| make_error(e.to_string()))?;
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            output: Some(request.0.output.clone()),
+            sheet: request.0.sheet.clone(),
+            range: request.0.range.clone(),
+            cell: request.0.cell.clone(),
+            ..Default::default()
+        };
         match self.registry.execute("apply_formula", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
-            Err(e) => Err(make_error(format!("Failed to apply formula: {}", e))),
+            Err(e) => Err(tool_error("Failed to apply formula", e, ctx)),
         }
     }
 }

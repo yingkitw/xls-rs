@@ -1,4 +1,10 @@
 //! Capability catalog shared by CLI/MCP.
+//!
+//! **Parity:** the `xls-rs` binary maps subcommands to this crate’s public APIs (see the repo’s
+//! `src/cli/handler.rs` and `src/cli/commands/`). Reads with `--range` use `Converter::read_any_data`
+//! plus `filter_by_range` (same as [`ExcelHandler::read_range`](crate::excel::ExcelHandler::read_range) for a single sheet).
+//! MCP uses [`CapabilityRegistry::execute`](crate::capabilities::CapabilityRegistry::execute) with the
+//! same names as in [`CAPABILITIES`].
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CapabilitySurface {
@@ -97,4 +103,3 @@ pub const CAPABILITIES: &[Capability] = &[
 ];
 
 pub const FORMATS: &[&str] = &["csv", "xlsx", "xls", "ods", "parquet", "avro", "json"];
-

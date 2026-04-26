@@ -4,6 +4,8 @@
 //! and returns structured error messages with actionable guidance.
 
 use anyhow::{anyhow, Result};
+use regex::Regex;
+use std::io::Read;
 
 /// Unsupported Excel feature with structured error information
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,20 +206,110 @@ impl std::fmt::Display for FeatureSeverity {
 pub struct FeatureDetector;
 
 impl FeatureDetector {
-    /// Detect features that may affect read/write operations
+    /// Detect features that may affect read/write operations.
     ///
-    /// This is a placeholder for future implementation. Currently, calamine
-    /// doesn't expose detailed feature information. This would be enhanced
-    /// when using a more advanced Excel library or adding custom parsing.
-    pub fn detect_potential_issues(_path: &str) -> Result<Vec<UnsupportedFeature>> {
-        // TODO: Implement actual feature detection
-        // This would require:
-        // 1. Parsing Excel XML structure directly
-        // 2. Detecting merged cells, pivot tables, etc.
-        // 3. Or using a library that exposes this information
+    /// For `.xlsx`, the zip bundle is scanned (`xl/workbook.xml`, `xl/worksheets/*.xml`,
+    /// `xl/charts/*.xml`). Other extensions keep [`Self::heuristic_check`] only.
+    pub fn detect_potential_issues(path: &str) -> Result<Vec<UnsupportedFeature>> {
+        let mut issues = Self::heuristic_check(path);
+        if !path.to_lowercase().ends_with(".xlsx") {
+            return Ok(issues);
+        }
 
-        // For now, return empty vector
-        Ok(Vec::new())
+        let file = std::fs::File::open(path).map_err(|e| anyhow!(e))?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| anyhow!(e))?;
+        let mut workbook_xml = String::new();
+        {
+            let mut e = archive
+                .by_name("xl/workbook.xml")
+                .map_err(|_| anyhow!("invalid xlsx: missing xl/workbook.xml"))?;
+            e.read_to_string(&mut workbook_xml)
+                .map_err(|e| anyhow!(e))?;
+        }
+        let re_name = Regex::new(r#"<sheet[^>]+name="([^"]+)""#).expect("sheet name regex");
+        let sheet_names: Vec<String> = re_name
+            .captures_iter(&workbook_xml)
+            .map(|c| c[1].to_string())
+            .collect();
+
+        let re_sheet_num = Regex::new(r"sheet(\d+)\.xml$").expect("sheet file regex");
+        let ref_cell = Regex::new(r#"ref="([^"]+)""#).expect("ref attr regex");
+        let ref_sq = Regex::new(r#"sqref="([^"]+)""#).expect("sqref attr regex");
+        let mut chart_count: usize = 0;
+
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i).map_err(|e| anyhow!(e))?;
+            let ename = entry.name().to_string();
+            if ename.starts_with("xl/charts/chart") && ename.ends_with(".xml") {
+                chart_count += 1;
+                continue;
+            }
+            if !ename.starts_with("xl/worksheets/") || !ename.ends_with(".xml") {
+                continue;
+            }
+            let mut data = String::new();
+            entry
+                .read_to_string(&mut data)
+                .map_err(|e| anyhow!(e))?;
+
+            let sheet_idx = re_sheet_num
+                .captures(&ename)
+                .and_then(|c| c[1].parse::<usize>().ok())
+                .unwrap_or(1);
+            let sheet = sheet_names
+                .get(sheet_idx.saturating_sub(1))
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+
+            if data.contains("mergeCells") || data.contains("mergeCell") {
+                let range = ref_cell
+                    .captures(&data)
+                    .map(|c| c[1].to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                issues.push(UnsupportedFeature::MergedCells {
+                    sheet: sheet.clone(),
+                    range,
+                });
+            }
+            if data.contains("pivotCache") || data.contains("pivotTable") {
+                issues.push(UnsupportedFeature::PivotTable { sheet: sheet.clone() });
+            }
+            if data.contains("dataValidation") {
+                let range = ref_sq
+                    .captures(&data)
+                    .map(|c| c[1].to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                issues.push(UnsupportedFeature::DataValidation {
+                    sheet: sheet.clone(),
+                    range,
+                });
+            }
+            if data.contains("conditionalFormatting") {
+                issues.push(UnsupportedFeature::ConditionalFormatting {
+                    sheet: sheet.clone(),
+                });
+            }
+            if data.contains("sheetProtection") {
+                let password_protected = data.contains("password");
+                issues.push(UnsupportedFeature::ProtectedSheet {
+                    sheet,
+                    password_protected,
+                });
+            }
+        }
+
+        if chart_count > 0 {
+            let sheet = sheet_names
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+            issues.push(UnsupportedFeature::Charts {
+                sheet,
+                count: chart_count,
+            });
+        }
+
+        Ok(issues)
     }
 
     /// Check if a file is likely to contain unsupported features
@@ -318,5 +410,29 @@ mod tests {
         };
         let error = feature.to_error();
         assert!(error.to_string().contains("Pivot table"));
+    }
+
+    #[test]
+    fn detect_simple_written_xlsx_has_no_error_severity_flags() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("t.xlsx");
+        let handler = crate::ExcelHandler::new();
+        let data = vec![vec!["a".to_string()]];
+        handler
+            .write_styled(
+                p.to_str().unwrap(),
+                &data,
+                &crate::WriteOptions::default(),
+            )
+            .unwrap();
+        let issues = FeatureDetector::detect_potential_issues(p.to_str().unwrap()).unwrap();
+        let errors: Vec<_> = issues
+            .iter()
+            .filter(|i| i.severity() == FeatureSeverity::Error)
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "expected no error-level workbook features, got {errors:?}"
+        );
     }
 }

@@ -72,3 +72,8 @@ incremental = false
 incremental = false
 
 [dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "performance"
+harness = false

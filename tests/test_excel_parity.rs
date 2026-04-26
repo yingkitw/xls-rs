@@ -4,7 +4,8 @@
 //! across the library API, CLI commands, and MCP tools.
 
 use std::process::Command;
-use tempfile::TempDir;
+use xls_rs::helpers::filter_by_range;
+use xls_rs::CellRange;
 
 #[test]
 fn test_excel_write_styled_parity() {
@@ -140,6 +141,57 @@ fn test_excel_read_range_parity() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("A1,B1"));
     assert!(stdout.contains("A2,B2"));
+}
+
+/// Mirrors `IoCommandHandler::print_csv` / `println!` (line + newline per row).
+fn grid_to_cli_csv(data: &[Vec<String>]) -> String {
+    let mut s = String::new();
+    for row in data {
+        s.push_str(&row.join(","));
+        s.push('\n');
+    }
+    s
+}
+
+#[test]
+fn test_read_range_normalized_parity_cli_vs_library() {
+    let dir = tempfile::tempdir().unwrap();
+    let xlsx_input = dir.path().join("test_parity.xlsx");
+    let data = vec![
+        vec!["A1".to_string(), "B1".to_string(), "C1".to_string()],
+        vec!["A2".to_string(), "B2".to_string(), "C2".to_string()],
+        vec!["A3".to_string(), "B3".to_string(), "C3".to_string()],
+    ];
+    let converter = xls_rs::Converter::new();
+    converter
+        .write_any_data(xlsx_input.to_string_lossy().as_ref(), &data, None)
+        .unwrap();
+
+    let mut lib_data = converter
+        .read_any_data(xlsx_input.to_string_lossy().as_ref(), None)
+        .unwrap();
+    let cr = CellRange::parse("A1:B2").unwrap();
+    lib_data = filter_by_range(&lib_data, &cr);
+    let lib_csv = grid_to_cli_csv(&lib_data);
+
+    let exe = env!("CARGO_BIN_EXE_xls-rs");
+    let out = Command::new(exe)
+        .args([
+            "--quiet",
+            "read",
+            "--input",
+            xlsx_input.to_string_lossy().as_ref(),
+            "--range",
+            "A1:B2",
+            "--format",
+            "csv",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(out.status.success(), "CLI read with range failed: {:?}", out);
+    let cli_csv = String::from_utf8_lossy(&out.stdout).to_string();
+    assert_eq!(lib_csv.trim_end(), cli_csv.trim_end());
 }
 
 #[test]

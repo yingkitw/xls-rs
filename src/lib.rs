@@ -23,6 +23,7 @@ pub mod google_sheets;
 pub mod handler_registry;
 pub mod helpers;
 pub mod lineage;
+mod mcp_enrichment;
 pub mod mcp;
 #[cfg(test)]
 pub mod mocks;
