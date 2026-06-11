@@ -191,6 +191,146 @@ impl GoogleSheetsHandler {
 
         Ok(titles)
     }
+
+    /// Obtain authorization header for Google Sheets API calls.
+    fn auth_header(&self) -> Result<String> {
+        if let Some(token) = &self.config.google_sheets.access_token {
+            Ok(format!("Bearer {}", token))
+        } else if let Some(_api_key) = &self.config.google_sheets.api_key {
+            // API key is query-param based; return empty for header auth
+            Ok(String::new())
+        } else {
+            Err(anyhow!(
+                "No Google Sheets credentials configured. \
+                 Set google_sheets.access_token or google_sheets.api_key in config."
+            ))
+        }
+    }
+
+    /// Read values from a range via the Google Sheets API.
+    fn read_values(&self, spreadsheet_id: &str, range: &str) -> Result<Vec<Vec<String>>> {
+        let auth = self.auth_header()?;
+        let url = format!(
+            "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range}"
+        );
+
+        let req = ureq::get(&url);
+        let req = if auth.is_empty() {
+            if let Some(api_key) = &self.config.google_sheets.api_key {
+                req.query("key", api_key)
+            } else {
+                req
+            }
+        } else {
+            req.set("Authorization", &auth)
+        };
+
+        let resp = req
+            .call()
+            .map_err(|e| anyhow!("Google Sheets read failed: {}", e))?;
+
+        let status = resp.status();
+        let body = resp
+            .into_string()
+            .map_err(|e| anyhow!("Failed to read Sheets API response: {}", e))?;
+
+        if status != 200 {
+            anyhow::bail!("Google Sheets API returned HTTP {}: {}", status, body);
+        }
+
+        let v: serde_json::Value = serde_json::from_str(&body)
+            .with_context(|| "Invalid JSON from Sheets API")?;
+
+        let values = v
+            .get("values")
+            .and_then(|s| s.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        let mut result = Vec::new();
+        for row in values {
+            if let Some(cols) = row.as_array() {
+                let row_strs: Vec<String> = cols
+                    .iter()
+                    .map(|c| c.as_str().unwrap_or("").to_string())
+                    .collect();
+                result.push(row_strs);
+            }
+        }
+        Ok(result)
+    }
+
+    /// Write values to a range via the Google Sheets API.
+    fn write_values(
+        &self,
+        spreadsheet_id: &str,
+        range: &str,
+        data: &[Vec<String>],
+    ) -> Result<()> {
+        let auth = self.auth_header()?;
+        let url = format!(
+            "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range}?valueInputOption=USER_ENTERED"
+        );
+
+        let payload = serde_json::json!({
+            "range": range,
+            "majorDimension": "ROWS",
+            "values": data,
+        });
+
+        let resp = ureq::put(&url)
+            .set("Authorization", &auth)
+            .set("Content-Type", "application/json")
+            .send_string(&payload.to_string())
+            .map_err(|e| anyhow!("Google Sheets write failed: {}", e))?;
+
+        let status = resp.status();
+        let body = resp
+            .into_string()
+            .map_err(|e| anyhow!("Failed to read Sheets API response: {}", e))?;
+
+        if status != 200 {
+            anyhow::bail!("Google Sheets API returned HTTP {}: {}", status, body);
+        }
+
+        Ok(())
+    }
+
+    /// Append values to a sheet via the Google Sheets API.
+    fn append_values(
+        &self,
+        spreadsheet_id: &str,
+        range: &str,
+        data: &[Vec<String>],
+    ) -> Result<()> {
+        let auth = self.auth_header()?;
+        let url = format!(
+            "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"
+        );
+
+        let payload = serde_json::json!({
+            "range": range,
+            "majorDimension": "ROWS",
+            "values": data,
+        });
+
+        let resp = ureq::post(&url)
+            .set("Authorization", &auth)
+            .set("Content-Type", "application/json")
+            .send_string(&payload.to_string())
+            .map_err(|e| anyhow!("Google Sheets append failed: {}", e))?;
+
+        let status = resp.status();
+        let body = resp
+            .into_string()
+            .map_err(|e| anyhow!("Failed to read Sheets API response: {}", e))?;
+
+        if status != 200 {
+            anyhow::bail!("Google Sheets API returned HTTP {}: {}", status, body);
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for GoogleSheetsHandler {
@@ -201,16 +341,14 @@ impl Default for GoogleSheetsHandler {
 
 impl DataReader for GoogleSheetsHandler {
     fn read(&self, path: &str) -> Result<Vec<Vec<String>>> {
-        // For now, return a placeholder implementation
-        // In a real implementation, this would use the Google Sheets API
-        let _spreadsheet_id = self.parse_spreadsheet_id(path)?;
-        let _sheet_name = self.parse_sheet_name(path);
-
-        // Full read/write requires OAuth or service-account auth; not implemented here.
-        Ok(vec![
-            vec!["Column1".to_string(), "Column2".to_string()],
-            vec!["Value1".to_string(), "Value2".to_string()],
-        ])
+        let spreadsheet_id = self.parse_spreadsheet_id(path)?;
+        let sheet_name = self.parse_sheet_name(path);
+        let range = if let Some(name) = sheet_name {
+            format!("{}!A1:ZZ1000000", name)
+        } else {
+            "Sheet1!A1:ZZ1000000".to_string()
+        };
+        self.read_values(&spreadsheet_id, &range)
     }
 
     fn read_with_headers(&self, path: &str) -> Result<Vec<Vec<String>>> {
@@ -218,15 +356,10 @@ impl DataReader for GoogleSheetsHandler {
     }
 
     fn read_range(&self, path: &str, range: &CellRange) -> Result<Vec<Vec<String>>> {
-        let _spreadsheet_id = self.parse_spreadsheet_id(path)?;
-        let _sheet_name = self.parse_sheet_name(path);
-        let _range_str = self.cell_range_to_a1(range, _sheet_name.as_deref());
-
-        // Same as [`Self::read`]: live API access is not wired for this path yet.
-        Ok(vec![vec![
-            "RangeValue1".to_string(),
-            "RangeValue2".to_string(),
-        ]])
+        let spreadsheet_id = self.parse_spreadsheet_id(path)?;
+        let sheet_name = self.parse_sheet_name(path);
+        let range_str = self.cell_range_to_a1(range, sheet_name.as_deref());
+        self.read_values(&spreadsheet_id, &range_str)
     }
 
     fn read_as_json(&self, path: &str) -> Result<String> {
@@ -248,15 +381,12 @@ impl DataWriter for GoogleSheetsHandler {
     fn write(&self, path: &str, data: &[Vec<String>], options: DataWriteOptions) -> Result<()> {
         let spreadsheet_id = self.parse_spreadsheet_id(path)?;
         let sheet_name = options.sheet_name.or_else(|| self.parse_sheet_name(path));
-
-        // Live API write not implemented; logs intent only.
-        println!("Writing to Google Sheets: {}", spreadsheet_id);
-        if let Some(name) = &sheet_name {
-            println!("Sheet: {}", name);
-        }
-        println!("Data rows: {}", data.len());
-
-        Ok(())
+        let range = if let Some(name) = sheet_name {
+            format!("{}!A1", name)
+        } else {
+            "Sheet1!A1".to_string()
+        };
+        self.write_values(&spreadsheet_id, &range, data)
     }
 
     fn write_range(
@@ -269,30 +399,23 @@ impl DataWriter for GoogleSheetsHandler {
         let spreadsheet_id = self.parse_spreadsheet_id(path)?;
         let sheet_name = self.parse_sheet_name(path);
         let start_a1 = self.row_col_to_a1(start_row, start_col);
-
-        // Live API write not implemented; logs intent only.
-        println!("Writing range to Google Sheets: {}", spreadsheet_id);
-        if let Some(name) = &sheet_name {
-            println!("Sheet: {}", name);
-        }
-        println!("Start: {}", start_a1);
-        println!("Data rows: {}", data.len());
-
-        Ok(())
+        let range = if let Some(name) = sheet_name {
+            format!("{}!{}", name, start_a1)
+        } else {
+            format!("Sheet1!{}", start_a1)
+        };
+        self.write_values(&spreadsheet_id, &range, data)
     }
 
     fn append(&self, path: &str, data: &[Vec<String>]) -> Result<()> {
         let spreadsheet_id = self.parse_spreadsheet_id(path)?;
         let sheet_name = self.parse_sheet_name(path);
-
-        // Live API append not implemented; logs intent only.
-        println!("Appending to Google Sheets: {}", spreadsheet_id);
-        if let Some(name) = &sheet_name {
-            println!("Sheet: {}", name);
-        }
-        println!("Data rows: {}", data.len());
-
-        Ok(())
+        let range = if let Some(name) = sheet_name {
+            format!("{}!A1", name)
+        } else {
+            "Sheet1!A1".to_string()
+        };
+        self.append_values(&spreadsheet_id, &range, data)
     }
 
     fn supports_format(&self, path: &str) -> bool {
@@ -321,5 +444,49 @@ impl Clone for GoogleSheetsHandler {
             config: self.config.clone(),
             rt: Runtime::new().expect("Failed to create tokio runtime"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auth_header_returns_bearer_when_access_token_set() {
+        let mut config = Config::default();
+        config.google_sheets.access_token = Some("my_token".to_string());
+        let handler = GoogleSheetsHandler::with_config(config);
+        assert_eq!(handler.auth_header().unwrap(), "Bearer my_token");
+    }
+
+    #[test]
+    fn auth_header_returns_empty_when_only_api_key() {
+        let mut config = Config::default();
+        config.google_sheets.api_key = Some("my_key".to_string());
+        let handler = GoogleSheetsHandler::with_config(config);
+        assert_eq!(handler.auth_header().unwrap(), "");
+    }
+
+    #[test]
+    fn auth_header_errors_when_no_credentials() {
+        let handler = GoogleSheetsHandler::new();
+        let err = handler.auth_header().unwrap_err().to_string();
+        assert!(err.contains("No Google Sheets credentials configured"));
+    }
+
+    #[test]
+    fn a1_to_row_col_basic() {
+        let handler = GoogleSheetsHandler::new();
+        assert_eq!(handler.a1_to_row_col("A1").unwrap(), (0, 0));
+        assert_eq!(handler.a1_to_row_col("B2").unwrap(), (1, 1));
+        assert_eq!(handler.a1_to_row_col("Z26").unwrap(), (25, 25));
+    }
+
+    #[test]
+    fn row_col_to_a1_basic() {
+        let handler = GoogleSheetsHandler::new();
+        assert_eq!(handler.row_col_to_a1(0, 0), "A1");
+        assert_eq!(handler.row_col_to_a1(1, 1), "B2");
+        assert_eq!(handler.row_col_to_a1(25, 25), "Z26");
     }
 }

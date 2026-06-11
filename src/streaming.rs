@@ -144,6 +144,7 @@ pub struct CsvStreamingReader {
     current_row: usize,
     total_rows: Option<usize>,
     reader: Option<csv::Reader<std::fs::File>>,
+    finished: bool,
 }
 
 impl CsvStreamingReader {
@@ -157,6 +158,7 @@ impl CsvStreamingReader {
             current_row: 0,
             total_rows: None,
             reader: Some(reader),
+            finished: false,
         })
     }
 
@@ -175,6 +177,10 @@ impl CsvStreamingReader {
 
 impl StreamingDataReader for CsvStreamingReader {
     fn read_chunk(&mut self, chunk_size: usize) -> Result<Option<DataChunk>> {
+        if self.finished {
+            return Ok(None);
+        }
+
         let start_row = self.current_row;
         let reader = self.ensure_reader()?;
 
@@ -191,6 +197,7 @@ impl StreamingDataReader for CsvStreamingReader {
         self.current_row = start_row + rows_read;
 
         if chunk_data.is_empty() {
+            self.finished = true;
             return Ok(None);
         }
 
@@ -215,13 +222,13 @@ impl StreamingDataReader for CsvStreamingReader {
     }
 
     fn has_more(&self) -> bool {
-        // Simplified - in real implementation, would check file position
-        self.reader.is_some()
+        !self.finished
     }
 
     fn reset(&mut self) -> Result<()> {
         self.reader = Some(csv::Reader::from_path(&self.path)?);
         self.current_row = 0;
+        self.finished = false;
         Ok(())
     }
 }

@@ -49,8 +49,8 @@ fn parse_from_message(s: &str) -> McpErrorContext {
     ctx
 }
 
-/// Build `error.data` object: `kind`, `detail`, and optional `file` / `sheet` / `range` / I/O paths.
-pub fn mcp_error_data(detail: &str, mut ctx: McpErrorContext) -> Value {
+/// Build `error.data` object: `kind`, `detail`, `code`, and optional `file` / `sheet` / `range` / I/O paths.
+pub fn mcp_error_data(detail: &str, mut ctx: McpErrorContext, code: Option<&str>) -> Value {
     let parsed = parse_from_message(detail);
     if ctx.file.is_none() {
         ctx.file = parsed.file;
@@ -65,6 +65,9 @@ pub fn mcp_error_data(detail: &str, mut ctx: McpErrorContext) -> Value {
     let mut o = serde_json::Map::new();
     o.insert("kind".to_string(), json!("xls_rs_error"));
     o.insert("detail".to_string(), json!(detail));
+    if let Some(c) = code {
+        o.insert("code".to_string(), json!(c));
+    }
     if let Some(v) = ctx.file {
         o.insert("file".to_string(), json!(v));
     }
@@ -100,5 +103,18 @@ mod tests {
     fn parse_invalid_cell() {
         let c = parse_from_message("Invalid cell reference 'A1:B2'");
         assert_eq!(c.range.as_deref(), Some("A1:B2"));
+    }
+
+    #[test]
+    fn mcp_error_data_includes_code() {
+        let data = mcp_error_data("detail", McpErrorContext::default(), Some("file_not_found"));
+        assert_eq!(data.get("code").and_then(|v| v.as_str()), Some("file_not_found"));
+        assert_eq!(data.get("kind").and_then(|v| v.as_str()), Some("xls_rs_error"));
+    }
+
+    #[test]
+    fn mcp_error_data_omits_code_when_none() {
+        let data = mcp_error_data("detail", McpErrorContext::default(), None);
+        assert!(data.get("code").is_none());
     }
 }

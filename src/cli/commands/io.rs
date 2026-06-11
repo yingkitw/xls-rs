@@ -189,8 +189,14 @@ impl IoCommandHandler {
 
     /// Handle the write_range command
     ///
-    /// Writes data starting at a specific cell.
-    pub fn handle_write_range(&self, input: String, output: String, start: String) -> Result<()> {
+    /// Writes data starting at a specific cell with configurable preserve/overwrite behavior.
+    pub fn handle_write_range(
+        &self,
+        input: String,
+        output: String,
+        start: String,
+        mode: String,
+    ) -> Result<()> {
         crate::cli::runtime::ensure_can_write(&output)?;
         let converter = Converter::new();
         let data = converter.read_any_data(&input, None)?;
@@ -198,14 +204,35 @@ impl IoCommandHandler {
         // Parse start cell
         let (start_row, start_col) = self.parse_cell_ref(&start)?;
 
-        // Create new data structure with offset
-        let mut offset_data = vec![vec![String::new(); start_col]; start_row];
-        for row in data {
-            offset_data.push(row);
+        let mode = match mode.to_lowercase().as_str() {
+            "preserve" => xls_rs::excel::WriteMode::Preserve,
+            "overwrite" => xls_rs::excel::WriteMode::Overwrite,
+            _ => xls_rs::excel::WriteMode::Expand,
+        };
+
+        if output.ends_with(".xlsx") || output.ends_with(".xls") {
+            let handler = ExcelHandler::new();
+            handler.write_range_with_mode(
+                &output,
+                &data,
+                start_row as u32,
+                start_col as u16,
+                None,
+                mode,
+            )?;
+        } else {
+            // For non-Excel, fall back to offset-based write
+            let mut offset_data = vec![vec![String::new(); start_col]; start_row];
+            for row in data {
+                offset_data.push(row);
+            }
+            converter.write_any_data(&output, &offset_data, None)?;
         }
 
-        converter.write_any_data(&output, &offset_data, None)?;
-        crate::cli::runtime::log(format!("Wrote data starting at {start} in {output}"));
+        crate::cli::runtime::log(format!(
+            "Wrote data starting at {start} in {output} (mode: {:?})",
+            mode
+        ));
 
         Ok(())
     }

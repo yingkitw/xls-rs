@@ -4,6 +4,11 @@
 //! regression test so core behaviors don't diverge.
 
 use std::process::Command;
+use xls_rs::DataWriter;
+
+fn xls_rs_exe() -> &'static str {
+    env!("CARGO_BIN_EXE_xls-rs")
+}
 
 #[test]
 fn test_library_and_cli_can_read_csv() {
@@ -24,8 +29,7 @@ fn test_library_and_cli_can_read_csv() {
     assert_eq!(data[0][0], "Product");
 
     // CLI read (use the compiled test binary path)
-    let exe = env!("CARGO_BIN_EXE_xls-rs");
-    let out = Command::new(exe)
+    let out = Command::new(xls_rs_exe())
         .args([
             "--quiet",
             "read",
@@ -47,5 +51,56 @@ fn test_library_and_cli_can_read_csv() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Product"));
     assert!(stdout.contains("Laptop"));
+}
+
+#[test]
+fn test_cli_write_range_mode_preserve() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("patch.csv");
+    let output = dir.path().join("output.xlsx");
+
+    // Create baseline XLSX via library
+    let handler = xls_rs::ExcelHandler::new();
+    let baseline = vec![
+        vec!["A".to_string(), "B".to_string()],
+        vec!["1".to_string(), "2".to_string()],
+    ];
+    handler
+        .write(output.to_string_lossy().as_ref(), &baseline, Default::default())
+        .unwrap();
+
+    // Create patch CSV
+    std::fs::write(&input, "X\n99\n").unwrap();
+
+    // CLI write-range --mode preserve at B2 (row 1, col 1)
+    let out = Command::new(xls_rs_exe())
+        .args([
+            "--quiet",
+            "--overwrite",
+            "write-range",
+            "--input",
+            input.to_string_lossy().as_ref(),
+            "--output",
+            output.to_string_lossy().as_ref(),
+            "--start",
+            "B2",
+            "--mode",
+            "preserve",
+        ])
+        .output()
+        .unwrap();
+    if !out.status.success() {
+        panic!(
+            "CLI write-range failed.\nstatus: {}\nstderr:\n{}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    // Verify the file still exists and can be read back
+    let data = xls_rs::Converter::new()
+        .read_any_data(output.to_string_lossy().as_ref(), None)
+        .unwrap();
+    assert!(!data.is_empty());
 }
 

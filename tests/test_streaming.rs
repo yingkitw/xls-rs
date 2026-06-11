@@ -1,6 +1,7 @@
 //! Tests for streaming module
 
-use xls_rs::streaming::{ChunkMetadata, DataChunk, StreamingProcessor};
+use std::io::Write;
+use xls_rs::streaming::{ChunkMetadata, CsvStreamingReader, DataChunk, StreamingDataReader, StreamingProcessor};
 
 #[test]
 fn test_data_chunk_creation() {
@@ -148,4 +149,50 @@ fn test_multiple_chunks_sequence() {
     assert_eq!(chunks.len(), 5);
     assert_eq!(chunks[0].sequence, 0);
     assert_eq!(chunks[4].sequence, 4);
+}
+
+#[test]
+fn test_csv_streaming_reader_reads_chunks_and_stops() {
+    let mut temp = tempfile::NamedTempFile::with_suffix(".csv").unwrap();
+    // Write 5 data rows plus header = 6 total rows
+    writeln!(temp, "col_a,col_b").unwrap();
+    for i in 0..5 {
+        writeln!(temp, "{},{}", i, i * 10).unwrap();
+    }
+    temp.flush().unwrap();
+
+    let mut reader = CsvStreamingReader::new(temp.path().to_str().unwrap()).unwrap();
+
+    // csv::Reader treats first line as header by default, so records() yields 5 data rows
+    let chunk1 = reader.read_chunk(2).unwrap();
+    assert!(chunk1.is_some());
+    let chunk1 = chunk1.unwrap();
+    assert_eq!(chunk1.data.len(), 2);
+    assert!(reader.has_more());
+
+    let chunk2 = reader.read_chunk(2).unwrap();
+    assert!(chunk2.is_some());
+    let chunk2 = chunk2.unwrap();
+    assert_eq!(chunk2.data.len(), 2);
+    assert!(reader.has_more());
+
+    let chunk3 = reader.read_chunk(2).unwrap();
+    assert!(chunk3.is_some());
+    let chunk3 = chunk3.unwrap();
+    assert_eq!(chunk3.data.len(), 1); // last remaining data row
+    // has_more stays true until an empty read actually occurs
+    assert!(reader.has_more());
+
+    let chunk4 = reader.read_chunk(2).unwrap();
+    assert!(chunk4.is_none());
+    assert!(!reader.has_more());
+}
+
+#[test]
+fn test_csv_streaming_reader_empty_file() {
+    let temp = tempfile::NamedTempFile::with_suffix(".csv").unwrap();
+    let mut reader = CsvStreamingReader::new(temp.path().to_str().unwrap()).unwrap();
+    let chunk = reader.read_chunk(10).unwrap();
+    assert!(chunk.is_none());
+    assert!(!reader.has_more());
 }

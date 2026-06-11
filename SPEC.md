@@ -13,6 +13,9 @@
 - Read specific sheets/ranges from Excel files.
 - Apply formula evaluation and transformations.
 - Batch/process large files (streaming-oriented operations where possible).
+- In-place Excel edits: apply formulas to ranges, write ranges with expand/preserve/overwrite semantics.
+- Read/write Google Sheets via API v4 when authenticated.
+- Expose the same capabilities to AI agents via the MCP server (`XlsRsMcpServer`).
 
 ## Non-functional requirements
 

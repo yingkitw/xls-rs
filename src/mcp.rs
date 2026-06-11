@@ -20,10 +20,13 @@ use crate::mcp_enrichment::{mcp_error_data, McpErrorContext};
 
 fn tool_error(context: &str, e: anyhow::Error, ctx: McpErrorContext) -> McpError {
     let full = format!("{context}: {e:#}");
+    let code = e
+        .downcast_ref::<crate::error::XlsRsError>()
+        .map(|x| x.code());
     McpError {
         code: ErrorCode::INTERNAL_ERROR,
         message: Cow::from(full.clone()),
-        data: Some(mcp_error_data(&full, ctx)),
+        data: Some(mcp_error_data(&full, ctx, code)),
     }
 }
 
@@ -32,7 +35,7 @@ fn serde_err(e: serde_json::Error) -> McpError {
     McpError {
         code: ErrorCode::INTERNAL_ERROR,
         message: Cow::from(s.clone()),
-        data: Some(mcp_error_data(&s, McpErrorContext::default())),
+        data: Some(mcp_error_data(&s, McpErrorContext::default(), Some("parse_error"))),
     }
 }
 
@@ -166,6 +169,8 @@ pub struct ReadExcelRequest {
     pub sheet: Option<String>,
     #[schemars(description = "Cell range in A1 notation (e.g., A1:B10)")]
     pub range: Option<String>,
+    #[schemars(description = "Output format: csv, json, jsonl, markdown (default: json)")]
+    pub format: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -420,8 +425,109 @@ impl XlsRsMcpServer {
             ..Default::default()
         };
         match self.registry.execute("read_excel", args) {
-            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
+            Ok(result) => {
+                let text = Self::format_read_result(&result, request.0.format.as_deref());
+                Ok(CallToolResult::success(vec![Content::text(text)]))
+            }
             Err(e) => Err(tool_error("Failed to read Excel", e, ctx)),
+        }
+    }
+
+    fn format_read_result(result: &serde_json::Value, format: Option<&str>) -> String {
+        let data = result.get("data").and_then(|v| v.as_array());
+        match format {
+            Some("csv") => {
+                if let Some(rows) = data {
+                    rows.iter()
+                        .filter_map(|r| r.as_array())
+                        .map(|cols| {
+                            cols.iter()
+                                .map(|v| v.as_str().unwrap_or_default().to_string())
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                } else {
+                    result.to_string()
+                }
+            }
+            Some("jsonl") => {
+                if let Some(rows) = data {
+                    if rows.is_empty() {
+                        return String::new();
+                    }
+                    let headers: Vec<String> = rows[0]
+                        .as_array()
+                        .unwrap_or(&vec![])
+                        .iter()
+                        .map(|v| v.as_str().unwrap_or_default().to_string())
+                        .collect();
+                    rows[1..]
+                        .iter()
+                        .filter_map(|r| r.as_array())
+                        .map(|cols| {
+                            let mut obj = serde_json::Map::new();
+                            for (i, h) in headers.iter().enumerate() {
+                                let val = cols.get(i).cloned().unwrap_or(serde_json::Value::Null);
+                                obj.insert(h.clone(), val);
+                            }
+                            serde_json::Value::Object(obj).to_string()
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                } else {
+                    result.to_string()
+                }
+            }
+            Some("markdown") => {
+                if let Some(rows) = data {
+                    if rows.is_empty() {
+                        return String::new();
+                    }
+                    let str_rows: Vec<Vec<String>> = rows
+                        .iter()
+                        .filter_map(|r| r.as_array())
+                        .map(|cols| {
+                            cols.iter()
+                                .map(|v| v.as_str().unwrap_or_default().to_string())
+                                .collect()
+                        })
+                        .collect();
+                    let num_cols = str_rows.iter().map(|r| r.len()).max().unwrap_or(0);
+                    let mut widths = vec![0; num_cols];
+                    for row in &str_rows {
+                        for (i, cell) in row.iter().enumerate() {
+                            if i < widths.len() {
+                                widths[i] = widths[i].max(cell.len());
+                            }
+                        }
+                    }
+                    let mut lines = Vec::new();
+                    for (ri, row) in str_rows.iter().enumerate() {
+                        let mut line = String::new();
+                        for (i, cell) in row.iter().enumerate() {
+                            if i < widths.len() {
+                                line.push_str(&format!("| {:<width$} ", cell, width = widths[i]));
+                            }
+                        }
+                        line.push('|');
+                        lines.push(line);
+                        if ri == 0 {
+                            let mut sep = String::new();
+                            for w in &widths {
+                                sep.push_str(&format!("|-{:<w$}-", "", w = w));
+                            }
+                            sep.push('|');
+                            lines.push(sep);
+                        }
+                    }
+                    lines.join("\n")
+                } else {
+                    result.to_string()
+                }
+            }
+            _ => result.to_string(),
         }
     }
 

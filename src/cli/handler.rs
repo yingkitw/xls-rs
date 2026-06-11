@@ -85,7 +85,8 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 input,
                 output,
                 start,
-            } => self.io.handle_write_range(input, output, start),
+                mode,
+            } => self.io.handle_write_range(input, output, start, mode),
 
             Commands::Append { source, target } => self.io.handle_append(source, target),
 

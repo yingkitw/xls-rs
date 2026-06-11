@@ -119,6 +119,27 @@ pub enum ErrorKind {
     Other(String),
 }
 
+impl ErrorKind {
+    /// Stable error code for programmatic matching across CLI and MCP.
+    pub fn code(&self) -> &'static str {
+        match self {
+            ErrorKind::ColumnNotFound(_) => "column_not_found",
+            ErrorKind::InvalidCellRef(_) => "invalid_cell_ref",
+            ErrorKind::InvalidValue(_, _) => "invalid_value",
+            ErrorKind::TypeConversion(_, _) => "type_conversion",
+            ErrorKind::DivisionByZero => "division_by_zero",
+            ErrorKind::InvalidFormula(_) => "invalid_formula",
+            ErrorKind::FileNotFound(_) => "file_not_found",
+            ErrorKind::UnsupportedFormat(_) => "unsupported_format",
+            ErrorKind::ParseError(_) => "parse_error",
+            ErrorKind::InvalidDateFormat(_) => "invalid_date_format",
+            ErrorKind::InvalidRegex(_) => "invalid_regex",
+            ErrorKind::IoError(_) => "io_error",
+            ErrorKind::Other(_) => "other",
+        }
+    }
+}
+
 impl XlsRsError {
     pub fn column_not_found(name: &str) -> Self {
         Self {
@@ -144,6 +165,11 @@ impl XlsRsError {
     pub fn with_context(mut self, context: ErrorContext) -> Self {
         self.context = context;
         self
+    }
+
+    /// Stable error code for programmatic matching across CLI and MCP.
+    pub fn code(&self) -> &'static str {
+        self.kind.code()
     }
 }
 

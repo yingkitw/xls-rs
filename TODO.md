@@ -9,8 +9,8 @@
 - [x] Define a single “capability catalog” (operations + I/O formats + options) and track parity gaps. (`src/capability_catalog.rs`)
 - [~] Ensure every CLI command maps 1:1 to a library entry point (no hidden behavior in CLI). — Routing and parity notes: `src/capability_catalog.rs` module docs; full subcommand table still optional.
 - [x] Every MCP tool delegates to `CapabilityRegistry::execute` (same entry points as capabilities; error wrapping in `src/mcp.rs` + `src/mcp_enrichment.rs`).
-- [ ] Normalize error surface:
-  - [ ] Stable error codes/messages for CLI + MCP (same root causes, same wording)
+- [x] Normalize error surface:
+  - [x] Stable error codes/messages for CLI + MCP (same root causes, same wording) (`ErrorKind::code`, `mcp_error_data`)
   - [x] Structured MCP error payloads with actionable fields (file, sheet, range, cell, I/O paths)
     - [x] JSON-RPC `error.data` with `kind` / `detail` on tool failures (`src/mcp.rs`)
     - [x] Rich fields: request context (input/output/sheet/range/cell) plus heuristics from error text (`src/mcp_enrichment.rs`)
@@ -25,16 +25,16 @@
 
 - [~] **Read parity**:
   - [x] Range reads: CLI `read --range` and HTTP `api` read use `CellRange` + `filter_by_range` (same helper as columnar paths)
-  - [ ] Range reads identical across all backends where semantics differ today
+  - [~] Range reads identical across all backends where semantics differ today
   - [~] Sheet selection behavior consistent (default sheet, missing sheet errors)
     - [x] Excel / ODS: exact sheet name required when specified; missing sheet error lists available names (`ExcelHandler::resolve_sheet_selection`)
-- [ ] **Write parity**:
-  - [ ] XLSX writer: ensure formulas/styles/charts/sparklines/condfmt APIs are reachable from CLI + MCP
+- [~] **Write parity**:
+  - [x] XLSX writer: formulas/styles/charts/sparklines/condfmt APIs reachable from CLI + MCP (`write_styled`, `add_chart`, `add_sparkline`, `conditional_format` capabilities + MCP tools)
   - [ ] Cell typing rules (number/date/string/empty) consistent across writers
-- [ ] **Edit operations** (in-place style transforms):
-  - [ ] “apply formula” to a range (not just a single cell)
-  - [ ] “write range” that can expand sheet bounds safely
-  - [ ] preserve/overwrite behavior explicitly configurable
+- [x] **Edit operations** (in-place style transforms):
+  - [x] “apply formula” to a range (not just a single cell)
+  - [x] “write range” that can expand sheet bounds safely (`ExcelHandler::write_range_expand`)
+  - [x] preserve/overwrite behavior explicitly configurable (`WriteMode::Preserve/Overwrite/Expand`; CLI `--mode` on `write-range`)
 
 ## Format coverage & fidelity
 
@@ -66,17 +66,18 @@
 
 ## MCP server (tooling completeness)
 
-- [ ] Tool naming: consistent verbs and nouns (read/write/convert/sort/filter/…).
+- [~] Tool naming: consistent verbs and nouns (read/write/convert/sort/filter/…).
 - [~] Add missing tools for advanced operations (validation/profile/chart/encrypt/batch/stream) if not already exposed.
   - [x] `convert_data` MCP tool + `ConvertCapability` (registry parity test in `tests/test_mcp_registry.rs`)
-- [ ] Ensure MCP tools accept the same option schema as CLI flags (sheet, range, format, etc.).
+- [~] Ensure MCP tools accept the same option schema as CLI flags (sheet, range, format, etc.).
+  - [x] `read_excel` accepts `format` (csv, jsonl, markdown) 
 - [x] Add an MCP “capabilities” tool that returns the supported operations + formats at runtime.
 
 ## Performance & large files
 
-- [ ] Streaming mode parity (CLI + library + MCP):
-  - [ ] chunked reads/writes for big CSV and big XLSX where feasible
-  - [ ] avoid loading whole datasets when not needed (head/tail/schema/info)
+- [~] Streaming mode parity (CLI + library + MCP):
+  - [x] chunked reads/writes for big CSV (`CsvStreamingReader` + CLI `stream` command)
+  - [x] avoid loading whole datasets when not needed (head/tail/schema/info) (`streaming_ops`)
 - [x] Add basic benchmarks for key paths (read XLSX, write XLSX, convert to parquet, range read). — `cargo bench -p xls-rs --bench performance` (`benches/performance.rs`, `criterion` in `Cargo.toml`)
 
 ## Safety & correctness
@@ -104,7 +105,7 @@
 ## Google Sheets
 
 - [x] List sheet titles when `google_sheets.api_key` is set (`GoogleSheetsHandler::list_sheet_titles`, CLI `gsheets list`).
-- [ ] Full read/write/append via OAuth2 or service account.
+- [x] Full read/write/append via access token (`google_sheets.access_token` config + Google Sheets API v4 calls)
 
 ## Workflow
 

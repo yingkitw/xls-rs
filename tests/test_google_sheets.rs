@@ -142,22 +142,19 @@ fn test_supported_extensions() {
     assert!(extensions.contains(&"gsheet"));
 }
 
-// Test reading data (placeholder implementation)
+// Test reading data fails when no credentials are configured
 #[test]
-fn test_read() {
+fn test_read_no_credentials() {
     let handler = GoogleSheetsHandler::new();
     let result = handler.read("gsheet://1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms");
-    assert!(result.is_ok());
-
-    let data = result.unwrap();
-    assert!(!data.is_empty());
-    assert_eq!(data[0], vec!["Column1", "Column2"]);
-    assert_eq!(data[1], vec!["Value1", "Value2"]);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("No Google Sheets credentials configured"), "Expected auth error, got: {}", err);
 }
 
-// Test writing data (placeholder implementation)
+// Test writing data fails when no credentials are configured
 #[test]
-fn test_write() {
+fn test_write_no_credentials() {
     let handler = GoogleSheetsHandler::new();
     let data = vec![
         vec!["Header1".to_string(), "Header2".to_string()],
@@ -176,5 +173,7 @@ fn test_write() {
         &data,
         options,
     );
-    assert!(result.is_ok());
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("No Google Sheets credentials configured"), "Expected auth error, got: {}", err);
 }

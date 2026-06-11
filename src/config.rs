@@ -103,6 +103,10 @@ pub struct GoogleSheetsConfig {
     #[serde(default)]
     pub api_key: Option<String>,
 
+    /// OAuth access token (obtained externally via gcloud or OAuth flow)
+    #[serde(default)]
+    pub access_token: Option<String>,
+
     /// OAuth scopes
     #[serde(default = "default_scopes")]
     pub scopes: Vec<String>,

@@ -189,3 +189,28 @@ fn test_error_kind_other() {
     let msg = format!("{error}");
     assert!(msg.contains("custom error message"));
 }
+
+#[test]
+fn test_error_kind_code() {
+    assert_eq!(ErrorKind::ColumnNotFound("x".to_string()).code(), "column_not_found");
+    assert_eq!(ErrorKind::InvalidCellRef("A1".to_string()).code(), "invalid_cell_ref");
+    assert_eq!(ErrorKind::InvalidValue("a".to_string(), "b".to_string()).code(), "invalid_value");
+    assert_eq!(ErrorKind::TypeConversion("a".to_string(), "b".to_string()).code(), "type_conversion");
+    assert_eq!(ErrorKind::DivisionByZero.code(), "division_by_zero");
+    assert_eq!(ErrorKind::InvalidFormula("=SUM(".to_string()).code(), "invalid_formula");
+    assert_eq!(ErrorKind::FileNotFound("x".to_string()).code(), "file_not_found");
+    assert_eq!(ErrorKind::UnsupportedFormat("x".to_string()).code(), "unsupported_format");
+    assert_eq!(ErrorKind::ParseError("x".to_string()).code(), "parse_error");
+    assert_eq!(ErrorKind::InvalidDateFormat("x".to_string()).code(), "invalid_date_format");
+    assert_eq!(ErrorKind::InvalidRegex("x".to_string()).code(), "invalid_regex");
+    assert_eq!(ErrorKind::IoError("x".to_string()).code(), "io_error");
+    assert_eq!(ErrorKind::Other("x".to_string()).code(), "other");
+}
+
+#[test]
+fn test_error_code_with_context() {
+    let error = XlsRsError::column_not_found("price").with_context(
+        ErrorContext::new().with_file("data.csv"),
+    );
+    assert_eq!(error.code(), "column_not_found");
+}

@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 use xls_rs::capabilities::{
-    CapabilityRegistry, ConvertCapability, FilterCapability, SortCapability,
+    CapabilityRegistry, ConvertCapability, FilterCapability, ReadExcelCapability, SortCapability,
 };
-use xls_rs::Converter;
+use xls_rs::{Converter, DataWriter};
 
 #[test]
 fn registry_sort_writes_sorted_csv() {
@@ -79,4 +79,33 @@ fn registry_convert_invokes_converter() {
         .unwrap();
     assert_eq!(data[0], vec!["x", "y"]);
     assert_eq!(data[1], vec!["1", "2"]);
+}
+
+#[test]
+fn registry_read_excel_returns_data_rows_and_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in.xlsx");
+
+    // Create a small Excel file via library
+    let handler = xls_rs::ExcelHandler::new();
+    let data = vec![
+        vec!["Name".to_string(), "Score".to_string()],
+        vec!["Alice".to_string(), "95".to_string()],
+        vec!["Bob".to_string(), "87".to_string()],
+    ];
+    handler.write(input.to_string_lossy().as_ref(), &data, Default::default()).unwrap();
+
+    let reg = CapabilityRegistry::new();
+    reg.register(Arc::new(ReadExcelCapability));
+    let args = serde_json::json!({
+        "input": input.to_string_lossy(),
+    });
+    let r = reg.execute("read_excel", args).unwrap();
+    assert_eq!(r["status"], "success");
+    assert_eq!(r["rows"], 3);
+    assert_eq!(r["columns"], 2);
+
+    let returned = r["data"].as_array().unwrap();
+    assert_eq!(returned[0][0], "Name");
+    assert_eq!(returned[1][0], "Alice");
 }

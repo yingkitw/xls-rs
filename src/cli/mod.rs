@@ -187,6 +187,9 @@ pub enum Commands {
         output: String,
         #[arg(short, long)]
         start: String,
+        /// Write mode: expand, preserve, overwrite (default: expand)
+        #[arg(short, long, default_value = "expand")]
+        mode: String,
     },
 
     /// Select specific columns

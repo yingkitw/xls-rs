@@ -1,6 +1,6 @@
 mod common;
 
-use xls_rs::{CellStyle, ChartConfig, DataChartType, ExcelHandler, WriteOptions};
+use xls_rs::{CellStyle, ChartConfig, DataChartType, DataWriter, ExcelHandler, WriteMode, WriteOptions};
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -477,6 +477,73 @@ fn test_write_range() {
 
     assert!(Path::new(&output_path).exists());
 
+    fs::remove_file(&output_path).ok();
+}
+
+#[test]
+fn test_write_range_expand() {
+    let handler = ExcelHandler::new();
+    let data = vec![
+        vec!["X".to_string(), "Y".to_string()],
+        vec!["1".to_string(), "2".to_string()],
+    ];
+    let output_path = unique_path("excel_write_expand", "xlsx");
+
+    handler
+        .write_range_with_mode(&output_path, &data, 1, 1, None, WriteMode::Expand)
+        .unwrap();
+
+    assert!(Path::new(&output_path).exists());
+    fs::remove_file(&output_path).ok();
+}
+
+#[test]
+fn test_write_range_preserve() {
+    let handler = ExcelHandler::new();
+    let output_path = unique_path("excel_write_preserve", "xlsx");
+
+    // First write baseline data
+    let baseline = vec![
+        vec!["A".to_string(), "B".to_string(), "C".to_string()],
+        vec!["1".to_string(), "2".to_string(), "3".to_string()],
+        vec!["4".to_string(), "5".to_string(), "6".to_string()],
+    ];
+    handler.write(&output_path, &baseline, Default::default()).unwrap();
+
+    // Overwrite a sub-range starting at B2 (row 1, col 1)
+    let patch = vec![
+        vec!["X".to_string()],
+        vec!["Y".to_string()],
+    ];
+    handler
+        .write_range_with_mode(&output_path, &patch, 1, 1, None, WriteMode::Preserve)
+        .unwrap();
+
+    assert!(Path::new(&output_path).exists());
+    fs::remove_file(&output_path).ok();
+}
+
+#[test]
+fn test_write_range_overwrite() {
+    let handler = ExcelHandler::new();
+    let output_path = unique_path("excel_write_overwrite", "xlsx");
+
+    // First write baseline data
+    let baseline = vec![
+        vec!["A".to_string(), "B".to_string()],
+        vec!["1".to_string(), "2".to_string()],
+    ];
+    handler.write(&output_path, &baseline, Default::default()).unwrap();
+
+    // Overwrite starting at B2 (row 1, col 1)
+    let patch = vec![
+        vec!["X".to_string(), "Y".to_string()],
+    ];
+    handler
+        .write_range_with_mode(&output_path, &patch, 1, 1, None, WriteMode::Overwrite)
+        .unwrap();
+
+    assert!(Path::new(&output_path).exists());
     fs::remove_file(&output_path).ok();
 }
 

@@ -28,15 +28,41 @@ pub fn handle_plugin(
 
 /// Handle the stream command
 ///
-/// Processes a large file in chunks to reduce memory usage.
-pub fn handle_stream(input: String, output: String, _chunk_size: usize) -> Result<()> {
-    println!("Streaming support is a placeholder. Processing file normally...");
+/// Processes a large CSV file in chunks to reduce memory usage.
+pub fn handle_stream(input: String, output: String, chunk_size: usize) -> Result<()> {
+    use xls_rs::streaming::{CsvStreamingReader, StreamingDataReader};
+    use csv::WriterBuilder;
 
-    let converter = Converter::new();
-    let data = converter.read_any_data(&input, None)?;
-    converter.write_any_data(&output, &data, None)?;
+    if !input.ends_with(".csv") {
+        println!("Streaming is optimized for CSV. Falling back to normal processing...");
+        let converter = Converter::new();
+        let data = converter.read_any_data(&input, None)?;
+        converter.write_any_data(&output, &data, None)?;
+        println!("Processed {} rows; wrote {}", data.len(), output);
+        return Ok(());
+    }
 
-    println!("Processed {} rows; wrote {}", data.len(), output);
+    let mut reader = CsvStreamingReader::new(&input)?;
+    let mut writer = WriterBuilder::new()
+        .from_path(&output)
+        .map_err(|e| anyhow::anyhow!("Failed to create output CSV: {}", e))?;
+
+    let chunk_size = if chunk_size == 0 { 1000 } else { chunk_size };
+    let mut total_rows = 0usize;
+    let mut total_chunks = 0usize;
+
+    while reader.has_more() {
+        if let Some(chunk) = reader.read_chunk(chunk_size)? {
+            for row in &chunk.data {
+                writer.write_record(row)?;
+            }
+            total_rows += chunk.data.len();
+            total_chunks += 1;
+        }
+    }
+
+    writer.flush()?;
+    println!("Streamed {} chunks ({} rows); wrote {}", total_chunks, total_rows, output);
 
     Ok(())
 }

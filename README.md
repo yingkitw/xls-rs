@@ -12,7 +12,7 @@ Supported formats include CSV, Excel (`.xlsx`, `.xls`), ODS, Parquet, and Avro, 
 - **MCP Server**: New `XlsRsMcpServer` exposes all capabilities to AI agents and automation tools via the Model Context Protocol
 - **Styled Excel Export**: New presets (`default`, `minimal`, `report`, `executive`) for professional spreadsheet formatting with charts, conditional formatting, and sparklines
 - **Workflow Engine**: Config-driven batch operations via `WorkflowExecutor` — no temp JSON files needed
-- **Streaming Mode**: Memory-efficient processing for large CSV and Excel files (chunked reads/writes)
+- **Streaming Mode**: Memory-efficient chunked CSV processing (`CsvStreamingReader` + CLI `stream` command)
 - **Time Series & Geospatial**: Built-in support for temporal analysis and location-based data
 
 ## Why xls-rs?
@@ -21,14 +21,14 @@ Unlike single-purpose libraries, xls-rs provides a **unified surface** across li
 
 **Key differentiators:**
 
-- **Production Safety**: CSV formula-injection sanitization on all write paths; overwrite guards (`--overwrite` required)
+- **Production Safety**: CSV formula-injection sanitization on all write paths; overwrite guards (`--overwrite` required); stable error codes across CLI and MCP
 - **Advanced Excel Features**: Charts, conditional formatting, sparklines, and styling — not just raw cell values
 - **Data Quality Built-in**: Validation rules, profiling, anomaly detection, and data lineage tracking
 - **Pandas-Style Ops**: `head`, `tail`, `describe`, `sort`, `filter`, `dedupe`, `transpose`, `select`, `join`, `concat`
 - **Formula Evaluation**: Built-in evaluator for Excel formulas (not just reading stored values)
 - **Encryption**: File-level encryption support for sensitive data
 - **Parquet & Avro**: Native columnar format support with schema inference from headers
-- **Google Sheets**: List and prepare for OAuth integration (API key support today)
+- **Google Sheets**: Full read/write/append via Google Sheets API v4 when `google_sheets.access_token` is configured; list sheets with `google_sheets.api_key`
 
 ## Format support (high level)
 
@@ -40,7 +40,7 @@ Unlike single-purpose libraries, xls-rs provides a **unified surface** across li
 | `.ods` | Yes | Via conversion paths | OpenDocument spreadsheet |
 | `.parquet` | Yes | Yes | Columnar; schema from headers when present |
 | `.avro` | Yes | Yes | Columnar; field names from headers when present |
-| Google Sheets (`gsheet://`, URL, ID) | Stub / API-key metadata | Stub | `list` with `google_sheets.api_key`; full read/write needs future OAuth / service account |
+| Google Sheets (`gsheet://`, URL, ID) | Yes (access token) | Yes (access token) | `list` with `api_key`; read/write/append with `access_token` |
 
 For the latest parity detail across library, CLI, and MCP, see `TODO.md` and `src/capability_catalog.rs`.
 
@@ -77,6 +77,12 @@ cargo run -- read --input examples/sales.csv
 
 - With `-f` / `--format`: use that output (`csv`, `json`, `jsonl`, `markdown`).
 - Without `--format`: uses `default_format` from the resolved config file if set; otherwise `csv`.
+
+### `write-range` modes
+
+- `--mode expand` (default): writes data starting at the given cell, expanding sheet bounds if needed.
+- `--mode preserve`: patches an existing Excel file, keeping cells outside the target range intact.
+- `--mode overwrite`: replaces the target range area directly.
 
 ### Generate examples
 
