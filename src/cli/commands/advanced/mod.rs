@@ -23,9 +23,11 @@ pub use profile::handle_profile;
 pub use schema::handle_schema;
 pub use to_sql::handle_to_sql;
 pub use utils::{
-    handle_add_chart, handle_add_sparkline, handle_apply_formula_range, handle_completions,
+    handle_add_chart, handle_add_sparkline, handle_apply_formula_range,
     handle_conditional_format, handle_config_init, handle_export_styled,
 };
+#[cfg(feature = "completions")]
+pub use utils::handle_completions;
 pub use validation::handle_validate;
 pub use watch::handle_watch;
 pub use examples::handle_examples_generate;

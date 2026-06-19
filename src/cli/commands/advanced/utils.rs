@@ -10,13 +10,16 @@ use xls_rs::{
     },
 };
 use anyhow::{Context, Result};
+#[cfg(feature = "completions")]
 use clap::CommandFactory;
+#[cfg(feature = "completions")]
 use clap_complete::{generate, Shell};
 use std::io;
 
 /// Handle the completions command
 ///
 /// Generates shell completion scripts.
+#[cfg(feature = "completions")]
 pub fn handle_completions(shell: String) -> Result<()> {
     let mut cmd = crate::cli::Cli::command();
 

@@ -326,6 +326,7 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 chunk_size,
             } => self.advanced.handle_stream(input, output, chunk_size),
 
+            #[cfg(feature = "completions")]
             Commands::Completions { shell } => self.advanced.handle_completions(shell),
 
             Commands::ExamplesGenerate => self.advanced.handle_examples_generate(),

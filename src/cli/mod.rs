@@ -671,6 +671,7 @@ pub enum Commands {
     },
 
     /// Generate shell completions
+    #[cfg(feature = "completions")]
     Completions {
         #[arg(short, long)]
         shell: String,

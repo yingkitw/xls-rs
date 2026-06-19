@@ -1,10 +1,9 @@
 //! Enhanced error types with context information
 
 use std::fmt;
-use thiserror::Error;
 
 /// Error with file and location context
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub struct XlsRsError {
     pub kind: ErrorKind,
     pub context: ErrorContext,
@@ -26,6 +25,12 @@ impl fmt::Display for XlsRsError {
             write!(f, " (cell {})", cell)?;
         }
         Ok(())
+    }
+}
+
+impl std::error::Error for XlsRsError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
     }
 }
 
@@ -77,46 +82,49 @@ impl ErrorContext {
 }
 
 /// Types of errors
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum ErrorKind {
-    #[error("Column '{0}' not found")]
     ColumnNotFound(String),
-
-    #[error("Invalid cell reference '{0}'")]
     InvalidCellRef(String),
-
-    #[error("Invalid value '{0}' - expected {1}")]
     InvalidValue(String, String),
-
-    #[error("Type conversion failed: cannot convert '{0}' to {1}")]
     TypeConversion(String, String),
-
-    #[error("Division by zero")]
     DivisionByZero,
-
-    #[error("Invalid formula: {0}")]
     InvalidFormula(String),
-
-    #[error("File not found: {0}")]
     FileNotFound(String),
-
-    #[error("Unsupported file format: {0}")]
     UnsupportedFormat(String),
-
-    #[error("Parse error: {0}")]
     ParseError(String),
-
-    #[error("Invalid date format: {0}")]
     InvalidDateFormat(String),
-
-    #[error("Invalid regex pattern: {0}")]
     InvalidRegex(String),
-
-    #[error("IO error: {0}")]
     IoError(String),
-
-    #[error("{0}")]
     Other(String),
+}
+
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ErrorKind::ColumnNotFound(s) => write!(f, "Column '{s}' not found"),
+            ErrorKind::InvalidCellRef(s) => write!(f, "Invalid cell reference '{s}'"),
+            ErrorKind::InvalidValue(a, b) => write!(f, "Invalid value '{a}' - expected {b}"),
+            ErrorKind::TypeConversion(a, b) => {
+                write!(f, "Type conversion failed: cannot convert '{a}' to {b}")
+            }
+            ErrorKind::DivisionByZero => write!(f, "Division by zero"),
+            ErrorKind::InvalidFormula(s) => write!(f, "Invalid formula: {s}"),
+            ErrorKind::FileNotFound(s) => write!(f, "File not found: {s}"),
+            ErrorKind::UnsupportedFormat(s) => write!(f, "Unsupported file format: {s}"),
+            ErrorKind::ParseError(s) => write!(f, "Parse error: {s}"),
+            ErrorKind::InvalidDateFormat(s) => write!(f, "Invalid date format: {s}"),
+            ErrorKind::InvalidRegex(s) => write!(f, "Invalid regex pattern: {s}"),
+            ErrorKind::IoError(s) => write!(f, "IO error: {s}"),
+            ErrorKind::Other(s) => write!(f, "{s}"),
+        }
+    }
+}
+
+impl std::error::Error for ErrorKind {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
 }
 
 impl ErrorKind {

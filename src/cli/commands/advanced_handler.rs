@@ -109,6 +109,7 @@ impl AdvancedCommandHandler {
     }
 
     /// Handle the completions command
+    #[cfg(feature = "completions")]
     pub fn handle_completions(&self, shell: String) -> Result<()> {
         advanced::handle_completions(shell)
     }
