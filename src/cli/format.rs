@@ -20,6 +20,9 @@ pub enum OutputFormat {
 
     /// Markdown table format
     Markdown,
+
+    /// HTML table format
+    Html,
 }
 
 impl OutputFormat {
@@ -30,6 +33,7 @@ impl OutputFormat {
             "json" => Some(Self::Json),
             "jsonl" | "ndjson" => Some(Self::Jsonl),
             "markdown" | "md" => Some(Self::Markdown),
+            "html" => Some(Self::Html),
             _ => None,
         }
     }
@@ -45,7 +49,7 @@ impl OutputFormat {
                 return Ok(f);
             }
             anyhow::bail!(
-                "Invalid default_format in config: {:?}. Use csv, json, jsonl, or markdown.",
+                "Invalid default_format in config: {:?}. Use csv, json, jsonl, markdown, or html.",
                 s
             );
         }
@@ -59,6 +63,7 @@ impl OutputFormat {
             OutputFormat::Json => "json",
             OutputFormat::Jsonl => "jsonl",
             OutputFormat::Markdown => "md",
+            OutputFormat::Html => "html",
         }
     }
 
@@ -69,6 +74,7 @@ impl OutputFormat {
             OutputFormat::Json => "application/json",
             OutputFormat::Jsonl => "application/x-ndjson",
             OutputFormat::Markdown => "text/markdown",
+            OutputFormat::Html => "text/html",
         }
     }
 }
@@ -80,6 +86,7 @@ impl std::fmt::Display for OutputFormat {
             OutputFormat::Json => write!(f, "json"),
             OutputFormat::Jsonl => write!(f, "jsonl"),
             OutputFormat::Markdown => write!(f, "markdown"),
+            OutputFormat::Html => write!(f, "html"),
         }
     }
 }

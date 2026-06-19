@@ -56,6 +56,7 @@ impl IoCommandHandler {
             OutputFormat::Json => self.print_json(&data)?,
             OutputFormat::Jsonl => self.print_jsonl(&data)?,
             OutputFormat::Markdown => self.print_markdown(&data),
+            OutputFormat::Html => self.print_html(&data),
         }
 
         Ok(())
@@ -478,5 +479,39 @@ impl IoCommandHandler {
             }
             println!("|");
         }
+    }
+
+    /// Print data as HTML table
+    fn print_html(&self, data: &[Vec<String>]) {
+        if data.is_empty() {
+            println!("<table></table>");
+            return;
+        }
+
+        println!("<table>");
+
+        // Header
+        if let Some(header) = data.first() {
+            println!("  <thead><tr>");
+            for cell in header {
+                println!("    <th>{}</th>", cell);
+            }
+            println!("  </tr></thead>");
+        }
+
+        // Data rows
+        if data.len() > 1 {
+            println!("  <tbody>");
+            for row in &data[1..] {
+                println!("    <tr>");
+                for cell in row {
+                    println!("      <td>{}</td>", cell);
+                }
+                println!("    </tr>");
+            }
+            println!("  </tbody>");
+        }
+
+        println!("</table>");
     }
 }

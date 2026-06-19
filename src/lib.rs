@@ -62,9 +62,9 @@ pub use error_traits::{
 };
 pub use excel::{
     add_cell_to_row, add_cells_to_row, classify_cell, CellComment, CellData, CellStyle,
-    ChartConfig, ConditionalFormat, ConditionalRule, DataChartType, DataValidation,
+    ChartConfig, ColGroup, ConditionalFormat, ConditionalRule, DataChartType, DataValidation,
     ExcelHandler, FeatureDetector, FeatureSeverity, Hyperlink, MergeCell, PageMargins,
-    PageOrientation, PrintSetup, RowData, Sparkline, SparklineGroup, SparklineType,
+    PageOrientation, PrintSetup, RowData, RowGroup, Sparkline, SparklineGroup, SparklineType,
     StreamingXlsxWriter, UnsupportedFeature, ValidationType, WriteMode, WriteOptions, XlsxWriter,
 };
 pub use format_detector::DefaultFormatDetector;

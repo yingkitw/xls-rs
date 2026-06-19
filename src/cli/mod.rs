@@ -256,6 +256,18 @@ pub enum Commands {
         input: String,
         #[arg(short, long)]
         columns: Option<String>,
+        #[arg(short, long, value_name = "METHOD", default_value = "pearson")]
+        method: String,
+    },
+
+    /// Simple linear regression (slope, intercept, r_squared)
+    Regress {
+        #[arg(short, long)]
+        input: String,
+        #[arg(short, long)]
+        x_column: String,
+        #[arg(short, long)]
+        y_column: String,
     },
 
     /// Group by column with aggregation

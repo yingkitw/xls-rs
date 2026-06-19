@@ -14,7 +14,7 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 ### I/O layer
 
 - `src/csv_handler.rs`: CSV read/write with formula-injection sanitization (`sanitize_csv_row` / `write_records_safe`).
-- `src/excel/`: Excel read (`calamine` based) + write (`XlsxWriter`, `StreamingXlsxWriter`). Includes `WriteMode` (Expand/Preserve/Overwrite).
+- `src/excel/`: Excel read (`calamine` based) + write (`XlsxWriter`, `StreamingXlsxWriter`). Includes `WriteMode` (Expand/Preserve/Overwrite). Writer supports charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping (outline), freeze panes, and auto-filter.
 - `src/columnar/`: Parquet (`arrow` / `parquet`) and Avro (`apache-avro`) handlers.
 - `src/google_sheets.rs`: Google Sheets API v4 client for read/write/append/list; uses `ureq` for HTTP.
 - `src/converter.rs`: `Converter` — format-agnostic entry point that routes to the correct handler by extension.
@@ -22,11 +22,11 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 
 ### Operations layer
 
-- `src/operations/`: pandas-style operations — sort, filter, join, concat, groupby, pivot, melt, rolling, crosstab, transpose, select, dedupe, sample, clip, normalize, zscore, fillna, dropna, rename, drop, mutate, astype, unique, value-counts, corr, describe, head, tail, info, dtypes.
+- `src/operations/`: pandas-style operations — sort, filter, join, concat, groupby, pivot, melt, rolling, crosstab, transpose, select, dedupe, sample, clip, normalize, zscore, fillna, dropna, rename, drop, mutate, astype, unique, value-counts, corr (Pearson & Spearman), describe (with percentiles, skewness, kurtosis), simple linear regression (`regress`), head, tail, info, dtypes.
 - `src/formula/`: Excel formula parsing and evaluation (`FormulaEvaluator`).
 - `src/validation.rs`: Data validation rules engine (`DataValidator`).
 - `src/profiling.rs` / `src/profiling_handler.rs`: Column profiles and data-quality reports.
-- `src/anomaly.rs`: Statistical outlier detection.
+- `src/anomaly.rs`: Statistical outlier detection — Z-score, Modified Z-score (MAD-based), IQR, and percentile methods.
 - `src/quality.rs`: Quality issue reporting.
 - `src/text_analysis.rs` / `src/text_analysis_handler.rs`: Keyword, language, and sentiment analysis.
 - `src/timeseries.rs`: Temporal resampling, rolling aggregates, trend detection.

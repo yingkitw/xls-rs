@@ -13,16 +13,19 @@ use super::WriteOptions;
 
 /// Escape special XML characters
 pub fn escape_xml(s: &str) -> String {
-    s.chars()
-        .flat_map(|c| match c {
-            '&' => "&amp;".chars().collect::<Vec<_>>(),
-            '<' => "&lt;".chars().collect::<Vec<_>>(),
-            '>' => "&gt;".chars().collect::<Vec<_>>(),
-            '"' => "&quot;".chars().collect::<Vec<_>>(),
-            '\'' => "&apos;".chars().collect::<Vec<_>>(),
-            _ => vec![c],
-        })
-        .collect()
+    let extra = s.bytes().filter(|&b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\'')).count();
+    let mut out = String::with_capacity(s.len() + extra * 4);
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// Convert column number to Excel column letter (1=A, 26=Z, 27=AA, etc.)
@@ -315,24 +318,75 @@ pub fn add_worksheet<W: Write + Seek>(
     // Sheet format properties (required by Excel/Numbers)
     xml.push_str(r#"<sheetFormatPr baseColWidth="8" defaultRowHeight="15"/>"#);
 
+    // Build column outline level lookup
+    let mut col_outline: Vec<u8> = Vec::new();
+    let mut col_collapsed: Vec<bool> = Vec::new();
+    for cg in &sheet.col_groups {
+        let end = cg.end_col.max(col_outline.len().saturating_sub(1));
+        if col_outline.len() <= end {
+            col_outline.resize(end + 1, 0);
+            col_collapsed.resize(end + 1, false);
+        }
+        for c in cg.start_col..=cg.end_col {
+            if c < col_outline.len() {
+                col_outline[c] = col_outline[c].max(cg.level);
+                col_collapsed[c] = col_collapsed[c] || cg.collapsed;
+            }
+        }
+    }
+
     // Column widths
     if !sheet.column_widths.is_empty() {
         xml.push_str(r#"<cols>"#);
         for (col_idx, &width) in sheet.column_widths.iter().enumerate() {
+            let outline = if col_idx < col_outline.len() && col_outline[col_idx] > 0 {
+                format!(r#" outlineLevel="{}""#, col_outline[col_idx])
+            } else {
+                String::new()
+            };
+            let collapsed = if col_idx < col_collapsed.len() && col_collapsed[col_idx] {
+                r#" collapsed="1""#.to_string()
+            } else {
+                String::new()
+            };
             xml.push_str(&format!(
-                r#"<col min="{}" max="{}" width="{}" customWidth="1"/>"#,
+                r#"<col min="{}" max="{}"{}{} width="{}" customWidth="1"/>"#,
                 col_idx + 1,
                 col_idx + 1,
+                outline,
+                collapsed,
                 width
             ));
         }
         xml.push_str(r#"</cols>"#);
     }
 
+    // Build row outline level lookup
+    let mut row_outline: Vec<u8> = vec![0; sheet.rows.len()];
+    let mut row_collapsed: Vec<bool> = vec![false; sheet.rows.len()];
+    for rg in &sheet.row_groups {
+        for r in rg.start_row..=rg.end_row {
+            if r < row_outline.len() {
+                row_outline[r] = row_outline[r].max(rg.level);
+                row_collapsed[r] = row_collapsed[r] || rg.collapsed;
+            }
+        }
+    }
+
     // Sheet data
     xml.push_str(r#"<sheetData>"#);
     for (row_idx, row) in sheet.rows.iter().enumerate() {
-        xml.push_str(&format!(r#"<row r="{}">"#, row_idx + 1));
+        let outline_attr = if row_outline[row_idx] > 0 {
+            format!(r#" outlineLevel="{}""#, row_outline[row_idx])
+        } else {
+            String::new()
+        };
+        let collapsed_attr = if row_collapsed[row_idx] {
+            r#" collapsed="1" hidden="1""#.to_string()
+        } else {
+            String::new()
+        };
+        xml.push_str(&format!(r#"<row r="{}{}{}">"#, row_idx + 1, outline_attr, collapsed_attr));
         for (col_idx, cell) in row.cells.iter().enumerate() {
             let col_ref = col_num_to_letter(col_idx + 1);
             let cell_ref = format!("{}{}", col_ref, row_idx + 1);

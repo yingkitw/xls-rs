@@ -190,7 +190,15 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 self.pandas.handle_value_counts(input, column)
             }
 
-            Commands::Corr { input, columns } => self.pandas.handle_corr(input, columns),
+            Commands::Corr { input, columns, method } => {
+                self.pandas.handle_corr(input, columns, &method)
+            }
+
+            Commands::Regress {
+                input,
+                x_column,
+                y_column,
+            } => self.pandas.handle_regress(input, x_column, y_column),
 
             Commands::Groupby {
                 input,

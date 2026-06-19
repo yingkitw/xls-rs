@@ -25,8 +25,8 @@ All three surfaces delegate to the same underlying operations registered in `Cap
 ### Library (`xls_rs`)
 
 - Core types: `ExcelHandler`, `Converter`, `CsvHandler`, `ParquetHandler`, `AvroHandler`, `GoogleSheetsHandler`.
-- Operations: `DataOperations` (sort, filter, join, concat, groupby, pivot, etc.), `DataValidator`, `DataProfiler`, `AnomalyDetector`, `TextAnalyzer`.
-- Excel-specific: `XlsxWriter`, `StreamingXlsxWriter`, `WriteMode`, charts, sparklines, conditional formatting.
+- Operations: `DataOperations` (sort, filter, join, concat, groupby, pivot, describe with percentiles/skewness/kurtosis, correlation (Pearson/Spearman), simple linear regression, etc.), `DataValidator`, `DataProfiler`, `AnomalyDetector` (Z-score, Modified Z-score, IQR, percentile), `TextAnalyzer`.
+- Excel-specific: `XlsxWriter`, `StreamingXlsxWriter`, `WriteMode`, charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping, freeze panes, auto-filter.
 - Streaming: `CsvStreamingReader`, `StreamingProcessor`.
 - Formula: `FormulaEvaluator` for in-memory evaluation of Excel expressions.
 
@@ -40,7 +40,7 @@ All three surfaces delegate to the same underlying operations registered in `Cap
 ### MCP (`XlsRsMcpServer`)
 
 - Each tool delegates to `CapabilityRegistry::execute` with the same name used by the CLI capability catalog.
-- `read_excel` supports `format` option (`csv`, `jsonl`, `markdown`, `json`).
+- `read_excel` supports `format` option (`csv`, `jsonl`, `markdown`, `json`, `html`).
 - `capabilities` tool returns the runtime catalog of operations and formats.
 - Error responses include structured `error.data` with stable `code`, `file`, `sheet`, `range`, and `cell` fields.
 

@@ -9,11 +9,15 @@ Supported formats include CSV, Excel (`.xlsx`, `.xls`), ODS, Parquet, and Avro, 
 
 ## What's New
 
-- **MCP Server**: New `XlsRsMcpServer` exposes all capabilities to AI agents and automation tools via the Model Context Protocol
-- **Styled Excel Export**: New presets (`default`, `minimal`, `report`, `executive`) for professional spreadsheet formatting with charts, conditional formatting, and sparklines
-- **Workflow Engine**: Config-driven batch operations via `WorkflowExecutor` — no temp JSON files needed
-- **Streaming Mode**: Memory-efficient chunked CSV processing (`CsvStreamingReader` + CLI `stream` command)
-- **Time Series & Geospatial**: Built-in support for temporal analysis and location-based data
+- **Extended Statistics**: `describe` now reports 10/25/50/75/90/95/99 percentiles, skewness, and kurtosis (NumPy-compatible interpolation). `corr` supports `--method spearman` for rank correlation. `regress` computes simple linear regression (slope, intercept, r²).
+- **Excel Grouping (Outline)**: Collapsible row/column groups via `XlsxWriter::add_row_group()` / `add_col_group()` with configurable outline level and collapse state.
+- **HTML Output**: `read` and inspect commands support `--format html` for HTML table output.
+- **Modified Z-score Outlier Detection**: `AnomalyMethod::ModifiedZScore` uses MAD (Median Absolute Deviation) for robust outlier detection.
+- **MCP Server**: `XlsRsMcpServer` exposes all capabilities to AI agents and automation tools via the Model Context Protocol.
+- **Styled Excel Export**: Presets (`default`, `minimal`, `report`, `executive`) for professional formatting with charts, conditional formatting, and sparklines.
+- **Workflow Engine**: Config-driven batch operations via `WorkflowExecutor`.
+- **Streaming Mode**: Memory-efficient chunked CSV processing (`CsvStreamingReader` + CLI `stream` command).
+- **Time Series & Geospatial**: Temporal analysis and location-based data.
 
 ## Why xls-rs?
 
@@ -22,9 +26,9 @@ Unlike single-purpose libraries, xls-rs provides a **unified surface** across li
 **Key differentiators:**
 
 - **Production Safety**: CSV formula-injection sanitization on all write paths; overwrite guards (`--overwrite` required); stable error codes across CLI and MCP
-- **Advanced Excel Features**: Charts, conditional formatting, sparklines, and styling — not just raw cell values
+- **Advanced Excel Features**: Charts, conditional formatting, sparklines, grouping (outline), merged cells, hyperlinks, comments, data validation, print setup, freeze panes, auto-filter — not just raw cell values
 - **Data Quality Built-in**: Validation rules, profiling, anomaly detection, and data lineage tracking
-- **Pandas-Style Ops**: `head`, `tail`, `describe`, `sort`, `filter`, `dedupe`, `transpose`, `select`, `join`, `concat`, `groupby`, `pivot`, `melt`, `rolling`, `crosstab`, `sample`, `clip`, `normalize`, `zscore`, `fillna`, `dropna`, `rename`, `drop`, `mutate`, `astype`, `unique`, `value-counts`, `corr`
+- **Pandas-Style Ops**: `head`, `tail`, `describe` (with percentiles/skewness/kurtosis), `sort`, `filter`, `dedupe`, `transpose`, `select`, `join`, `concat`, `groupby`, `pivot`, `melt`, `rolling`, `crosstab`, `sample`, `clip`, `normalize`, `zscore`, `fillna`, `dropna`, `rename`, `drop`, `mutate`, `astype`, `unique`, `value-counts`, `corr` (Pearson & Spearman), `regress`
 - **Formula Evaluation**: Built-in evaluator for Excel formulas (not just reading stored values)
 - **Encryption**: File-level encryption/decryption support for sensitive data
 - **Parquet & Avro**: Native columnar format support with schema inference from headers
@@ -97,7 +101,7 @@ cargo run -- read --input examples/sales.csv
 
 **Transforms**: `sort`, `filter`, `replace`, `dedupe`, `transpose`, `select`, `mutate`, `rename`, `drop`, `fillna`, `dropna`, `astype`, `unique`, `clip`, `normalize`, `zscore`
 
-**Analytics**: `head`, `tail`, `sample`, `describe`, `value-counts`, `corr`, `info`, `dtypes`, `groupby`, `join`, `concat`, `pivot`, `rolling`, `crosstab`, `melt`, `query`, `parse-date`, `regex-filter`, `regex-replace`, `diff`, `histogram`
+**Analytics**: `head`, `tail`, `sample`, `describe`, `value-counts`, `corr`, `regress`, `info`, `dtypes`, `groupby`, `join`, `concat`, `pivot`, `rolling`, `crosstab`, `melt`, `query`, `parse-date`, `regex-filter`, `regex-replace`, `diff`, `histogram`
 
 **Advanced**: `formula`, `apply-formula-range`, `chart`, `add-chart`, `add-sparkline`, `conditional-format`, `export-styled`, `validate`, `profile`, `schema`, `to-sql`, `encrypt`, `decrypt`, `batch`, `plugin`, `stream`, `examples-generate`, `config-init`, `completions`, `gsheets-list`, `gsheets-auth`, `gsheets-set-default`
 

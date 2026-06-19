@@ -18,8 +18,8 @@ pub use writer::WriteMode;
 #[allow(unused_imports)]
 pub use types::{CellStyle, WriteOptions};
 pub use xlsx_writer::{
-    CellComment, CellData, ConditionalFormat, ConditionalRule, DataValidation, Hyperlink,
-    MergeCell, PageMargins, PageOrientation, PrintSetup, RowData, Sparkline, SparklineGroup,
-    SparklineType, ValidationType, XlsxWriter,
+    CellComment, CellData, ColGroup, ConditionalFormat, ConditionalRule, DataValidation,
+    Hyperlink, MergeCell, PageMargins, PageOrientation, PrintSetup, RowData, RowGroup, Sparkline,
+    SparklineGroup, SparklineType, ValidationType, XlsxWriter,
     streaming::StreamingXlsxWriter,
 };

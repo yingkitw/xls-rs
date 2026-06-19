@@ -34,8 +34,8 @@ pub mod sparkline_xml;
 pub mod streaming;
 
 pub use types::{
-    CellComment, CellData, DataValidation, Hyperlink, MergeCell, PageMargins, PageOrientation,
-    PrintSetup, RowData, SheetData, ValidationType,
+    CellComment, CellData, ColGroup, DataValidation, Hyperlink, MergeCell, PageMargins,
+    PageOrientation, PrintSetup, RowData, RowGroup, SheetData, ValidationType,
 };
 pub use cond_fmt_xml::{ConditionalFormat, ConditionalRule};
 pub use sparkline_xml::{Sparkline, SparklineGroup, SparklineType};
@@ -103,6 +103,8 @@ impl XlsxWriter {
             hyperlinks: Vec::new(),
             print_setup: None,
             comments: Vec::new(),
+            row_groups: Vec::new(),
+            col_groups: Vec::new(),
         });
         Ok(())
     }
@@ -165,6 +167,30 @@ impl XlsxWriter {
                 cell_ref: cell_ref.to_string(),
                 text: text.to_string(),
                 author: author.map(|s| s.to_string()),
+            });
+        }
+    }
+
+    /// Add a row group (outline) to the current sheet
+    pub fn add_row_group(&mut self, start_row: usize, end_row: usize, level: u8, collapsed: bool) {
+        if let Some(sheet) = self.sheets.last_mut() {
+            sheet.row_groups.push(RowGroup {
+                start_row,
+                end_row,
+                level,
+                collapsed,
+            });
+        }
+    }
+
+    /// Add a column group (outline) to the current sheet
+    pub fn add_col_group(&mut self, start_col: usize, end_col: usize, level: u8, collapsed: bool) {
+        if let Some(sheet) = self.sheets.last_mut() {
+            sheet.col_groups.push(ColGroup {
+                start_col,
+                end_col,
+                level,
+                collapsed,
             });
         }
     }
@@ -737,5 +763,58 @@ mod tests {
         let output = buffer.into_inner();
         assert!(output.len() > 0);
         assert_eq!(&output[0..4], b"PK\x03\x04");
+    }
+
+    #[test]
+    fn test_save_workbook_with_row_groups() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("Grouped").unwrap();
+
+        let mut row = RowData::new();
+        row.add_string("Header");
+        writer.add_row(row);
+
+        let mut row = RowData::new();
+        row.add_string("Group1-A");
+        writer.add_row(row);
+
+        let mut row = RowData::new();
+        row.add_string("Group1-B");
+        writer.add_row(row);
+
+        writer.add_row_group(1, 2, 1, false);
+
+        let mut buffer = Cursor::new(Vec::new());
+        assert!(writer.save(&mut buffer).is_ok());
+
+        let output = buffer.into_inner();
+        assert!(output.len() > 0);
+        assert_eq!(&output[0..4], b"PK\x03\x04");
+        assert_eq!(writer.sheets[0].row_groups.len(), 1);
+    }
+
+    #[test]
+    fn test_save_workbook_with_col_groups() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("GroupedCols").unwrap();
+
+        let mut row = RowData::new();
+        row.add_string("A");
+        row.add_string("B");
+        row.add_string("C");
+        writer.add_row(row);
+
+        writer.set_column_width(0, 10.0);
+        writer.set_column_width(1, 10.0);
+        writer.set_column_width(2, 10.0);
+        writer.add_col_group(0, 1, 1, false);
+
+        let mut buffer = Cursor::new(Vec::new());
+        assert!(writer.save(&mut buffer).is_ok());
+
+        let output = buffer.into_inner();
+        assert!(output.len() > 0);
+        assert_eq!(&output[0..4], b"PK\x03\x04");
+        assert_eq!(writer.sheets[0].col_groups.len(), 1);
     }
 }

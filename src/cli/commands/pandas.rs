@@ -116,7 +116,7 @@ impl PandasCommandHandler {
     /// Handle the corr command
     ///
     /// Calculates the correlation matrix for numeric columns.
-    pub fn handle_corr(&self, input: String, columns: Option<String>) -> Result<()> {
+    pub fn handle_corr(&self, input: String, columns: Option<String>, method: &str) -> Result<()> {
         let converter = Converter::new();
         let data = converter.read_any_data(&input, None)?;
 
@@ -131,14 +131,42 @@ impl PandasCommandHandler {
         };
 
         let ops = DataOperations::new();
-        let corr_matrix = ops.correlation(&data, &col_indices)?;
+        let corr_matrix = match method {
+            "spearman" => ops.spearman_correlation(&data, &col_indices)?,
+            "pearson" | _ => ops.correlation(&data, &col_indices)?,
+        };
 
-        println!("Correlation Matrix:");
+        let label = if method == "spearman" {
+            "Spearman Rank Correlation"
+        } else {
+            "Pearson Correlation"
+        };
+        println!("{} Matrix:", label);
         for row in &corr_matrix {
             for val in row {
                 print!("{val} ");
             }
             println!();
+        }
+
+        Ok(())
+    }
+
+    /// Handle the regress command
+    ///
+    /// Calculates simple linear regression (slope, intercept, r_squared) for two numeric columns.
+    pub fn handle_regress(&self, input: String, x_column: String, y_column: String) -> Result<()> {
+        let converter = Converter::new();
+        let data = converter.read_any_data(&input, None)?;
+
+        let x_idx = self.find_column_index(&data, &x_column)?;
+        let y_idx = self.find_column_index(&data, &y_column)?;
+
+        let ops = DataOperations::new();
+        let result = ops.simple_linear_regression(&data, x_idx, y_idx)?;
+
+        for row in &result {
+            println!("{}: {}", row[0], row[1]);
         }
 
         Ok(())
@@ -628,6 +656,33 @@ impl PandasCommandHandler {
                     }
                     println!("|");
                 }
+            }
+            OutputFormat::Html => {
+                if data.is_empty() {
+                    println!("<table></table>");
+                    return Ok(());
+                }
+
+                println!("<table>");
+                if let Some(header) = data.first() {
+                    println!("  <thead><tr>");
+                    for cell in header {
+                        println!("    <th>{}</th>", cell);
+                    }
+                    println!("  </tr></thead>");
+                }
+                if data.len() > 1 {
+                    println!("  <tbody>");
+                    for row in &data[1..] {
+                        println!("    <tr>");
+                        for cell in row {
+                            println!("      <td>{}</td>", cell);
+                        }
+                        println!("    </tr>");
+                    }
+                    println!("  </tbody>");
+                }
+                println!("</table>");
             }
         }
 

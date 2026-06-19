@@ -199,7 +199,7 @@ impl super::profiler::DataProfiler {
         let mean = numbers.iter().sum::<f64>() / numbers.len() as f64;
 
         let mut sorted_numbers = numbers.clone();
-        sorted_numbers.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted_numbers.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
         let median = if sorted_numbers.len().is_multiple_of(2) {
             let mid = sorted_numbers.len() / 2;
             (sorted_numbers[mid - 1] + sorted_numbers[mid]) / 2.0

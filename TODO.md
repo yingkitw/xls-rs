@@ -135,7 +135,7 @@
 - [ ] **Excel structured tables**: Read/write `Table` objects (auto-expanding ranges with headers, total rows, banded rows). openpyxl has full `Table` support.
 - [x] **Freeze panes**: Set freeze rows/columns on write (`freeze_header` in `WriteOptions`, generates `<pane ySplit="1" state="frozen"/>`).
 - [x] **Auto-filter**: Write `autoFilter` range so Excel shows dropdown arrows (`auto_filter` in `WriteOptions`).
-- [ ] **Row/column grouping (outline)**: Group/outline rows for collapsible sections. `<outlinePr>` exists but actual row-level grouping not yet implemented.
+- [x] **Row/column grouping (outline)**: Write `outlineLevel` on `<row>` and `<col>` elements for collapsible sections. API: `XlsxWriter::add_row_group(start_row, end_row, level, collapsed)` / `add_col_group(...)`. openpyxl / xlsxwriter support.
 - [x] **Hyperlinks**: Write clickable URLs in cells via `<hyperlinks>` + worksheet rels. API: `XlsxWriter::add_hyperlink(cell_ref, url, tooltip)`.
 - [x] **Cell comments**: Write comments via `xl/commentsN.xml` + worksheet rels. No VML drawing indicator yet (comments visible in review pane). API: `XlsxWriter::add_comment(cell_ref, text, author)`.
 - [x] **Data validation / dropdown lists**: Write `dataValidation` rules (list, whole, decimal, date, textLength, custom). API: `XlsxWriter::add_data_validation(DataValidation { range, validation_type, ... })`.
@@ -146,6 +146,12 @@
 
 ### Performance & scale (xsv / polars / duckdb gaps)
 
+**Recently optimized**:
+- [x] **`escape_xml` rewrite**: Eliminated per-character `Vec` allocations (from `flat_map` + `collect` to pre-allocated `String` with capacity). Reduces allocations by ~O(n) per string cell in XLSX write.
+- [x] **`describe()` sort-once**: Replaced 7 sorts per column (one per percentile) with a single sort via `ColumnStats` struct. Sort complexity reduced from O(7n log n) to O(n log n) per column.
+- [x] **`sort_unstable` profiling**: Switched `calculate_numeric_stats` and `calculate_length_stats` from `sort_by` to `sort_unstable_by` for faster constant factor.
+
+Still open:
 - [ ] **CSV index (xsv-style)**: Build a lightweight index (row offsets per block) so `head`/`tail`/random access on huge CSVs is O(1) instead of O(n). xsv does this via `xsv index`.
 - [ ] **True streaming XLSX read**: Row-by-row SAX-style parsing without loading entire workbook into memory. Current implementation uses `calamine` which materializes the whole sheet. `xlsx2csv` streams via `quick-xml`.
 - [ ] **Lazy / query-plan evaluation**: Polars-style lazy DataFrames — build an execution graph, optimize (predicate pushdown, projection pushdown), then execute. Would dramatically speed up chained operations.
@@ -174,7 +180,7 @@
 - [ ] **SQLite read/write**: Read from `.db` / `.sqlite` and write back. `csvsql` / `sqlite-utils` territory.
 - [ ] **PostgreSQL / MySQL connectors**: Direct database read/write. `csvsql` / `pandas.read_sql` territory.
 - [ ] **PDF export**: Convert tabular data to PDF tables. `libreoffice --headless --convert-to pdf` is the workaround; native Rust would be powerful.
-- [ ] **HTML table export**: Rich HTML with CSS styling, sortable columns. pandas `to_html` / `datatables`.
+- [x] **HTML table export**: Basic HTML table output via `--format html` on `read`, `head`, `tail`, `describe`, and other inspect commands. Rich CSS styling still open.
 - [ ] **LaTeX table export**: Academic paper tables. pandas `to_latex`.
 
 ### Interactive & UX (visidata / Tad / xsv gaps)
@@ -186,12 +192,15 @@
 
 ### Advanced analytics (pandas / polars / R gaps)
 
-- [ ] **Percentile / quantile**: `describe` should include 25th, 50th, 75th, 90th, 95th, 99th percentiles. pandas `describe(percentiles=[...])`.
-- [ ] **Skewness & kurtosis**: Shape statistics for numeric columns. pandas / R.
-- [ ] **Correlation methods**: Spearman rank, Kendall tau, not just Pearson. pandas / scipy.
-- [ ] **Regression (simple linear)**: `slope`, `intercept`, `r_squared` for two numeric columns. Excel `LINEST` / R `lm()`.
+- [x] **Percentile / quantile**: `describe` now includes 10th, 25th, 50th, 75th, 90th, 95th, 99th percentiles using linear interpolation (NumPy-compatible). API: `DataOperations::describe(data)`.
+- [x] **Skewness & kurtosis**: Added to `describe` output. Uses population moment definitions (excess kurtosis = Fisher-1). API: `DataOperations::describe(data)`.
+- [x] **Correlation methods**: Spearman rank correlation added. CLI: `--method spearman` on `corr` command. API: `DataOperations::spearman_correlation(data, columns)`.
+- [ ] **Kendall tau correlation**: Not yet implemented.
+- [x] **Regression (simple linear)**: `slope`, `intercept`, `r_squared` for two numeric columns. CLI: `regress --x-column X --y-column Y`. API: `DataOperations::simple_linear_regression(data, x_col, y_col)`.
 - [ ] **String distance metrics**: Levenshtein, Jaro-Winkler, Hamming for fuzzy matching. `strsim-rs` crate.
-- [ ] **Outlier methods beyond IQR**: Z-score, modified Z-score, Isolation Forest (even a simple version). sklearn territory.
+- [x] **Z-score outlier detection**: Population Z-score via `AnomalyMethod::ZScore { threshold }`. Uses mean and std dev.
+- [x] **Modified Z-score outlier detection**: Robust outlier detection via `AnomalyMethod::ModifiedZScore { threshold }`. Uses median and MAD (Median Absolute Deviation).
+- [ ] **Isolation Forest**: Even a simple version. sklearn territory.
 - [ ] **Sampling methods**: Stratified sampling, systematic sampling (not just random). pandas / R.
 - [ ] **Reshape (wider / longer)**: `pivot_wider` and `pivot_longer` as first-class tidyverse-style operations. tidyr / dplyr.
 

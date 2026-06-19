@@ -138,6 +138,24 @@ pub struct CellComment {
     pub author: Option<String>,
 }
 
+/// Row/column outline grouping
+#[derive(Debug, Clone)]
+pub struct RowGroup {
+    pub start_row: usize, // 0-based, inclusive
+    pub end_row: usize,   // 0-based, inclusive
+    pub level: u8,        // outline level (1-7)
+    pub collapsed: bool,
+}
+
+/// Column outline grouping
+#[derive(Debug, Clone)]
+pub struct ColGroup {
+    pub start_col: usize, // 0-based, inclusive
+    pub end_col: usize,   // 0-based, inclusive
+    pub level: u8,        // outline level (1-7)
+    pub collapsed: bool,
+}
+
 /// Sheet data structure
 pub struct SheetData {
     pub name: String,
@@ -150,4 +168,6 @@ pub struct SheetData {
     pub hyperlinks: Vec<Hyperlink>,
     pub print_setup: Option<PrintSetup>,
     pub comments: Vec<CellComment>,
+    pub row_groups: Vec<RowGroup>,
+    pub col_groups: Vec<ColGroup>,
 }

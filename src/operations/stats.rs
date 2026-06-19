@@ -29,55 +29,143 @@ impl DataOperations {
         stat_header.extend(header.iter().cloned());
         result.push(stat_header);
 
-        let stats = ["count", "mean", "std", "min", "25%", "50%", "75%", "max"];
-        for stat in stats {
-            let mut row = vec![stat.to_string()];
-            for col_values in &columns {
-                let value = if col_values.is_empty() {
-                    "NaN".to_string()
-                } else {
-                    match stat {
-                        "count" => col_values.len().to_string(),
-                        "mean" => format!(
-                            "{:.2}",
-                            col_values.iter().sum::<f64>() / col_values.len() as f64
-                        ),
-                        "std" => {
-                            let mean = col_values.iter().sum::<f64>() / col_values.len() as f64;
-                            let variance =
-                                col_values.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
-                                    / col_values.len() as f64;
-                            format!("{:.2}", variance.sqrt())
-                        }
-                        "min" => format!(
-                            "{:.2}",
-                            col_values.iter().cloned().fold(f64::INFINITY, f64::min)
-                        ),
-                        "max" => format!(
-                            "{:.2}",
-                            col_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
-                        ),
-                        "25%" | "50%" | "75%" => {
-                            let mut sorted = col_values.clone();
-                            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                            let p = match stat {
-                                "25%" => 0.25,
-                                "50%" => 0.50,
-                                "75%" => 0.75,
-                                _ => 0.5,
-                            };
-                            let idx = ((sorted.len() - 1) as f64 * p) as usize;
-                            format!("{:.2}", sorted[idx])
-                        }
-                        _ => "".to_string(),
-                    }
-                };
-                row.push(value);
+        // Precompute all stats per-column (sort once, reuse mean/variance)
+        let col_stats: Vec<ColumnStats> = columns
+            .iter()
+            .map(|vals| ColumnStats::compute(vals))
+            .collect();
+
+        let stat_names = [
+            "count", "mean", "std", "min", "10%", "25%", "50%", "75%", "90%", "95%", "99%",
+            "max", "skewness", "kurtosis",
+        ];
+        for &name in &stat_names {
+            let mut row = vec![name.to_string()];
+            for cs in &col_stats {
+                row.push(cs.format(name));
             }
             result.push(row);
         }
 
         Ok(result)
+    }
+
+    /// Spearman rank correlation matrix
+    pub fn spearman_correlation(
+        &self,
+        data: &[Vec<String>],
+        columns: &[usize],
+    ) -> Result<Vec<Vec<String>>> {
+        if data.is_empty() || columns.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let header = &data[0];
+
+        // Extract numeric values per column
+        let mut col_data: Vec<Vec<f64>> = vec![Vec::new(); columns.len()];
+        for row in data.iter().skip(1) {
+            for (i, &col_idx) in columns.iter().enumerate() {
+                if let Some(val) = row.get(col_idx).and_then(|v| v.parse::<f64>().ok()) {
+                    col_data[i].push(val);
+                }
+            }
+        }
+
+        let mut result = Vec::new();
+
+        let mut corr_header = vec!["".to_string()];
+        for &col_idx in columns {
+            corr_header.push(
+                header
+                    .get(col_idx)
+                    .cloned()
+                    .unwrap_or_else(|| format!("col_{}", col_idx)),
+            );
+        }
+        result.push(corr_header);
+
+        for (i, &col_i) in columns.iter().enumerate() {
+            let col_name = header
+                .get(col_i)
+                .cloned()
+                .unwrap_or_else(|| format!("col_{}", col_i));
+            let mut row = vec![col_name];
+
+            for (j, _) in columns.iter().enumerate() {
+                let corr = spearman_rho(&col_data[i], &col_data[j]);
+                row.push(format!("{:.4}", corr));
+            }
+            result.push(row);
+        }
+
+        Ok(result)
+    }
+
+    /// Simple linear regression: slope, intercept, and r_squared for two numeric columns
+    pub fn simple_linear_regression(
+        &self,
+        data: &[Vec<String>],
+        x_col: usize,
+        y_col: usize,
+    ) -> Result<Vec<Vec<String>>> {
+        if data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut xs = Vec::new();
+        let mut ys = Vec::new();
+        for row in data.iter().skip(1) {
+            if let (Some(xv), Some(yv)) = (row.get(x_col), row.get(y_col)) {
+                if let (Ok(x), Ok(y)) = (xv.parse::<f64>(), yv.parse::<f64>()) {
+                    xs.push(x);
+                    ys.push(y);
+                }
+            }
+        }
+
+        if xs.len() < 2 {
+            anyhow::bail!("Need at least 2 valid numeric pairs for regression");
+        }
+
+        let n = xs.len() as f64;
+        let sum_x: f64 = xs.iter().sum();
+        let sum_y: f64 = ys.iter().sum();
+        let mean_x = sum_x / n;
+        let mean_y = sum_y / n;
+
+        let mut ss_xy = 0.0;
+        let mut ss_xx = 0.0;
+        let mut ss_yy = 0.0;
+        for i in 0..xs.len() {
+            let dx = xs[i] - mean_x;
+            let dy = ys[i] - mean_y;
+            ss_xy += dx * dy;
+            ss_xx += dx * dx;
+            ss_yy += dy * dy;
+        }
+
+        if ss_xx == 0.0 {
+            anyhow::bail!("X column has zero variance; cannot compute regression");
+        }
+
+        let slope = ss_xy / ss_xx;
+        let intercept = mean_y - slope * mean_x;
+
+        let r = if ss_yy > 0.0 {
+            ss_xy / (ss_xx.sqrt() * ss_yy.sqrt())
+        } else {
+            0.0
+        };
+        let r_squared = r * r;
+
+        Ok(vec![
+            vec!["stat".to_string(), "value".to_string()],
+            vec!["slope".to_string(), format!("{:.6}", slope)],
+            vec!["intercept".to_string(), format!("{:.6}", intercept)],
+            vec!["r_squared".to_string(), format!("{:.6}", r_squared)],
+            vec!["n".to_string(), format!("{}", xs.len())],
+        ])
     }
 
     /// Count unique values in a column
@@ -426,5 +514,174 @@ impl DataOperations {
         }
 
         result
+    }
+}
+
+/// Spearman rank correlation coefficient
+fn spearman_rho(x: &[f64], y: &[f64]) -> f64 {
+    let n = x.len().min(y.len());
+    if n == 0 {
+        return 0.0;
+    }
+
+    let rank_x = rank_values(&x[..n]);
+    let rank_y = rank_values(&y[..n]);
+
+    pearson_rho(&rank_x, &rank_y)
+}
+
+/// Assign average ranks to values (handles ties)
+fn rank_values(values: &[f64]) -> Vec<f64> {
+    let mut indexed: Vec<(usize, f64)> = values.iter().cloned().enumerate().collect();
+    indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut ranks = vec![0.0; values.len()];
+    let mut i = 0;
+    while i < indexed.len() {
+        let mut j = i + 1;
+        while j < indexed.len() && indexed[j].1 == indexed[i].1 {
+            j += 1;
+        }
+        let avg_rank = (i + 1 + j) as f64 / 2.0; // 1-based rank average
+        for k in i..j {
+            ranks[indexed[k].0] = avg_rank;
+        }
+        i = j;
+    }
+    ranks
+}
+
+/// Pearson correlation on already-numeric slices (no parsing)
+fn pearson_rho(x: &[f64], y: &[f64]) -> f64 {
+    let n = x.len().min(y.len());
+    if n == 0 {
+        return 0.0;
+    }
+    let mean_x = x.iter().take(n).sum::<f64>() / n as f64;
+    let mean_y = y.iter().take(n).sum::<f64>() / n as f64;
+    let mut cov = 0.0;
+    let mut var_x = 0.0;
+    let mut var_y = 0.0;
+    for i in 0..n {
+        let dx = x[i] - mean_x;
+        let dy = y[i] - mean_y;
+        cov += dx * dy;
+        var_x += dx * dx;
+        var_y += dy * dy;
+    }
+    if var_x == 0.0 || var_y == 0.0 {
+        return 0.0;
+    }
+    cov / (var_x.sqrt() * var_y.sqrt())
+}
+
+/// Precomputed statistics for a single numeric column
+struct ColumnStats {
+    count: usize,
+    mean: f64,
+    std_dev: f64,
+    min: f64,
+    max: f64,
+    p10: f64,
+    p25: f64,
+    p50: f64,
+    p75: f64,
+    p90: f64,
+    p95: f64,
+    p99: f64,
+    skewness: f64,
+    kurtosis: f64,
+    empty: bool,
+}
+
+impl ColumnStats {
+    fn compute(values: &[f64]) -> Self {
+        if values.is_empty() {
+            return Self {
+                count: 0, mean: f64::NAN, std_dev: f64::NAN,
+                min: f64::NAN, max: f64::NAN,
+                p10: f64::NAN, p25: f64::NAN, p50: f64::NAN,
+                p75: f64::NAN, p90: f64::NAN, p95: f64::NAN, p99: f64::NAN,
+                skewness: f64::NAN, kurtosis: f64::NAN, empty: true,
+            };
+        }
+
+        let count = values.len();
+        let sum: f64 = values.iter().sum();
+        let mean = sum / count as f64;
+
+        let variance = values.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / count as f64;
+        let std_dev = variance.sqrt();
+
+        let min = *values.iter().min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).unwrap();
+        let max = *values.iter().max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).unwrap();
+
+        // Sort once for all percentiles
+        let mut sorted = values.to_vec();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+        let p = |p: f64| {
+            let n = sorted.len();
+            let idx = (n - 1) as f64 * p;
+            let lower = idx.floor() as usize;
+            let upper = idx.ceil() as usize;
+            if lower == upper {
+                sorted[lower]
+            } else {
+                let frac = idx - lower as f64;
+                sorted[lower] * (1.0 - frac) + sorted[upper] * frac
+            }
+        };
+
+        let p10 = p(0.10);
+        let p25 = p(0.25);
+        let p50 = p(0.50);
+        let p75 = p(0.75);
+        let p90 = p(0.90);
+        let p95 = p(0.95);
+        let p99 = p(0.99);
+
+        let skewness = if std_dev > 0.0 {
+            let m3 = values.iter().map(|&x| (x - mean).powi(3)).sum::<f64>() / count as f64;
+            m3 / std_dev.powi(3)
+        } else {
+            f64::NAN
+        };
+
+        let kurtosis = if variance > 0.0 {
+            let m4 = values.iter().map(|&x| (x - mean).powi(4)).sum::<f64>() / count as f64;
+            m4 / variance.powi(2) - 3.0
+        } else {
+            f64::NAN
+        };
+
+        Self {
+            count, mean, std_dev, min, max,
+            p10, p25, p50, p75, p90, p95, p99,
+            skewness, kurtosis, empty: false,
+        }
+    }
+
+    fn format(&self, name: &str) -> String {
+        if self.empty {
+            return "NaN".to_string();
+        }
+        match name {
+            "count" => self.count.to_string(),
+            "mean" => format!("{:.2}", self.mean),
+            "std" => format!("{:.2}", self.std_dev),
+            "min" => format!("{:.2}", self.min),
+            "10%" => format!("{:.2}", self.p10),
+            "25%" => format!("{:.2}", self.p25),
+            "50%" => format!("{:.2}", self.p50),
+            "75%" => format!("{:.2}", self.p75),
+            "90%" => format!("{:.2}", self.p90),
+            "95%" => format!("{:.2}", self.p95),
+            "99%" => format!("{:.2}", self.p99),
+            "max" => format!("{:.2}", self.max),
+            "skewness" => format!("{:.4}", self.skewness),
+            "kurtosis" => format!("{:.4}", self.kurtosis),
+            _ => "".to_string(),
+        }
     }
 }

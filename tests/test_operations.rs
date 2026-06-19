@@ -608,3 +608,44 @@ fn test_melt_infer_value_vars() {
     assert_eq!(long[1][1], "A");
     assert_eq!(long[2][1], "B");
 }
+
+#[test]
+fn test_simple_linear_regression() {
+    let ops = DataOperations::new();
+    // y = 2x + 1
+    let data = vec![
+        vec!["x".to_string(), "y".to_string()],
+        vec!["0".to_string(), "1".to_string()],
+        vec!["1".to_string(), "3".to_string()],
+        vec!["2".to_string(), "5".to_string()],
+        vec!["3".to_string(), "7".to_string()],
+    ];
+    let result = ops.simple_linear_regression(&data, 0, 1).unwrap();
+    assert_eq!(result[0], vec!["stat", "value"]);
+    // slope should be ~2.0
+    let slope: f64 = result[1][1].parse().unwrap();
+    assert!((slope - 2.0).abs() < 0.001, "slope = {}", slope);
+    // intercept should be ~1.0
+    let intercept: f64 = result[2][1].parse().unwrap();
+    assert!((intercept - 1.0).abs() < 0.001, "intercept = {}", intercept);
+    // r_squared should be ~1.0
+    let r2: f64 = result[3][1].parse().unwrap();
+    assert!((r2 - 1.0).abs() < 0.001, "r_squared = {}", r2);
+    assert_eq!(result[4][1], "4");
+}
+
+#[test]
+fn test_spearman_correlation() {
+    let ops = DataOperations::new();
+    let data = vec![
+        vec!["a".to_string(), "b".to_string()],
+        vec!["1".to_string(), "1".to_string()],
+        vec!["2".to_string(), "2".to_string()],
+        vec!["3".to_string(), "3".to_string()],
+    ];
+    let corr = ops.spearman_correlation(&data, &[0, 1]).unwrap();
+    assert_eq!(corr.len(), 3); // header + 2 rows
+    // Diagonal should be 1.0
+    let r: f64 = corr[1][1].parse().unwrap();
+    assert!((r - 1.0).abs() < 0.001);
+}
