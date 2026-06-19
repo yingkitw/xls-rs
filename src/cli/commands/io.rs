@@ -22,7 +22,7 @@ pub struct IoCommandHandler;
 impl IoCommandHandler {
     /// Create a new I/O command handler
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// Handle the read command
@@ -326,9 +326,9 @@ impl IoCommandHandler {
         crate::cli::runtime::log("");
         crate::cli::runtime::log(format!("Current config file: {}", config_path.display()));
         
-        if !config.google_sheets.service_account_file.is_some() 
-            && !config.google_sheets.client_secrets_file.is_some() 
-            && !config.google_sheets.api_key.is_some() {
+        if config.google_sheets.service_account_file.is_none() 
+            && config.google_sheets.client_secrets_file.is_none() 
+            && config.google_sheets.api_key.is_none() {
             crate::cli::runtime::log("No Google Sheets credentials configured.");
         }
         

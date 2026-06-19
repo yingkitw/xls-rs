@@ -159,7 +159,7 @@ impl super::profiler::DataProfiler {
 
         let mut sorted_lengths = lengths.clone();
         sorted_lengths.sort_unstable();
-        let median_length = if sorted_lengths.len() % 2 == 0 {
+        let median_length = if sorted_lengths.len().is_multiple_of(2) {
             let mid = sorted_lengths.len() / 2;
             (sorted_lengths[mid - 1] + sorted_lengths[mid]) / 2
         } else {
@@ -200,7 +200,7 @@ impl super::profiler::DataProfiler {
 
         let mut sorted_numbers = numbers.clone();
         sorted_numbers.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let median = if sorted_numbers.len() % 2 == 0 {
+        let median = if sorted_numbers.len().is_multiple_of(2) {
             let mid = sorted_numbers.len() / 2;
             (sorted_numbers[mid - 1] + sorted_numbers[mid]) / 2.0
         } else {

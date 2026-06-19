@@ -84,19 +84,19 @@ impl DataOperations {
     pub fn value_counts(&self, data: &[Vec<String>], column: usize) -> Vec<Vec<String>> {
         use std::collections::HashMap;
 
-        let mut counts: HashMap<String, usize> = HashMap::new();
+        let mut counts: HashMap<&str, usize> = HashMap::new();
         for row in data.iter().skip(1) {
             if let Some(val) = row.get(column) {
-                *counts.entry(val.clone()).or_insert(0) += 1;
+                *counts.entry(val.as_str()).or_insert(0) += 1;
             }
         }
 
-        let mut result: Vec<(String, usize)> = counts.into_iter().collect();
+        let mut result: Vec<(&str, usize)> = counts.into_iter().collect();
         result.sort_by(|a, b| b.1.cmp(&a.1));
 
         let mut output = vec![vec!["value".to_string(), "count".to_string()]];
         for (val, count) in result {
-            output.push(vec![val, count.to_string()]);
+            output.push(vec![val.to_string(), count.to_string()]);
         }
         output
     }

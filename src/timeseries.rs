@@ -181,7 +181,7 @@ impl TimeSeriesProcessor {
 
         for point in data {
             let key = self.get_interval_key(point.timestamp, interval);
-            groups.entry(key).or_insert_with(Vec::new).push(point.value);
+            groups.entry(key).or_default().push(point.value);
         }
 
         Ok(groups)
@@ -253,7 +253,7 @@ impl TimeSeriesProcessor {
                 let mut sorted = values.to_vec();
                 sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
                 let mid = sorted.len() / 2;
-                if sorted.len() % 2 == 0 {
+                if sorted.len().is_multiple_of(2) {
                     Ok((sorted[mid - 1] + sorted[mid]) / 2.0)
                 } else {
                     Ok(sorted[mid])
@@ -373,7 +373,7 @@ impl TimeSeriesProcessor {
             let month = point.timestamp.month();
             monthly_data
                 .entry(month)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(point.value);
         }
 

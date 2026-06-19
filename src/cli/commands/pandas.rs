@@ -17,7 +17,7 @@ pub struct PandasCommandHandler;
 impl PandasCommandHandler {
     /// Create a new pandas command handler
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// Handle the head command
@@ -531,12 +531,11 @@ impl PandasCommandHandler {
         for i in 0..num_cols {
             let mut is_numeric = true;
             for row in data.iter().skip(1) {
-                if let Some(cell) = row.get(i) {
-                    if !cell.is_empty() && cell.parse::<f64>().is_err() {
+                if let Some(cell) = row.get(i)
+                    && !cell.is_empty() && cell.parse::<f64>().is_err() {
                         is_numeric = false;
                         break;
                     }
-                }
             }
             if is_numeric {
                 numeric_cols.push(i);

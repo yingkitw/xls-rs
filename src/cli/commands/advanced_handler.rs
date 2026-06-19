@@ -12,7 +12,7 @@ pub struct AdvancedCommandHandler;
 impl AdvancedCommandHandler {
     /// Create a new advanced command handler
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// Handle the profile command

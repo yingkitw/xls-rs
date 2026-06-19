@@ -45,15 +45,16 @@ pub fn add_content_types<W: Write + Seek>(
     zip: &mut ZipWriter<W>,
     sheet_count: usize,
 ) -> Result<()> {
-    let no_charts = vec![false; sheet_count];
-    add_content_types_ext(zip, sheet_count, &no_charts)
+    let no_flags = vec![false; sheet_count];
+    add_content_types_ext(zip, sheet_count, &no_flags, &no_flags)
 }
 
-/// Add [Content_Types].xml with optional chart/drawing content types
+/// Add [Content_Types].xml with optional chart/drawing/comment content types
 pub fn add_content_types_ext<W: Write + Seek>(
     zip: &mut ZipWriter<W>,
     sheet_count: usize,
     chart_flags: &[bool],
+    comment_flags: &[bool],
 ) -> Result<()> {
     let mut xml = String::with_capacity(1024);
     xml.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
@@ -72,6 +73,8 @@ pub fn add_content_types_ext<W: Write + Seek>(
 
     // Chart and drawing content types
     add_chart_content_types(&mut xml, sheet_count, chart_flags);
+    // Comments content types
+    add_comment_content_types(&mut xml, comment_flags);
 
     xml.push_str(r#"</Types>"#);
 
@@ -117,6 +120,25 @@ pub fn add_workbook<W: Write + Seek>(
         ));
     }
     xml.push_str(r#"</sheets>"#);
+
+    // Print areas as defined names
+    let print_areas: Vec<(usize, &str)> = sheets
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, s)| s.print_setup.as_ref()?.print_area.as_ref().map(|a| (idx, a.as_str())))
+        .collect();
+    if !print_areas.is_empty() {
+        xml.push_str(r#"<definedNames>"#);
+        for (idx, area) in print_areas {
+            let sheet_name = escape_xml(&sheets[idx].name);
+            xml.push_str(&format!(
+                r#"<definedName name="_xlnm.Print_Area" localSheetId="{}">'{}'!{}</definedName>"#,
+                idx, sheet_name, area
+            ));
+        }
+        xml.push_str(r#"</definedNames>"#);
+    }
+
     xml.push_str(r#"<calcPr calcId="124519" fullCalcOnLoad="1"/>"#);
     xml.push_str(r#"</workbook>"#);
 
@@ -252,9 +274,15 @@ pub fn add_worksheet<W: Write + Seek>(
     let max_row = sheet.rows.len();
     let max_col = sheet.rows.iter().map(|r| r.cells.len()).max().unwrap_or(0);
 
-    let mut xml = String::with_capacity(max_row * max_col * 40 + 512);
+    let needs_r_namespace = has_chart || !sheet.hyperlinks.is_empty() || !sheet.comments.is_empty();
+
+    let mut xml = String::with_capacity(max_row * max_col * 40 + 1024);
     xml.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
-    xml.push_str(r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#);
+    if needs_r_namespace {
+        xml.push_str(r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">"#);
+    } else {
+        xml.push_str(r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#);
+    }
 
     // Sheet properties
     xml.push_str(r#"<sheetPr><outlinePr summaryBelow="1" summaryRight="1"/><pageSetUpPr/></sheetPr>"#);
@@ -323,7 +351,7 @@ pub fn add_worksheet<W: Write + Seek>(
                     ));
                 }
                 CellData::Formula(f) => {
-                    let formula = if f.starts_with('=') { &f[1..] } else { f };
+                    let formula = f.strip_prefix('=').unwrap_or(f);
                     xml.push_str(&format!(
                         r#"<c r="{}"><f>{}</f></c>"#,
                         cell_ref,
@@ -353,8 +381,58 @@ pub fn add_worksheet<W: Write + Seek>(
         xml.push_str(&cf_xml);
     }
 
-    // Page margins (required by Excel/Numbers)
-    xml.push_str(r#"<pageMargins left="0.75" right="0.75" top="1" bottom="1" header="0.5" footer="0.5"/>"#);
+    // Merge cells
+    if !sheet.merge_cells.is_empty() {
+        xml.push_str(&format!(
+            r#"<mergeCells count="{}">"#,
+            sheet.merge_cells.len()
+        ));
+        for mc in &sheet.merge_cells {
+            let start_ref = format!("{}{}", col_num_to_letter(mc.start_col + 1), mc.start_row + 1);
+            let end_ref = format!("{}{}", col_num_to_letter(mc.end_col + 1), mc.end_row + 1);
+            xml.push_str(&format!(r#"<mergeCell ref="{}:{}"/>"#, start_ref, end_ref));
+        }
+        xml.push_str(r#"</mergeCells>"#);
+    }
+
+    // Data validations
+    if !sheet.data_validations.is_empty() {
+        xml.push_str(&format!(
+            r#"<dataValidations count="{}">"#,
+            sheet.data_validations.len()
+        ));
+        for dv in &sheet.data_validations {
+            xml.push_str(&generate_data_validation_xml(dv));
+        }
+        xml.push_str(r#"</dataValidations>"#);
+    }
+
+    // Hyperlinks
+    if !sheet.hyperlinks.is_empty() {
+        xml.push_str(r#"<hyperlinks>"#);
+        let mut rel_id = if has_chart { 2 } else { 1 };
+        for hl in &sheet.hyperlinks {
+            let tooltip_attr = hl.tooltip.as_ref().map(|t| format!(r#" tooltip="{}""#, escape_xml(t))).unwrap_or_default();
+            xml.push_str(&format!(
+                r#"<hyperlink ref="{}" r:id="rId{}"{}/>"#,
+                hl.cell_ref, rel_id, tooltip_attr
+            ));
+            rel_id += 1;
+        }
+        xml.push_str(r#"</hyperlinks>"#);
+    }
+
+    // Page margins (use PrintSetup if provided, else defaults)
+    let margins = sheet.print_setup.as_ref().and_then(|ps| ps.margins).unwrap_or_default();
+    xml.push_str(&format!(
+        r#"<pageMargins left="{}" right="{}" top="{}" bottom="{}" header="{}" footer="{}"/>"#,
+        margins.left, margins.right, margins.top, margins.bottom, margins.header, margins.footer
+    ));
+
+    // Page setup
+    if let Some(ref ps) = sheet.print_setup {
+        xml.push_str(&generate_page_setup_xml(ps));
+    }
 
     // Drawing reference (for charts)
     if has_chart {
@@ -370,20 +448,21 @@ pub fn add_worksheet<W: Write + Seek>(
 
     xml.push_str(r#"</worksheet>"#);
 
-    // If we have a drawing reference, we need the r: namespace
-    if has_chart {
-        // Replace the worksheet opening tag to include the r: namespace
-        xml = xml.replacen(
-            r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#,
-            r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">"#,
-            1,
-        );
-    }
-
     let opts = FileOptions::<()>::default()
         .compression_method(zip::CompressionMethod::Deflated);
     zip.start_file(&format!("xl/worksheets/sheet{}.xml", idx + 1), opts)?;
     zip.write_all(xml.as_bytes())?;
+
+    // Worksheet rels (hyperlinks, comments, charts)
+    if needs_r_namespace {
+        add_worksheet_rels(zip, idx, has_chart, &sheet.hyperlinks, &sheet.comments)?;
+    }
+
+    // Comments XML
+    if !sheet.comments.is_empty() {
+        add_comments_xml(zip, idx, &sheet.comments)?;
+    }
+
     Ok(())
 }
 
@@ -402,4 +481,207 @@ pub fn add_chart_content_types(xml: &mut String, _sheet_count: usize, charts: &[
             ));
         }
     }
+}
+
+/// Add content types for comments
+pub fn add_comment_content_types(xml: &mut String, comment_flags: &[bool]) {
+    for (idx, has_comments) in comment_flags.iter().enumerate() {
+        if *has_comments {
+            let n = idx + 1;
+            xml.push_str(&format!(
+                r#"<Override PartName="/xl/comments{}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/>"#,
+                n
+            ));
+        }
+    }
+}
+
+fn generate_data_validation_xml(dv: &super::types::DataValidation) -> String {
+    use super::types::{Operator, ValidationType};
+
+    let type_str = match &dv.validation_type {
+        ValidationType::List { .. } => "list",
+        ValidationType::Whole { .. } => "whole",
+        ValidationType::Decimal { .. } => "decimal",
+        ValidationType::Date { .. } => "date",
+        ValidationType::TextLength { .. } => "textLength",
+        ValidationType::Custom { .. } => "custom",
+    };
+
+    let operator_str = match &dv.validation_type {
+        ValidationType::List { .. } => None,
+        ValidationType::Custom { .. } => None,
+        ValidationType::Whole { operator, .. }
+        | ValidationType::Decimal { operator, .. }
+        | ValidationType::Date { operator, .. }
+        | ValidationType::TextLength { operator, .. } => Some(operator_to_str(*operator)),
+    };
+
+    let allow_blank = if dv.allow_blank { "1" } else { "0" };
+    let show_dropdown = if dv.show_dropdown { "0" } else { "1" };
+
+    let mut xml = format!(
+        r#"<dataValidation type="{}" allowBlank="{}" showDropDown="{}" sqref="{}""#,
+        type_str, allow_blank, show_dropdown, dv.range
+    );
+
+    if let Some(op) = operator_str {
+        xml.push_str(&format!(r#" operator="{}""#, op));
+    }
+
+    xml.push_str(">");
+
+    match &dv.validation_type {
+        ValidationType::List { source } => {
+            xml.push_str(&format!(r#"<formula1>"{}"</formula1>"#, escape_xml(source)));
+        }
+        ValidationType::Whole { formula1, formula2, .. }
+        | ValidationType::Decimal { formula1, formula2, .. }
+        | ValidationType::Date { formula1, formula2, .. } => {
+            xml.push_str(&format!(r#"<formula1>{}</formula1>"#, escape_xml(formula1)));
+            if let Some(f2) = formula2 {
+                xml.push_str(&format!(r#"<formula2>{}</formula2>"#, escape_xml(f2)));
+            }
+        }
+        ValidationType::TextLength { formula1, .. } => {
+            xml.push_str(&format!(r#"<formula1>{}</formula1>"#, escape_xml(formula1)));
+        }
+        ValidationType::Custom { formula } => {
+            xml.push_str(&format!(r#"<formula1>{}</formula1>"#, escape_xml(formula)));
+        }
+    }
+
+    xml.push_str(r#"</dataValidation>"#);
+    xml
+}
+
+fn operator_to_str(op: super::types::Operator) -> &'static str {
+    use super::types::Operator;
+    match op {
+        Operator::Between => "between",
+        Operator::NotBetween => "notBetween",
+        Operator::Equal => "equal",
+        Operator::NotEqual => "notEqual",
+        Operator::GreaterThan => "greaterThan",
+        Operator::LessThan => "lessThan",
+        Operator::GreaterThanOrEqual => "greaterThanOrEqual",
+        Operator::LessThanOrEqual => "lessThanOrEqual",
+    }
+}
+
+fn generate_page_setup_xml(ps: &super::types::PrintSetup) -> String {
+    use super::types::PageOrientation;
+    let mut attrs = String::new();
+    if let Some(orientation) = ps.orientation {
+        attrs.push_str(&format!(
+            r#" orientation="{}""#,
+            match orientation {
+                PageOrientation::Portrait => "portrait",
+                PageOrientation::Landscape => "landscape",
+            }
+        ));
+    }
+    if let Some(paper_size) = ps.paper_size {
+        attrs.push_str(&format!(r#" paperSize="{}""#, paper_size));
+    }
+    if let Some(scale) = ps.scale {
+        attrs.push_str(&format!(r#" scale="{}""#, scale));
+    }
+    if let Some(fit_to_width) = ps.fit_to_width {
+        attrs.push_str(&format!(r#" fitToWidth="{}""#, fit_to_width));
+    }
+    if let Some(fit_to_height) = ps.fit_to_height {
+        attrs.push_str(&format!(r#" fitToHeight="{}""#, fit_to_height));
+    }
+    format!(r#"<pageSetup{} />"#, attrs)
+}
+
+fn add_worksheet_rels<W: Write + Seek>(
+    zip: &mut ZipWriter<W>,
+    idx: usize,
+    has_chart: bool,
+    hyperlinks: &[super::types::Hyperlink],
+    comments: &[super::types::CellComment],
+) -> Result<()> {
+    let sheet_idx = idx + 1;
+    let mut xml = String::with_capacity(512);
+    xml.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
+    xml.push_str(r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#);
+
+    let mut rel_id = 1;
+
+    if has_chart {
+        xml.push_str(&format!(
+            r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing{}.xml"/>"#,
+            rel_id, sheet_idx
+        ));
+        rel_id += 1;
+    }
+
+    for hl in hyperlinks {
+        xml.push_str(&format!(
+            r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="{}" TargetMode="External"/>"#,
+            rel_id, escape_xml(&hl.url)
+        ));
+        rel_id += 1;
+    }
+
+    if !comments.is_empty() {
+        xml.push_str(&format!(
+            r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments{}.xml"/>"#,
+            rel_id, sheet_idx
+        ));
+    }
+
+    xml.push_str(r#"</Relationships>"#);
+
+    let opts = FileOptions::<()>::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file(
+        &format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_idx),
+        opts,
+    )?;
+    zip.write_all(xml.as_bytes())?;
+    Ok(())
+}
+
+fn add_comments_xml<W: Write + Seek>(
+    zip: &mut ZipWriter<W>,
+    idx: usize,
+    comments: &[super::types::CellComment],
+) -> Result<()> {
+    let sheet_idx = idx + 1;
+    let mut xml = String::with_capacity(512);
+    xml.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
+    xml.push_str(r#"<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#);
+
+    xml.push_str(r#"<authors>"#);
+    for comment in comments {
+        let author = comment.author.as_deref().unwrap_or("Author");
+        xml.push_str(&format!(r#"<author>{}</author>"#, escape_xml(author)));
+    }
+    xml.push_str(r#"</authors>"#);
+
+    xml.push_str(r#"<commentList>"#);
+    for (i, comment) in comments.iter().enumerate() {
+        xml.push_str(&format!(
+            r#"<comment ref="{}" authorId="{}">"#,
+            comment.cell_ref, i
+        ));
+        xml.push_str(r#"<text>"#);
+        xml.push_str(&format!(
+            r#"<r><rPr><b/><sz val="9"/><color indexed="81"/><rFont val="Calibri"/></rPr><t>{}</t></r>"#,
+            escape_xml(&comment.text)
+        ));
+        xml.push_str(r#"</text>"#);
+        xml.push_str(r#"</comment>"#);
+    }
+    xml.push_str(r#"</commentList>"#);
+    xml.push_str(r#"</comments>"#);
+
+    let opts = FileOptions::<()>::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file(&format!("xl/comments{}.xml", sheet_idx), opts)?;
+    zip.write_all(xml.as_bytes())?;
+    Ok(())
 }

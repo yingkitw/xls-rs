@@ -37,11 +37,10 @@ pub fn debug(msg: impl AsRef<str>) {
 /// Load config honoring `--config` when set, otherwise default discovery.
 pub fn load_cli_config() -> Result<Config> {
     let r = get();
-    if let Some(ref p) = r.config_path {
-        if p.exists() {
+    if let Some(ref p) = r.config_path
+        && p.exists() {
             return Config::load_from(&p.to_string_lossy());
         }
-    }
     Config::load()
 }
 
@@ -60,13 +59,10 @@ pub fn ensure_can_write(path: &str) -> anyhow::Result<()> {
     let normalized = Path::new(path);
     if let Some(parent) = normalized.parent() {
         for component in parent.components() {
-            match component {
-                std::path::Component::ParentDir => {
-                    anyhow::bail!(
-                        "Invalid output path: directory traversal (..) not allowed for security reasons"
-                    );
-                }
-                _ => {}
+            if component == std::path::Component::ParentDir {
+                anyhow::bail!(
+                    "Invalid output path: directory traversal (..) not allowed for security reasons"
+                );
             }
         }
     }
@@ -93,13 +89,10 @@ pub fn ensure_safe_input(path: &str) -> anyhow::Result<()> {
     // Block directory traversal attempts
     let normalized = Path::new(path);
     for component in normalized.components() {
-        match component {
-            std::path::Component::ParentDir => {
-                anyhow::bail!(
-                    "Invalid input path: directory traversal (..) not allowed for security reasons"
-                );
-            }
-            _ => {}
+        if component == std::path::Component::ParentDir {
+            anyhow::bail!(
+                "Invalid input path: directory traversal (..) not allowed for security reasons"
+            );
         }
     }
 

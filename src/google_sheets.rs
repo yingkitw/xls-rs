@@ -66,8 +66,8 @@ impl GoogleSheetsHandler {
     /// Parse sheet name from path
     pub fn parse_sheet_name(&self, path: &str) -> Option<String> {
         // Extract from gsheets://id/sheet_name
-        if path.starts_with("gsheet://") {
-            let parts: Vec<&str> = path[9..].split('/').collect();
+        if let Some(rest) = path.strip_prefix("gsheet://") {
+            let parts: Vec<&str> = rest.split('/').collect();
             if parts.len() > 1 {
                 return Some(parts[1].to_string());
             }

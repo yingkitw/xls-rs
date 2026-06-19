@@ -82,7 +82,7 @@ impl DataOperations {
     /// Add computed column using formula
     pub fn mutate(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         new_col_name: &str,
         formula: &str,
     ) -> Result<()> {
@@ -223,33 +223,47 @@ impl DataOperations {
     /// Sort by multiple columns
     pub fn sort_by_columns(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         columns: &[(usize, SortOrder)],
     ) -> Result<()> {
         if data.len() <= 1 || columns.is_empty() {
             return Ok(());
         }
 
-        let header = data.remove(0);
+        let body = &mut data[1..];
+        if body.len() <= 1 {
+            return Ok(());
+        }
 
-        // Use parallel sort for better performance on large datasets
-        data.par_sort_by(|a, b| {
-            for (col, order) in columns {
-                let val_a = a.get(*col).map(|s| s.as_str()).unwrap_or("");
-                let val_b = b.get(*col).map(|s| s.as_str()).unwrap_or("");
+        // Pre-compute sort keys for all rows and columns to avoid O(n log n) * cols reparses.
+        let keys: Vec<Vec<(Option<f64>, &str)>> = body
+            .iter()
+            .map(|row| {
+                columns
+                    .iter()
+                    .map(|(col, _)| {
+                        let val = row.get(*col).map(|s| s.as_str()).unwrap_or("");
+                        (val.parse::<f64>().ok(), val)
+                    })
+                    .collect()
+            })
+            .collect();
 
-                let cmp = match (val_a.parse::<f64>(), val_b.parse::<f64>()) {
-                    (Ok(num_a), Ok(num_b)) => num_a
-                        .partial_cmp(&num_b)
-                        .unwrap_or(std::cmp::Ordering::Equal),
-                    _ => val_a.cmp(val_b),
+        let mut indices: Vec<usize> = (0..body.len()).collect();
+        indices.par_sort_by(|&i, &j| {
+            for (col_idx, (_, order)) in columns.iter().enumerate() {
+                let cmp = match (&keys[i][col_idx].0, &keys[j][col_idx].0) {
+                    (Some(a), Some(b)) => {
+                        a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                    }
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => keys[i][col_idx].1.cmp(keys[j][col_idx].1),
                 };
-
                 let cmp = match order {
                     SortOrder::Ascending => cmp,
                     SortOrder::Descending => cmp.reverse(),
                 };
-
                 if cmp != std::cmp::Ordering::Equal {
                     return cmp;
                 }
@@ -257,7 +271,14 @@ impl DataOperations {
             std::cmp::Ordering::Equal
         });
 
-        data.insert(0, header);
+        let mut reordered = Vec::with_capacity(body.len());
+        for &i in &indices {
+            reordered.push(std::mem::take(&mut body[i]));
+        }
+        for (i, row) in reordered.into_iter().enumerate() {
+            body[i] = row;
+        }
+
         Ok(())
     }
 

@@ -61,10 +61,11 @@ pub use error_traits::{
     ToTraitBasedError, TraitBasedError, UserFriendlyError,
 };
 pub use excel::{
-    add_cell_to_row, add_cells_to_row, classify_cell, CellData, CellStyle, ChartConfig,
-    ConditionalFormat, ConditionalRule, DataChartType, ExcelHandler, FeatureDetector,
-    FeatureSeverity, RowData, Sparkline, SparklineGroup, SparklineType, StreamingXlsxWriter,
-    UnsupportedFeature, WriteMode, WriteOptions, XlsxWriter,
+    add_cell_to_row, add_cells_to_row, classify_cell, CellComment, CellData, CellStyle,
+    ChartConfig, ConditionalFormat, ConditionalRule, DataChartType, DataValidation,
+    ExcelHandler, FeatureDetector, FeatureSeverity, Hyperlink, MergeCell, PageMargins,
+    PageOrientation, PrintSetup, RowData, Sparkline, SparklineGroup, SparklineType,
+    StreamingXlsxWriter, UnsupportedFeature, ValidationType, WriteMode, WriteOptions, XlsxWriter,
 };
 pub use format_detector::DefaultFormatDetector;
 pub use formula::{FormulaEvaluator, FormulaResult};

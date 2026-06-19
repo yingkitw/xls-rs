@@ -33,12 +33,14 @@ pub mod cond_fmt_xml;
 pub mod sparkline_xml;
 pub mod streaming;
 
-pub use types::{CellData, RowData};
+pub use types::{
+    CellComment, CellData, DataValidation, Hyperlink, MergeCell, PageMargins, PageOrientation,
+    PrintSetup, RowData, SheetData, ValidationType,
+};
 pub use cond_fmt_xml::{ConditionalFormat, ConditionalRule};
 pub use sparkline_xml::{Sparkline, SparklineGroup, SparklineType};
 
 use super::types::WriteOptions;
-use types::SheetData;
 use xml_gen::*;
 
 use super::chart::{ChartConfig};
@@ -96,6 +98,11 @@ impl XlsxWriter {
             column_widths: Vec::new(),
             conditional_formats: Vec::new(),
             sparkline_groups: Vec::new(),
+            merge_cells: Vec::new(),
+            data_validations: Vec::new(),
+            hyperlinks: Vec::new(),
+            print_setup: None,
+            comments: Vec::new(),
         });
         Ok(())
     }
@@ -111,6 +118,54 @@ impl XlsxWriter {
     pub fn add_sparkline_group(&mut self, group: SparklineGroup) {
         if let Some(sheet) = self.sheets.last_mut() {
             sheet.sparkline_groups.push(group);
+        }
+    }
+
+    /// Add a merged cell range to the current sheet (0-based, inclusive)
+    pub fn add_merge_cell(&mut self, start_row: usize, start_col: usize, end_row: usize, end_col: usize) {
+        if let Some(sheet) = self.sheets.last_mut() {
+            sheet.merge_cells.push(MergeCell {
+                start_row,
+                start_col,
+                end_row,
+                end_col,
+            });
+        }
+    }
+
+    /// Add a data validation rule to the current sheet
+    pub fn add_data_validation(&mut self, validation: DataValidation) {
+        if let Some(sheet) = self.sheets.last_mut() {
+            sheet.data_validations.push(validation);
+        }
+    }
+
+    /// Add a hyperlink to the current sheet
+    pub fn add_hyperlink(&mut self, cell_ref: &str, url: &str, tooltip: Option<&str>) {
+        if let Some(sheet) = self.sheets.last_mut() {
+            sheet.hyperlinks.push(Hyperlink {
+                cell_ref: cell_ref.to_string(),
+                url: url.to_string(),
+                tooltip: tooltip.map(|s| s.to_string()),
+            });
+        }
+    }
+
+    /// Set print setup for the current sheet
+    pub fn set_print_setup(&mut self, setup: PrintSetup) {
+        if let Some(sheet) = self.sheets.last_mut() {
+            sheet.print_setup = Some(setup);
+        }
+    }
+
+    /// Add a cell comment to the current sheet
+    pub fn add_comment(&mut self, cell_ref: &str, text: &str, author: Option<&str>) {
+        if let Some(sheet) = self.sheets.last_mut() {
+            sheet.comments.push(CellComment {
+                cell_ref: cell_ref.to_string(),
+                text: text.to_string(),
+                author: author.map(|s| s.to_string()),
+            });
         }
     }
 
@@ -151,14 +206,21 @@ impl XlsxWriter {
     pub fn save<W: Write + Seek>(&self, mut writer: W) -> Result<()> {
         let mut zip = ZipWriter::new(&mut writer);
 
-        // Determine which sheets have charts
+        // Determine which sheets have charts or comments
         let chart_flags: Vec<bool> = (0..self.sheets.len())
             .map(|i| self.chart_configs.get(i).and_then(|c| c.as_ref()).is_some())
             .collect();
-        let _has_any_chart = chart_flags.iter().any(|&f| f);
+        let comment_flags: Vec<bool> = (0..self.sheets.len())
+            .map(|i| {
+                self.sheets
+                    .get(i)
+                    .map(|s| !s.comments.is_empty())
+                    .unwrap_or(false)
+            })
+            .collect();
 
-        // Add [Content_Types].xml (with chart content types if needed)
-        add_content_types_ext(&mut zip, self.sheets.len(), &chart_flags)?;
+        // Add [Content_Types].xml (with chart/comment content types if needed)
+        add_content_types_ext(&mut zip, self.sheets.len(), &chart_flags, &comment_flags)?;
 
         // Add _rels/.rels
         add_rels(&mut zip)?;
@@ -557,5 +619,123 @@ mod tests {
         assert!(matches!(writer.sheets[0].rows[0].cells[0], CellData::String(_)));
         assert!(matches!(writer.sheets[0].rows[0].cells[1], CellData::Empty));
         assert!(matches!(writer.sheets[0].rows[0].cells[2], CellData::String(_)));
+    }
+
+    #[test]
+    fn test_save_workbook_with_merge_cells() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("Merged").unwrap();
+
+        let mut row = RowData::new();
+        row.add_string("A");
+        row.add_string("B");
+        writer.add_row(row);
+        writer.add_merge_cell(0, 0, 0, 1);
+
+        let mut buffer = Cursor::new(Vec::new());
+        assert!(writer.save(&mut buffer).is_ok());
+
+        let output = buffer.into_inner();
+        assert!(output.len() > 0);
+        assert_eq!(&output[0..4], b"PK\x03\x04");
+        assert_eq!(writer.sheets[0].merge_cells.len(), 1);
+    }
+
+    #[test]
+    fn test_save_workbook_with_data_validation() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("Validated").unwrap();
+
+        let mut row = RowData::new();
+        row.add_string("Status");
+        writer.add_row(row);
+
+        writer.add_data_validation(DataValidation {
+            range: "A2:A10".to_string(),
+            validation_type: ValidationType::List {
+                source: "Yes,No,Maybe".to_string(),
+            },
+            allow_blank: true,
+            show_dropdown: true,
+            error_title: None,
+            error_message: None,
+        });
+
+        let mut buffer = Cursor::new(Vec::new());
+        assert!(writer.save(&mut buffer).is_ok());
+
+        let output = buffer.into_inner();
+        assert!(output.len() > 0);
+        assert_eq!(&output[0..4], b"PK\x03\x04");
+    }
+
+    #[test]
+    fn test_save_workbook_with_hyperlink() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("Links").unwrap();
+
+        let mut row = RowData::new();
+        row.add_string("Click me");
+        writer.add_row(row);
+        writer.add_hyperlink("A1", "https://example.com", Some("Example"));
+
+        let mut buffer = Cursor::new(Vec::new());
+        assert!(writer.save(&mut buffer).is_ok());
+
+        let output = buffer.into_inner();
+        assert!(output.len() > 0);
+        assert_eq!(&output[0..4], b"PK\x03\x04");
+    }
+
+    #[test]
+    fn test_save_workbook_with_print_setup() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("Print").unwrap();
+
+        let mut row = RowData::new();
+        row.add_string("Data");
+        writer.add_row(row);
+
+        writer.set_print_setup(PrintSetup {
+            orientation: Some(PageOrientation::Landscape),
+            paper_size: Some(9),
+            scale: Some(85),
+            fit_to_width: None,
+            fit_to_height: None,
+            print_area: Some("$A$1:$B$10".to_string()),
+            margins: Some(PageMargins {
+                left: 0.5,
+                right: 0.5,
+                top: 0.75,
+                bottom: 0.75,
+                header: 0.3,
+                footer: 0.3,
+            }),
+        });
+
+        let mut buffer = Cursor::new(Vec::new());
+        assert!(writer.save(&mut buffer).is_ok());
+
+        let output = buffer.into_inner();
+        assert!(output.len() > 0);
+        assert_eq!(&output[0..4], b"PK\x03\x04");
+    }
+
+    #[test]
+    fn test_save_workbook_with_comments() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("Comments").unwrap();
+
+        let mut row = RowData::new();
+        row.add_string("Item");
+        writer.add_row(row);
+        writer.add_comment("A1", "This is a comment", Some("Author"));
+
+        let mut buffer = Cursor::new(Vec::new());
+        assert!(writer.save(&mut buffer).is_ok());
+
+        let output = buffer.into_inner();
+        assert!(output.len() > 0);
+        assert_eq!(&output[0..4], b"PK\x03\x04");
     }
 }

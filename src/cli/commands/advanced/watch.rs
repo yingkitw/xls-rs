@@ -28,11 +28,10 @@ pub fn handle_watch(input: String, command: String) -> Result<()> {
 
         let (tx, rx) = std::sync::mpsc::channel();
         let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-            if let Ok(event) = res {
-                if matches!(event.kind, notify::EventKind::Modify(_)) {
+            if let Ok(event) = res
+                && matches!(event.kind, notify::EventKind::Modify(_)) {
                     let _ = tx.send(());
                 }
-            }
         })
         .context("Failed to create file watcher")?;
 
@@ -77,10 +76,9 @@ fn run_command(cmd: &str, input: &str) -> Result<()> {
         .status()
         .context("Failed to run command")?;
 
-    if !status.success() {
-        if let Some(code) = status.code() {
+    if !status.success()
+        && let Some(code) = status.code() {
             std::process::exit(code);
         }
-    }
     Ok(())
 }

@@ -401,20 +401,8 @@ pub fn add_chart_to_zip<W: Write + Seek>(
     zip.start_file(format!("xl/drawings/_rels/drawing{}.xml.rels", chart_idx), opts)?;
     zip.write_all(drawing_rels.as_bytes())?;
 
-    // 4. xl/worksheets/_rels/sheet{n}.xml.rels
-    let sheet_rels = format!(
-        concat!(
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
-            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
-            r#"<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing{}.xml"/>"#,
-            r#"</Relationships>"#,
-        ),
-        chart_idx
-    );
-    let opts = FileOptions::<()>::default()
-        .compression_method(zip::CompressionMethod::Deflated);
-    zip.start_file(format!("xl/worksheets/_rels/sheet{}.xml.rels", chart_idx), opts)?;
-    zip.write_all(sheet_rels.as_bytes())?;
+    // Worksheet rels are now created centrally in xml_gen.rs add_worksheet_rels
+    // to coordinate drawing, hyperlink, and comment relationships.
 
     Ok(())
 }

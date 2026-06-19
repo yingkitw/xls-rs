@@ -77,23 +77,12 @@ pub struct ValidationStats {
 }
 
 /// Validation configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ValidationConfig {
     pub rules: HashMap<String, Vec<ValidationRule>>,
     pub strict_mode: bool,
     pub stop_on_first_error: bool,
     pub max_errors: Option<usize>,
-}
-
-impl Default for ValidationConfig {
-    fn default() -> Self {
-        Self {
-            rules: HashMap::new(),
-            strict_mode: false,
-            stop_on_first_error: false,
-            max_errors: None,
-        }
-    }
 }
 
 /// Data validator

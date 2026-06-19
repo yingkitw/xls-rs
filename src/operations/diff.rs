@@ -63,7 +63,7 @@ pub fn diff(
 }
 
 fn row_key(row: &[String], col: usize) -> String {
-    row.get(col).map(|s| s.as_str()).unwrap_or("").to_string()
+    row.get(col).cloned().unwrap_or_default()
 }
 
 fn rows_equal(a: &[String], b: &[String]) -> bool {

@@ -9,20 +9,15 @@ use super::xlsx_writer::{CellData, RowData, XlsxWriter};
 use crate::traits::{DataWriteOptions, DataWriter};
 
 /// Write mode for range operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WriteMode {
     /// Expand sheet bounds as needed
+    #[default]
     Expand,
     /// Preserve existing cells outside the range
     Preserve,
     /// Overwrite all cells with new data
     Overwrite,
-}
-
-impl Default for WriteMode {
-    fn default() -> Self {
-        Self::Expand
-    }
 }
 
 impl ExcelHandler {
@@ -98,7 +93,7 @@ impl ExcelHandler {
         let sheet_name = options.sheet_name.as_deref().unwrap_or("Sheet1");
         writer.add_sheet(sheet_name)?;
 
-        for (_row_idx, row) in data.iter().enumerate() {
+        for row in data.iter() {
             let mut row_data = RowData::new();
             for cell in row {
                 super::add_cell_to_row(&mut row_data, cell);
@@ -361,7 +356,7 @@ impl DataWriter for ExcelHandler {
         writer.add_data(data);
 
         // Auto-fit columns
-        for col_idx in 0..data.get(0).map(|r| r.len()).unwrap_or(0) {
+        for col_idx in 0..data.first().map(|r| r.len()).unwrap_or(0) {
             let max_width = data
                 .iter()
                 .map(|row| {

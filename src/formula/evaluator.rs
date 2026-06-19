@@ -103,10 +103,10 @@ impl FormulaEvaluator {
         for (row_idx, row) in range.rows().enumerate() {
             let mut row_data = RowData::new();
             for (col_idx, cell) in row.iter().enumerate() {
-                if row_idx >= target_range.start_row as usize
-                    && row_idx <= target_range.end_row as usize
-                    && col_idx >= target_range.start_col as usize
-                    && col_idx <= target_range.end_col as usize
+                if row_idx >= target_range.start_row
+                    && row_idx <= target_range.end_row
+                    && col_idx >= target_range.start_col
+                    && col_idx <= target_range.end_col
                 {
                     row_data.add_formula(formula);
                     cells_affected += 1;

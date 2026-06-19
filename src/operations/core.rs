@@ -33,7 +33,7 @@ impl DataOperations {
     /// Sort rows by a specific column (public for backward compatibility)
     pub fn sort_by_column(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         column: usize,
         order: SortOrder,
     ) -> Result<()> {
@@ -50,23 +50,37 @@ impl DataOperations {
             );
         }
 
-        // Use parallel sort for better performance on large datasets
-        data.par_sort_by(|a, b| {
-            let val_a = a.get(column).map(|s| s.as_str()).unwrap_or("");
-            let val_b = b.get(column).map(|s| s.as_str()).unwrap_or("");
+        // Pre-compute sort keys once to avoid O(n log n) f64 reparses during comparison.
+        let keys: Vec<(Option<f64>, &str)> = data
+            .iter()
+            .map(|row| {
+                let val = row.get(column).map(|s| s.as_str()).unwrap_or("");
+                (val.parse::<f64>().ok(), val)
+            })
+            .collect();
 
-            let cmp = match (val_a.parse::<f64>(), val_b.parse::<f64>()) {
-                (Ok(num_a), Ok(num_b)) => num_a
-                    .partial_cmp(&num_b)
-                    .unwrap_or(std::cmp::Ordering::Equal),
-                _ => val_a.cmp(val_b),
+        let mut indices: Vec<usize> = (0..data.len()).collect();
+        indices.par_sort_by(|&i, &j| {
+            let cmp = match (&keys[i].0, &keys[j].0) {
+                (Some(a), Some(b)) => a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => keys[i].1.cmp(keys[j].1),
             };
-
             match order {
                 SortOrder::Ascending => cmp,
                 SortOrder::Descending => cmp.reverse(),
             }
         });
+
+        // Apply the permutation in-place.
+        let mut reordered = Vec::with_capacity(data.len());
+        for &i in &indices {
+            reordered.push(std::mem::take(&mut data[i]));
+        }
+        for (i, row) in reordered.into_iter().enumerate() {
+            data[i] = row;
+        }
 
         Ok(())
     }

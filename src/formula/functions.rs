@@ -388,28 +388,28 @@ impl FormulaEvaluator {
     pub(crate) fn matches_criteria(&self, value: &str, criteria: &str) -> bool {
         let criteria = criteria.trim();
 
-        if criteria.starts_with(">=") {
-            if let (Ok(v), Ok(c)) = (value.parse::<f64>(), criteria[2..].trim().parse::<f64>()) {
+        if let Some(rest) = criteria.strip_prefix(">=") {
+            if let (Ok(v), Ok(c)) = (value.parse::<f64>(), rest.trim().parse::<f64>()) {
                 return v >= c;
             }
-        } else if criteria.starts_with("<=") {
-            if let (Ok(v), Ok(c)) = (value.parse::<f64>(), criteria[2..].trim().parse::<f64>()) {
+        } else if let Some(rest) = criteria.strip_prefix("<=") {
+            if let (Ok(v), Ok(c)) = (value.parse::<f64>(), rest.trim().parse::<f64>()) {
                 return v <= c;
             }
-        } else if criteria.starts_with("<>") || criteria.starts_with("!=") {
-            let c = criteria[2..].trim();
-            return value != c;
-        } else if criteria.starts_with('>') {
-            if let (Ok(v), Ok(c)) = (value.parse::<f64>(), criteria[1..].trim().parse::<f64>()) {
+        } else if let Some(rest) = criteria.strip_prefix("<>") {
+            return value != rest.trim();
+        } else if let Some(rest) = criteria.strip_prefix("!=") {
+            return value != rest.trim();
+        } else if let Some(rest) = criteria.strip_prefix('>') {
+            if let (Ok(v), Ok(c)) = (value.parse::<f64>(), rest.trim().parse::<f64>()) {
                 return v > c;
             }
-        } else if criteria.starts_with('<') {
-            if let (Ok(v), Ok(c)) = (value.parse::<f64>(), criteria[1..].trim().parse::<f64>()) {
+        } else if let Some(rest) = criteria.strip_prefix('<') {
+            if let (Ok(v), Ok(c)) = (value.parse::<f64>(), rest.trim().parse::<f64>()) {
                 return v < c;
             }
-        } else if criteria.starts_with('=') {
-            let c = criteria[1..].trim();
-            return value == c;
+        } else if let Some(rest) = criteria.strip_prefix('=') {
+            return value == rest.trim();
         }
 
         // Exact match

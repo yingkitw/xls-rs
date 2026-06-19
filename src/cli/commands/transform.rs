@@ -16,7 +16,7 @@ pub struct TransformCommandHandler;
 impl TransformCommandHandler {
     /// Create a new transformation command handler
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// Handle the sort command
@@ -114,12 +114,11 @@ impl TransformCommandHandler {
 
             let mut count = 0;
             for row in &mut data {
-                if let Some(cell) = row.get_mut(col_idx) {
-                    if cell.contains(&find) {
+                if let Some(cell) = row.get_mut(col_idx)
+                    && cell.contains(&find) {
                         *cell = cell.replace(&find, &replace);
                         count += 1;
                     }
-                }
             }
             crate::cli::runtime::log(format!(
                 "Replaced {count} occurrences in column '{col_name}'"
@@ -309,12 +308,11 @@ impl TransformCommandHandler {
             for row in &mut data.iter_mut().skip(1) {
                 // Skip header
                 for col_idx in &col_indices {
-                    if let Some(cell) = row.get_mut(*col_idx) {
-                        if cell.is_empty() {
+                    if let Some(cell) = row.get_mut(*col_idx)
+                        && cell.is_empty() {
                             *cell = value.clone();
                             count += 1;
                         }
-                    }
                 }
             }
             crate::cli::runtime::log(format!("Filled {count} cells in specified columns"));
@@ -374,11 +372,10 @@ impl TransformCommandHandler {
         }
 
         // Add header if new column
-        if let Some(header) = data.first_mut() {
-            if !header.contains(&column) {
+        if let Some(header) = data.first_mut()
+            && !header.contains(&column) {
                 header.push(column.clone());
             }
-        }
 
         // Add values to each row
         for (i, row) in data.iter_mut().enumerate().skip(1) {

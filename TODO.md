@@ -124,6 +124,84 @@
 
 - [x] CLI `export-styled` presets: `default`, `minimal`, `report`, `executive` / `corporate`.
 
+## Competitive capabilities (gaps vs. popular tools)
+
+### Excel fidelity (openpyxl / excelize / SheetJS gaps)
+
+- [ ] **Template-based generation**: Read an existing `.xlsx` as a template, fill data into named ranges / placeholder cells, write back. Common enterprise use case (invoices, reports) that openpyxl and excelize handle natively.
+- [ ] **Read existing styles / images / charts**: Currently we write styles/charts but cannot read them back from existing files. Needed for template workflows and round-trip fidelity.
+- [ ] **`.xlsm` (macro-enabled) read/write**: Preserve VBA macros on copy/edit. openpyxl supports this in "keep_vba" mode; SheetJS preserves `vbaProject.bin`.
+- [ ] **Password-protected Excel**: Support reading `.xlsx` encrypted with a password (msoffcrypto-style). Excelize and openpyxl both support this.
+- [ ] **Excel structured tables**: Read/write `Table` objects (auto-expanding ranges with headers, total rows, banded rows). openpyxl has full `Table` support.
+- [x] **Freeze panes**: Set freeze rows/columns on write (`freeze_header` in `WriteOptions`, generates `<pane ySplit="1" state="frozen"/>`).
+- [x] **Auto-filter**: Write `autoFilter` range so Excel shows dropdown arrows (`auto_filter` in `WriteOptions`).
+- [ ] **Row/column grouping (outline)**: Group/outline rows for collapsible sections. `<outlinePr>` exists but actual row-level grouping not yet implemented.
+- [x] **Hyperlinks**: Write clickable URLs in cells via `<hyperlinks>` + worksheet rels. API: `XlsxWriter::add_hyperlink(cell_ref, url, tooltip)`.
+- [x] **Cell comments**: Write comments via `xl/commentsN.xml` + worksheet rels. No VML drawing indicator yet (comments visible in review pane). API: `XlsxWriter::add_comment(cell_ref, text, author)`.
+- [x] **Data validation / dropdown lists**: Write `dataValidation` rules (list, whole, decimal, date, textLength, custom). API: `XlsxWriter::add_data_validation(DataValidation { range, validation_type, ... })`.
+- [x] **Print setup**: Page margins (customizable), orientation (portrait/landscape), paper size, scale, fit-to-width/height, print area. API: `XlsxWriter::set_print_setup(PrintSetup { ... })`.
+- [x] **Merged cells**: Write merged cell ranges via `<mergeCells>`. API: `XlsxWriter::add_merge_cell(start_row, start_col, end_row, end_col)`.
+- [ ] **Slicers / timelines**: Write Excel UI slicers connected to tables / pivot tables. Excelize advanced feature.
+- [ ] **Pivot charts**: Charts bound to pivot tables (distinct from regular charts). openpyxl.
+
+### Performance & scale (xsv / polars / duckdb gaps)
+
+- [ ] **CSV index (xsv-style)**: Build a lightweight index (row offsets per block) so `head`/`tail`/random access on huge CSVs is O(1) instead of O(n). xsv does this via `xsv index`.
+- [ ] **True streaming XLSX read**: Row-by-row SAX-style parsing without loading entire workbook into memory. Current implementation uses `calamine` which materializes the whole sheet. `xlsx2csv` streams via `quick-xml`.
+- [ ] **Lazy / query-plan evaluation**: Polars-style lazy DataFrames — build an execution graph, optimize (predicate pushdown, projection pushdown), then execute. Would dramatically speed up chained operations.
+- [ ] **SIMD-accelerated numeric ops**: Use `arrow` compute kernels or `simd-json`-style SIMD for parse + aggregate on numeric columns. Polars/duckdb leverage this.
+- [ ] **Memory-mapped CSV reads**: `memmap2` for zero-copy access to large CSVs on disk. xsv / polars use this.
+- [ ] **Parallel Excel reading**: Multi-threaded sheet parsing (one thread per worksheet or chunk). Polars parallelizes Parquet/CSV reads; Excel is harder but feasible per-sheet.
+- [ ] **Incremental Excel append**: Append rows to an existing `.xlsx` without rewriting the entire ZIP archive. Currently we rewrite the whole file. openpyxl supports true append for some operations.
+
+### SQL & query engine (q / duckdb / csvkit gaps)
+
+- [ ] **DuckDB-style SQL on files**: Embed a lightweight SQL engine (or call DuckDB via FFI) to run `SELECT * FROM 'sales.csv' WHERE amount > 100`. `q` tool and `duckdb` CLI are the gold standard here.
+- [ ] **Window functions**: `ROW_NUMBER()`, `RANK()`, `LEAD()`, `LAG()`, `NTILE()` over ordered partitions. Standard SQL / polars / pandas feature.
+- [ ] **CTEs and subqueries**: `WITH` clauses in the existing `query` command. Currently basic WHERE only.
+- [ ] **SQL JOIN across files**: `JOIN` two CSV/Excel files by a key column in SQL. csvsql / duckdb do this.
+- [ ] **Fuzzy join / record linkage**: Approximate string matching joins (e.g., join on "Company Name" with typos). Python `fuzzywuzzy` / `recordlinkage` libraries; no good Rust equivalent yet.
+
+### Format coverage (polars / miller / csvkit gaps)
+
+- [ ] **JSON / JSONLines first-class**: Native read/write with nested flattening/unflattening. `xsv` has `json` subcommand; `mlr` (miller) is excellent here. Currently only partial JSON support.
+- [ ] **YAML read/write**: Read YAML as tabular (with dot-path flattening) and write YAML. `dasel` / `yq` territory.
+- [ ] **TOML read/write**: Read TOML as tabular (flatten sections). `dasel` territory.
+- [ ] **Apache Arrow IPC (Feather)**: `.arrow` / `.ipc` format. Polars / pandas native. Zero-copy interop with Arrow ecosystem.
+- [ ] **Apache ORC**: Hadoop/ORC format. Spark / polars support.
+- [ ] **Delta Lake**: Read/write Delta tables (Delta-rs crate). Polars / duckdb support.
+- [ ] **Iceberg**: Read Apache Iceberg tables. DuckDB / Spark support.
+- [ ] **SQLite read/write**: Read from `.db` / `.sqlite` and write back. `csvsql` / `sqlite-utils` territory.
+- [ ] **PostgreSQL / MySQL connectors**: Direct database read/write. `csvsql` / `pandas.read_sql` territory.
+- [ ] **PDF export**: Convert tabular data to PDF tables. `libreoffice --headless --convert-to pdf` is the workaround; native Rust would be powerful.
+- [ ] **HTML table export**: Rich HTML with CSS styling, sortable columns. pandas `to_html` / `datatables`.
+- [ ] **LaTeX table export**: Academic paper tables. pandas `to_latex`.
+
+### Interactive & UX (visidata / Tad / xsv gaps)
+
+- [ ] **REPL / interactive mode**: Drop into an interactive shell (`xls-rs repl`) where you can chain operations and inspect intermediate results. Like `visidata` or a lightweight `ipython` for spreadsheets.
+- [ ] **TUI data explorer**: Terminal UI with arrow-key navigation, sorting, filtering, column selection. `visidata` / `tad` are the benchmarks.
+- [ ] **Shell completion for dynamic values**: Complete column names, sheet names, file paths from actual files. Currently only static completions.
+- [ ] **Piping ergonomics**: Better stdin/stdout support so `cat data.csv | xls-rs sort --column 2 | xls-rs head -n 5` works seamlessly. Currently many commands require `--input` / `--output`.
+
+### Advanced analytics (pandas / polars / R gaps)
+
+- [ ] **Percentile / quantile**: `describe` should include 25th, 50th, 75th, 90th, 95th, 99th percentiles. pandas `describe(percentiles=[...])`.
+- [ ] **Skewness & kurtosis**: Shape statistics for numeric columns. pandas / R.
+- [ ] **Correlation methods**: Spearman rank, Kendall tau, not just Pearson. pandas / scipy.
+- [ ] **Regression (simple linear)**: `slope`, `intercept`, `r_squared` for two numeric columns. Excel `LINEST` / R `lm()`.
+- [ ] **String distance metrics**: Levenshtein, Jaro-Winkler, Hamming for fuzzy matching. `strsim-rs` crate.
+- [ ] **Outlier methods beyond IQR**: Z-score, modified Z-score, Isolation Forest (even a simple version). sklearn territory.
+- [ ] **Sampling methods**: Stratified sampling, systematic sampling (not just random). pandas / R.
+- [ ] **Reshape (wider / longer)**: `pivot_wider` and `pivot_longer` as first-class tidyverse-style operations. tidyr / dplyr.
+
+### Distribution & deployment
+
+- [ ] **WebAssembly build target**: Compile to WASM for browser-based Excel processing (like SheetJS but in Rust). `wasm-bindgen` target.
+- [ ] **Pre-built binaries via GitHub Actions**: Release builds for macOS (universal), Linux (x86_64, aarch64), Windows. Homebrew formula.
+- [ ] **Docker image**: Official `xls-rs` Docker image for CI pipelines.
+- [ ] **GitHub Action**: `uses: yingkitw/xls-rs-action@v1` for workflows.
+
 ## Hygiene
 
 - [x] Keep `.gitignore` aligned with generated artifacts (`target/`, `*.tmp.csv`, generated `examples/*.{xlsx,xls,parquet,avro}`).
