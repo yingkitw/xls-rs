@@ -2,7 +2,8 @@
 
 use std::sync::Arc;
 use xls_rs::capabilities::{
-    CapabilityRegistry, ConvertCapability, FilterCapability, ReadExcelCapability, SortCapability,
+    CapabilityRegistry, ConvertCapability, FilterCapability, ProfileCapability, ReadExcelCapability,
+    SortCapability, StreamCapability, ValidateCapability,
 };
 use xls_rs::{Converter, DataWriter};
 
@@ -108,4 +109,68 @@ fn registry_read_excel_returns_data_rows_and_columns() {
     let returned = r["data"].as_array().unwrap();
     assert_eq!(returned[0][0], "Name");
     assert_eq!(returned[1][0], "Alice");
+}
+
+#[test]
+fn registry_validate_returns_status_and_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in.csv");
+    std::fs::write(&input, "A,B\n1,2\n3,4\n").unwrap();
+
+    let reg = CapabilityRegistry::new();
+    reg.register(Arc::new(ValidateCapability));
+    let args = serde_json::json!({
+        "input": input.to_string_lossy(),
+        "rules": "auto",
+    });
+    let r = reg.execute("validate", args).unwrap();
+    assert_eq!(r["status"], "passed");
+    assert_eq!(r["total_rows"], 2);
+}
+
+#[test]
+fn registry_profile_returns_quality_score() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in.csv");
+    std::fs::write(&input, "Name,Score\nAlice,95\nBob,87\n").unwrap();
+
+    let reg = CapabilityRegistry::new();
+    reg.register(Arc::new(ProfileCapability));
+    let args = serde_json::json!({
+        "input": input.to_string_lossy(),
+    });
+    let r = reg.execute("profile", args).unwrap();
+    assert_eq!(r["status"], "success");
+    assert_eq!(r["total_rows"], 2);
+    assert_eq!(r["total_columns"], 2);
+    assert!(r["data_quality_score"].as_f64().unwrap() > 0.0);
+    let cols = r["columns"].as_array().unwrap();
+    assert_eq!(cols.len(), 2);
+}
+
+#[test]
+fn registry_stream_copies_csv_in_chunks() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in.csv");
+    let output = dir.path().join("out.csv");
+    std::fs::write(&input, "A,B\n1,a\n2,b\n3,c\n").unwrap();
+
+    let reg = CapabilityRegistry::new();
+    reg.register(Arc::new(StreamCapability));
+    let args = serde_json::json!({
+        "input": input.to_string_lossy(),
+        "output": output.to_string_lossy(),
+        "chunk_size": 2,
+    });
+    let r = reg.execute("stream", args).unwrap();
+    assert_eq!(r["status"], "success");
+    assert_eq!(r["mode"], "streaming");
+    assert_eq!(r["total_rows"], 4);
+
+    let conv = Converter::new();
+    let data = conv
+        .read_any_data(output.to_string_lossy().as_ref(), None)
+        .unwrap();
+    assert_eq!(data[0], vec!["A", "B"]);
+    assert_eq!(data[1], vec!["1", "a"]);
 }

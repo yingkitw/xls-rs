@@ -58,13 +58,7 @@ impl StreamingXlsxWriter {
     pub fn write_row(&mut self, values: &[String]) -> Result<()> {
         let mut row = RowData::new();
         for val in values {
-            if let Ok(num) = val.parse::<f64>() {
-                row.add_number(num);
-            } else if !val.is_empty() {
-                row.add_string(val);
-            } else {
-                row.add_empty();
-            }
+            crate::excel::add_cell_to_row(&mut row, val);
         }
         self.inner.add_row(row);
         self.rows_written += 1;

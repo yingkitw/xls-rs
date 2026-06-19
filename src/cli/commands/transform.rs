@@ -443,6 +443,210 @@ impl TransformCommandHandler {
             .ok_or_else(|| anyhow::anyhow!("Column '{column}' not found"))
     }
 
+    /// Handle the clip command
+    pub fn handle_clip(
+        &self,
+        input: String,
+        output: String,
+        column: String,
+        min: f64,
+        max: f64,
+    ) -> Result<()> {
+        let converter = Converter::new();
+        let mut data = converter.read_any_data(&input, None)?;
+
+        let col_idx = self.find_column_index(&data, &column)?;
+        validation::validate_column_index(&data, col_idx)?;
+
+        let ops = DataOperations::new();
+        let clipped = ops.clip(&mut data, col_idx, Some(min), Some(max))?;
+
+        converter.write_any_data(&output, &data, None)?;
+        crate::cli::runtime::log(format!("Clipped {clipped} cells; wrote {output}"));
+        Ok(())
+    }
+
+    /// Handle the normalize command
+    pub fn handle_normalize(&self, input: String, output: String, column: String) -> Result<()> {
+        let converter = Converter::new();
+        let mut data = converter.read_any_data(&input, None)?;
+
+        let col_idx = self.find_column_index(&data, &column)?;
+        validation::validate_column_index(&data, col_idx)?;
+
+        let ops = DataOperations::new();
+        ops.normalize(&mut data, col_idx)?;
+
+        converter.write_any_data(&output, &data, None)?;
+        crate::cli::runtime::log(format!("Normalized column {column}; wrote {output}"));
+        Ok(())
+    }
+
+    /// Handle the zscore command
+    pub fn handle_zscore(&self, input: String, output: String, column: String) -> Result<()> {
+        let converter = Converter::new();
+        let mut data = converter.read_any_data(&input, None)?;
+
+        let col_idx = self.find_column_index(&data, &column)?;
+        validation::validate_column_index(&data, col_idx)?;
+
+        let ops = DataOperations::new();
+        ops.zscore(&mut data, col_idx)?;
+
+        converter.write_any_data(&output, &data, None)?;
+        crate::cli::runtime::log(format!("Z-score standardized column {column}; wrote {output}"));
+        Ok(())
+    }
+
+    /// Handle the parse-date command
+    pub fn handle_parse_date(
+        &self,
+        input: String,
+        output: String,
+        column: String,
+        from_format: String,
+        to_format: String,
+    ) -> Result<()> {
+        let converter = Converter::new();
+        let mut data = converter.read_any_data(&input, None)?;
+
+        let col_idx = self.find_column_index(&data, &column)?;
+        validation::validate_column_index(&data, col_idx)?;
+
+        let ops = DataOperations::new();
+        let converted = ops.parse_date(&mut data, col_idx, &from_format, &to_format)?;
+
+        converter.write_any_data(&output, &data, None)?;
+        crate::cli::runtime::log(format!("Converted {converted} dates; wrote {output}"));
+        Ok(())
+    }
+
+    /// Handle the regex-filter command
+    pub fn handle_regex_filter(
+        &self,
+        input: String,
+        output: String,
+        column: String,
+        pattern: String,
+    ) -> Result<()> {
+        let converter = Converter::new();
+        let data = converter.read_any_data(&input, None)?;
+
+        let col_idx = self.find_column_index(&data, &column)?;
+        validation::validate_column_index(&data, col_idx)?;
+
+        let ops = DataOperations::new();
+        let filtered = ops.regex_filter(&data, col_idx, &pattern)?;
+
+        converter.write_any_data(&output, &filtered, None)?;
+        crate::cli::runtime::log(format!(
+            "Filtered to {} rows; wrote {}",
+            filtered.len().saturating_sub(1),
+            output
+        ));
+        Ok(())
+    }
+
+    /// Handle the regex-replace command
+    pub fn handle_regex_replace(
+        &self,
+        input: String,
+        output: String,
+        column: String,
+        pattern: String,
+        replacement: String,
+    ) -> Result<()> {
+        let converter = Converter::new();
+        let mut data = converter.read_any_data(&input, None)?;
+
+        let col_idx = self.find_column_index(&data, &column)?;
+        validation::validate_column_index(&data, col_idx)?;
+
+        let ops = DataOperations::new();
+        let replaced = ops.regex_replace(&mut data, col_idx, &pattern, &replacement)?;
+
+        converter.write_any_data(&output, &data, None)?;
+        crate::cli::runtime::log(format!("Replaced {replaced} cells; wrote {output}"));
+        Ok(())
+    }
+
+    /// Handle the diff command
+    pub fn handle_diff(
+        &self,
+        left: String,
+        right: String,
+        key: Option<String>,
+    ) -> Result<()> {
+        let converter = Converter::new();
+        let left_data = converter.read_any_data(&left, None)?;
+        let right_data = converter.read_any_data(&right, None)?;
+
+        let key_col = key.as_ref().and_then(|k| {
+            if left_data.is_empty() {
+                None
+            } else {
+                left_data[0].iter().position(|h| h == k)
+            }
+        });
+
+        let result = xls_rs::operations::diff(&left_data, &right_data, key_col)?;
+
+        println!("Diff: {} left, {} right", left_data.len(), right_data.len());
+        println!("  Removed: {} rows", result.removed.len());
+        println!("  Added:   {} rows", result.added.len());
+        println!("  Changed: {} rows", result.changed.len());
+
+        if !result.removed.is_empty() {
+            println!("\n--- Removed (only in left) ---");
+            for row in result.removed.iter().take(10) {
+                println!("  {}", row.join(", "));
+            }
+            if result.removed.len() > 10 {
+                println!("  ... and {} more", result.removed.len() - 10);
+            }
+        }
+        if !result.added.is_empty() {
+            println!("\n--- Added (only in right) ---");
+            for row in result.added.iter().take(10) {
+                println!("  {}", row.join(", "));
+            }
+            if result.added.len() > 10 {
+                println!("  ... and {} more", result.added.len() - 10);
+            }
+        }
+        if !result.changed.is_empty() {
+            println!("\n--- Changed ---");
+            for c in result.changed.iter().take(5) {
+                println!("  Key {}: {:?} -> {:?}", c.key, c.left, c.right);
+            }
+            if result.changed.len() > 5 {
+                println!("  ... and {} more", result.changed.len() - 5);
+            }
+        }
+        Ok(())
+    }
+
+    /// Handle the histogram command
+    pub fn handle_histogram(
+        &self,
+        input: String,
+        column: String,
+        bins: usize,
+        width: usize,
+    ) -> Result<()> {
+        let converter = Converter::new();
+        let data = converter.read_any_data(&input, None)?;
+
+        let col_idx = self.find_column_index(&data, &column)?;
+        validation::validate_column_index(&data, col_idx)?;
+
+        let histogram_bins = xls_rs::operations::histogram(&data, col_idx, bins)?;
+        let rendered = xls_rs::operations::render_histogram(&histogram_bins, width, true);
+        println!("Histogram for column '{column}':");
+        println!("{rendered}");
+        Ok(())
+    }
+
     /// Simple formula evaluator for mutate command
     fn evaluate_formula(&self, data: &[Vec<String>], formula: &str) -> Result<Vec<String>> {
         // This is a simplified implementation

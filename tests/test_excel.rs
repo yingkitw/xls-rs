@@ -565,3 +565,44 @@ fn test_parse_cell_reference() {
     assert_eq!(row, 9);
     assert_eq!(col, 25);
 }
+
+// ============ Cell Typing Consistency Tests ============
+
+#[test]
+fn test_cell_typing_consistency_across_writers() {
+    let handler = ExcelHandler::new();
+    let data = vec![
+        vec!["Num".to_string(), "Str".to_string(), "Empty".to_string()],
+        vec!["42.5".to_string(), "hello".to_string(), "".to_string()],
+        vec!["0".to_string(), "=SUM(A1)".to_string(), "   ".to_string()],
+    ];
+
+    // Test DataWriter::write (uses XlsxWriter::add_data)
+    let path1 = unique_path("typing_datawriter", "xlsx");
+    handler.write(&path1, &data, Default::default()).unwrap();
+    let content1 = handler.read_with_sheet(&path1, None).unwrap();
+    assert!(content1.contains("42.5"));
+    assert!(content1.contains("hello"));
+
+    // Test write_styled (uses add_cell_to_row directly)
+    let path2 = unique_path("typing_styled", "xlsx");
+    handler
+        .write_styled(&path2, &data, &WriteOptions::default())
+        .unwrap();
+    let content2 = handler.read_with_sheet(&path2, None).unwrap();
+    assert!(content2.contains("42.5"));
+    assert!(content2.contains("hello"));
+
+    // Test write_range_with_mode Expand (uses add_cell_to_row)
+    let path3 = unique_path("typing_range", "xlsx");
+    handler
+        .write_range_with_mode(&path3, &data, 0, 0, None, WriteMode::Expand)
+        .unwrap();
+    let content3 = handler.read_with_sheet(&path3, None).unwrap();
+    assert!(content3.contains("42.5"));
+    assert!(content3.contains("hello"));
+
+    fs::remove_file(&path1).ok();
+    fs::remove_file(&path2).ok();
+    fs::remove_file(&path3).ok();
+}

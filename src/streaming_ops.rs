@@ -4,7 +4,7 @@
 //! rather than loading entire datasets into memory.
 
 use crate::csv_handler::StreamingCsvReader;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::HashMap;
 
 /// Schema information for a dataset
@@ -106,7 +106,7 @@ pub fn head(path: &str, n: usize) -> Result<Vec<Vec<String>>> {
 /// # Returns
 /// Vector of rows (as Vec<String>)
 pub fn tail(path: &str, n: usize) -> Result<Vec<Vec<String>>> {
-    let mut reader = StreamingCsvReader::open(path)?;
+    let reader = StreamingCsvReader::open(path)?;
     let mut buffer: Vec<Vec<String>> = Vec::with_capacity(n);
 
     for row_result in reader {

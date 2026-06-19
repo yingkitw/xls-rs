@@ -395,64 +395,26 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 min,
                 max,
             } => {
-                let converter = xls_rs::converter::Converter::new();
-                let mut data = converter.read_any_data(&input, None)?;
-
-                let col_idx = Self::find_column_index(&data, &column)?;
-                validation::validate_column_index(&data, col_idx)?;
-
                 let min_val: f64 = min
                     .parse()
                     .with_context(|| format!("Invalid min value: {}", min))?;
                 let max_val: f64 = max
                     .parse()
                     .with_context(|| format!("Invalid max value: {}", max))?;
-
-                let ops = xls_rs::operations::DataOperations::new();
-                let clipped = ops.clip(&mut data, col_idx, Some(min_val), Some(max_val))?;
-
-                converter.write_any_data(&output, &data, None)?;
-                println!("Clipped {} cells; wrote {}", clipped, output);
-                Ok(())
+                self.transform.handle_clip(input, output, column, min_val, max_val)
             }
 
             Commands::Normalize {
                 input,
                 output,
                 column,
-            } => {
-                let converter = xls_rs::converter::Converter::new();
-                let mut data = converter.read_any_data(&input, None)?;
-
-                let col_idx = Self::find_column_index(&data, &column)?;
-                validation::validate_column_index(&data, col_idx)?;
-
-                let ops = xls_rs::operations::DataOperations::new();
-                ops.normalize(&mut data, col_idx)?;
-
-                converter.write_any_data(&output, &data, None)?;
-                println!("Normalized column {}; wrote {}", column, output);
-                Ok(())
-            }
+            } => self.transform.handle_normalize(input, output, column),
 
             Commands::Zscore {
                 input,
                 output,
                 column,
-            } => {
-                let converter = xls_rs::converter::Converter::new();
-                let mut data = converter.read_any_data(&input, None)?;
-
-                let col_idx = Self::find_column_index(&data, &column)?;
-                validation::validate_column_index(&data, col_idx)?;
-
-                let ops = xls_rs::operations::DataOperations::new();
-                ops.zscore(&mut data, col_idx)?;
-
-                converter.write_any_data(&output, &data, None)?;
-                println!("Z-score standardized column {}; wrote {}", column, output);
-                Ok(())
-            }
+            } => self.transform.handle_zscore(input, output, column),
 
             Commands::ParseDate {
                 input,
@@ -460,44 +422,14 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 column,
                 from_format,
                 to_format,
-            } => {
-                let converter = xls_rs::converter::Converter::new();
-                let mut data = converter.read_any_data(&input, None)?;
-
-                let col_idx = Self::find_column_index(&data, &column)?;
-                validation::validate_column_index(&data, col_idx)?;
-
-                let ops = xls_rs::operations::DataOperations::new();
-                let converted = ops.parse_date(&mut data, col_idx, &from_format, &to_format)?;
-
-                converter.write_any_data(&output, &data, None)?;
-                println!("Converted {} dates; wrote {}", converted, output);
-                Ok(())
-            }
+            } => self.transform.handle_parse_date(input, output, column, from_format, to_format),
 
             Commands::RegexFilter {
                 input,
                 output,
                 column,
                 pattern,
-            } => {
-                let converter = xls_rs::converter::Converter::new();
-                let data = converter.read_any_data(&input, None)?;
-
-                let col_idx = Self::find_column_index(&data, &column)?;
-                validation::validate_column_index(&data, col_idx)?;
-
-                let ops = xls_rs::operations::DataOperations::new();
-                let filtered = ops.regex_filter(&data, col_idx, &pattern)?;
-
-                converter.write_any_data(&output, &filtered, None)?;
-                println!(
-                    "Filtered to {} rows; wrote {}",
-                    filtered.len().saturating_sub(1),
-                    output
-                );
-                Ok(())
-            }
+            } => self.transform.handle_regex_filter(input, output, column, pattern),
 
             Commands::RegexReplace {
                 input,
@@ -505,69 +437,10 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 column,
                 pattern,
                 replacement,
-            } => {
-                let converter = xls_rs::converter::Converter::new();
-                let mut data = converter.read_any_data(&input, None)?;
-
-                let col_idx = Self::find_column_index(&data, &column)?;
-                validation::validate_column_index(&data, col_idx)?;
-
-                let ops = xls_rs::operations::DataOperations::new();
-                let replaced = ops.regex_replace(&mut data, col_idx, &pattern, &replacement)?;
-
-                converter.write_any_data(&output, &data, None)?;
-                println!("Replaced {} cells; wrote {}", replaced, output);
-                Ok(())
-            }
+            } => self.transform.handle_regex_replace(input, output, column, pattern, replacement),
 
             Commands::Diff { left, right, key } => {
-                let converter = xls_rs::converter::Converter::new();
-                let left_data = converter.read_any_data(&left, None)?;
-                let right_data = converter.read_any_data(&right, None)?;
-
-                let key_col = key.as_ref().and_then(|k| {
-                    if left_data.is_empty() {
-                        None
-                    } else {
-                        left_data[0].iter().position(|h| h == k)
-                    }
-                });
-
-                let result = xls_rs::operations::diff(&left_data, &right_data, key_col)?;
-
-                println!("Diff: {} left, {} right", left_data.len(), right_data.len());
-                println!("  Removed: {} rows", result.removed.len());
-                println!("  Added:   {} rows", result.added.len());
-                println!("  Changed: {} rows", result.changed.len());
-
-                if !result.removed.is_empty() {
-                    println!("\n--- Removed (only in left) ---");
-                    for row in result.removed.iter().take(10) {
-                        println!("  {}", row.join(", "));
-                    }
-                    if result.removed.len() > 10 {
-                        println!("  ... and {} more", result.removed.len() - 10);
-                    }
-                }
-                if !result.added.is_empty() {
-                    println!("\n--- Added (only in right) ---");
-                    for row in result.added.iter().take(10) {
-                        println!("  {}", row.join(", "));
-                    }
-                    if result.added.len() > 10 {
-                        println!("  ... and {} more", result.added.len() - 10);
-                    }
-                }
-                if !result.changed.is_empty() {
-                    println!("\n--- Changed ---");
-                    for c in result.changed.iter().take(5) {
-                        println!("  Key {}: {:?} -> {:?}", c.key, c.left, c.right);
-                    }
-                    if result.changed.len() > 5 {
-                        println!("  ... and {} more", result.changed.len() - 5);
-                    }
-                }
-                Ok(())
+                self.transform.handle_diff(left, right, key)
             }
 
             Commands::Histogram {
@@ -575,38 +448,8 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 column,
                 bins,
                 width,
-            } => {
-                let converter = xls_rs::converter::Converter::new();
-                let data = converter.read_any_data(&input, None)?;
-
-                let col_idx = Self::find_column_index(&data, &column)?;
-                validation::validate_column_index(&data, col_idx)?;
-
-                let histogram_bins = xls_rs::operations::histogram(&data, col_idx, bins)?;
-                let rendered =
-                    xls_rs::operations::render_histogram(&histogram_bins, width, true);
-                println!("Histogram for column '{}':", column);
-                println!("{}", rendered);
-                Ok(())
-            }
+            } => self.transform.handle_histogram(input, column, bins, width),
         }
     }
 }
 
-// Import validation utility
-use xls_rs::common::validation;
-
-impl DefaultCommandHandler {
-    /// Find column index by name (helper method)
-    fn find_column_index(data: &[Vec<String>], column: &str) -> Result<usize> {
-        if data.is_empty() {
-            anyhow::bail!("Data is empty, cannot find column '{}'", column);
-        }
-
-        let header = &data[0];
-        header
-            .iter()
-            .position(|h| h == column)
-            .ok_or_else(|| anyhow::anyhow!("Column '{}' not found", column))
-    }
-}

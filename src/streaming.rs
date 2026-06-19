@@ -149,8 +149,10 @@ pub struct CsvStreamingReader {
 
 impl CsvStreamingReader {
     pub fn new(path: &str) -> Result<Self> {
-        // Create reader on initialization
-        let reader = csv::Reader::from_path(path)
+        // Create reader on initialization (no header skipping for parity with Converter)
+        let reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_path(path)
             .map_err(|e| anyhow::anyhow!("Failed to open CSV: {}", e))?;
 
         Ok(Self {
@@ -165,7 +167,9 @@ impl CsvStreamingReader {
     fn ensure_reader(&mut self) -> Result<&mut csv::Reader<std::fs::File>> {
         if self.reader.is_none() {
             self.reader = Some(
-                csv::Reader::from_path(&self.path)
+                csv::ReaderBuilder::new()
+                    .has_headers(false)
+                    .from_path(&self.path)
                     .map_err(|e| anyhow::anyhow!("Failed to open CSV: {}", e))?,
             );
         }

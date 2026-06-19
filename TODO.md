@@ -7,7 +7,7 @@
 ## Parity work (library ↔ CLI ↔ MCP)
 
 - [x] Define a single “capability catalog” (operations + I/O formats + options) and track parity gaps. (`src/capability_catalog.rs`)
-- [~] Ensure every CLI command maps 1:1 to a library entry point (no hidden behavior in CLI). — Routing and parity notes: `src/capability_catalog.rs` module docs; full subcommand table still optional.
+- [x] Ensure every CLI command maps 1:1 to a library entry point (no hidden behavior in CLI). — All commands now delegate to `IoCommandHandler`, `TransformCommandHandler`, `PandasCommandHandler`, or `AdvancedCommandHandler`.
 - [x] Every MCP tool delegates to `CapabilityRegistry::execute` (same entry points as capabilities; error wrapping in `src/mcp.rs` + `src/mcp_enrichment.rs`).
 - [x] Normalize error surface:
   - [x] Stable error codes/messages for CLI + MCP (same root causes, same wording) (`ErrorKind::code`, `mcp_error_data`)
@@ -30,7 +30,7 @@
     - [x] Excel / ODS: exact sheet name required when specified; missing sheet error lists available names (`ExcelHandler::resolve_sheet_selection`)
 - [~] **Write parity**:
   - [x] XLSX writer: formulas/styles/charts/sparklines/condfmt APIs reachable from CLI + MCP (`write_styled`, `add_chart`, `add_sparkline`, `conditional_format` capabilities + MCP tools)
-  - [ ] Cell typing rules (number/date/string/empty) consistent across writers
+  - [x] Cell typing rules (number/date/string/empty) consistent across writers (`classify_cell` / `add_cell_to_row` used by `XlsxWriter`, `StreamingXlsxWriter`, and `ExcelHandler` write paths)
 - [x] **Edit operations** (in-place style transforms):
   - [x] “apply formula” to a range (not just a single cell)
   - [x] “write range” that can expand sheet bounds safely (`ExcelHandler::write_range_expand`)
@@ -66,17 +66,21 @@
 
 ## MCP server (tooling completeness)
 
-- [~] Tool naming: consistent verbs and nouns (read/write/convert/sort/filter/…).
+- [x] Tool naming: consistent verbs and nouns (read/write/convert/sort/filter/…).
 - [~] Add missing tools for advanced operations (validation/profile/chart/encrypt/batch/stream) if not already exposed.
-  - [x] `convert_data` MCP tool + `ConvertCapability` (registry parity test in `tests/test_mcp_registry.rs`)
+  - [x] `convert_data` MCP tool + `ConvertCapability`
+  - [x] `validate_data` MCP tool + `ValidateCapability`
+  - [x] `profile_data` MCP tool + `ProfileCapability`
+  - [x] `stream_data` MCP tool + `StreamCapability`
+  - [~] chart/encrypt/batch still optional
 - [~] Ensure MCP tools accept the same option schema as CLI flags (sheet, range, format, etc.).
-  - [x] `read_excel` accepts `format` (csv, jsonl, markdown) 
+  - [x] `read_excel` accepts `format` (csv, jsonl, markdown)
 - [x] Add an MCP “capabilities” tool that returns the supported operations + formats at runtime.
 
 ## Performance & large files
 
-- [~] Streaming mode parity (CLI + library + MCP):
-  - [x] chunked reads/writes for big CSV (`CsvStreamingReader` + CLI `stream` command)
+- [x] Streaming mode parity (CLI + library + MCP):
+  - [x] chunked reads/writes for big CSV (`CsvStreamingReader` + CLI `stream` command + MCP `stream_data` tool)
   - [x] avoid loading whole datasets when not needed (head/tail/schema/info) (`streaming_ops`)
 - [x] Add basic benchmarks for key paths (read XLSX, write XLSX, convert to parquet, range read). — `cargo bench -p xls-rs --bench performance` (`benches/performance.rs`, `criterion` in `Cargo.toml`)
 

@@ -131,15 +131,7 @@ impl XlsxWriter {
 
         for row in data {
             let mut row_data = RowData::new();
-            for cell in row {
-                if let Ok(num) = cell.parse::<f64>() {
-                    row_data.add_number(num);
-                } else if !cell.is_empty() {
-                    row_data.add_string(cell);
-                } else {
-                    row_data.add_empty();
-                }
-            }
+            super::add_cells_to_row(&mut row_data, row);
             sheet.rows.push(row_data);
         }
     }

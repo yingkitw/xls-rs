@@ -11,8 +11,8 @@ use std::sync::Arc;
 use crate::capabilities::{
     AddChartCapability, AddSparklineCapability, ApplyFormulaCapability, CapabilityRegistry,
     ConditionalFormatCapability, ConvertCapability, FilterCapability, ListSheetsCapability,
-    ReadAllSheetsCapability, ReadExcelCapability, SortCapability, WorkflowCapability,
-    WriteStyledCapability,
+    ProfileCapability, ReadAllSheetsCapability, ReadExcelCapability, SortCapability,
+    StreamCapability, ValidateCapability, WorkflowCapability, WriteStyledCapability,
 };
 use rmcp::handler::server::tool::ToolRouter;
 use crate::capability_catalog;
@@ -195,6 +195,36 @@ pub struct ApplyFormulaRequest {
     pub sheet: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ValidateRequest {
+    #[schemars(description = "Input file path")]
+    pub input: String,
+    #[schemars(description = "Path to JSON rules file, or 'auto' for default rules")]
+    pub rules: Option<String>,
+    #[schemars(description = "Optional path to save validation result JSON")]
+    pub output: Option<String>,
+    #[schemars(description = "Optional path to save validation report")]
+    pub report: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ProfileRequest {
+    #[schemars(description = "Input file path")]
+    pub input: String,
+    #[schemars(description = "Optional path to save profile JSON")]
+    pub output: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct StreamRequest {
+    #[schemars(description = "Input CSV file path")]
+    pub input: String,
+    #[schemars(description = "Output CSV file path")]
+    pub output: String,
+    #[schemars(description = "Rows per chunk (default: 1000)")]
+    pub chunk_size: Option<usize>,
+}
+
 #[tool_router]
 impl XlsRsMcpServer {
     pub fn new() -> Self {
@@ -205,6 +235,9 @@ impl XlsRsMcpServer {
         registry.register(Arc::new(FilterCapability));
         registry.register(Arc::new(ConvertCapability));
         registry.register(Arc::new(WorkflowCapability::new()));
+        registry.register(Arc::new(ValidateCapability));
+        registry.register(Arc::new(ProfileCapability));
+        registry.register(Arc::new(StreamCapability));
 
         // Register Excel read capabilities
         registry.register(Arc::new(ListSheetsCapability));
@@ -566,6 +599,58 @@ impl XlsRsMcpServer {
         match self.registry.execute("apply_formula", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
             Err(e) => Err(tool_error("Failed to apply formula", e, ctx)),
+        }
+    }
+
+    #[tool(description = "Validate data against a set of rules")]
+    async fn validate_data(
+        &self,
+        request: Parameters<ValidateRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            ..Default::default()
+        };
+        match self.registry.execute("validate", args) {
+            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
+            Err(e) => Err(tool_error("Failed to validate", e, ctx)),
+        }
+    }
+
+    #[tool(description = "Generate a data quality profile for a dataset")]
+    async fn profile_data(
+        &self,
+        request: Parameters<ProfileRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            ..Default::default()
+        };
+        match self.registry.execute("profile", args) {
+            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
+            Err(e) => Err(tool_error("Failed to profile", e, ctx)),
+        }
+    }
+
+    #[tool(description = "Stream-process a large CSV file in chunks")]
+    async fn stream_data(
+        &self,
+        request: Parameters<StreamRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            output: Some(request.0.output.clone()),
+            ..Default::default()
+        };
+        match self.registry.execute("stream", args) {
+            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
+            Err(e) => Err(tool_error("Failed to stream", e, ctx)),
         }
     }
 }

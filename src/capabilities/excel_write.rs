@@ -2,7 +2,6 @@
 
 use crate::capabilities::{Capability, CapabilityMetadata};
 use crate::excel::{ChartConfig, DataChartType, ExcelHandler};
-use crate::traits::DataReader;
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 

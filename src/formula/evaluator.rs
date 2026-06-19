@@ -39,7 +39,7 @@ impl FormulaEvaluator {
             .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
 
         use crate::excel::xlsx_writer::XlsxWriter;
-        use crate::excel::xlsx_writer::{CellData, RowData};
+        use crate::excel::xlsx_writer::RowData;
 
         let mut writer = XlsxWriter::new();
         writer.add_sheet(sheet_name)?;

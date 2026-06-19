@@ -45,13 +45,7 @@ impl ExcelHandler {
             let record = result?;
             let mut row = RowData::new();
             for field in record.iter() {
-                if let Ok(num) = field.parse::<f64>() {
-                    row.add_number(num);
-                } else if !field.is_empty() {
-                    row.add_string(field);
-                } else {
-                    row.add_empty();
-                }
+                super::add_cell_to_row(&mut row, field);
             }
             writer.add_row(row);
         }
@@ -104,21 +98,10 @@ impl ExcelHandler {
         let sheet_name = options.sheet_name.as_deref().unwrap_or("Sheet1");
         writer.add_sheet(sheet_name)?;
 
-        for (row_idx, row) in data.iter().enumerate() {
-            let is_header = row_idx == 0 && options.style_header;
-
+        for (_row_idx, row) in data.iter().enumerate() {
             let mut row_data = RowData::new();
             for cell in row {
-                // Determine cell format
-                let _use_header_style = is_header;
-
-                if let Ok(num) = cell.parse::<f64>() {
-                    row_data.add_number(num);
-                } else if !cell.is_empty() {
-                    row_data.add_string(cell);
-                } else {
-                    row_data.add_empty();
-                }
+                super::add_cell_to_row(&mut row_data, cell);
             }
             writer.add_row(row_data);
         }
@@ -244,13 +227,7 @@ impl ExcelHandler {
             }
 
             for cell in row {
-                if let Ok(num) = cell.parse::<f64>() {
-                    row_data.add_number(num);
-                } else if !cell.is_empty() {
-                    row_data.add_string(cell);
-                } else {
-                    row_data.add_empty();
-                }
+                super::add_cell_to_row(&mut row_data, cell);
             }
             writer.add_row(row_data);
         }
@@ -362,13 +339,7 @@ impl ExcelHandler {
             }
 
             for cell in row {
-                if let Ok(num) = cell.parse::<f64>() {
-                    row_data.add_number(num);
-                } else if !cell.is_empty() {
-                    row_data.add_string(cell);
-                } else {
-                    row_data.add_empty();
-                }
+                super::add_cell_to_row(&mut row_data, cell);
             }
             writer.add_row(row_data);
         }

@@ -24,11 +24,18 @@ Unlike single-purpose libraries, xls-rs provides a **unified surface** across li
 - **Production Safety**: CSV formula-injection sanitization on all write paths; overwrite guards (`--overwrite` required); stable error codes across CLI and MCP
 - **Advanced Excel Features**: Charts, conditional formatting, sparklines, and styling — not just raw cell values
 - **Data Quality Built-in**: Validation rules, profiling, anomaly detection, and data lineage tracking
-- **Pandas-Style Ops**: `head`, `tail`, `describe`, `sort`, `filter`, `dedupe`, `transpose`, `select`, `join`, `concat`
+- **Pandas-Style Ops**: `head`, `tail`, `describe`, `sort`, `filter`, `dedupe`, `transpose`, `select`, `join`, `concat`, `groupby`, `pivot`, `melt`, `rolling`, `crosstab`, `sample`, `clip`, `normalize`, `zscore`, `fillna`, `dropna`, `rename`, `drop`, `mutate`, `astype`, `unique`, `value-counts`, `corr`
 - **Formula Evaluation**: Built-in evaluator for Excel formulas (not just reading stored values)
-- **Encryption**: File-level encryption support for sensitive data
+- **Encryption**: File-level encryption/decryption support for sensitive data
 - **Parquet & Avro**: Native columnar format support with schema inference from headers
 - **Google Sheets**: Full read/write/append via Google Sheets API v4 when `google_sheets.access_token` is configured; list sheets with `google_sheets.api_key`
+- **Text Analysis**: Keyword extraction, language detection, sentiment analysis
+- **Anomaly Detection**: Statistical outlier detection on numeric columns
+- **Data Lineage**: Track transformations through multi-step pipelines
+- **Regex Operations**: Filter and replace by regex pattern
+- **SQL Generation**: `to-sql` command generates `INSERT` statements from tabular data
+- **Shell Completions**: `completions --shell <shell>` generates tab-completion scripts
+- **File Watch**: `watch` feature re-runs a command when input files change
 
 ## Format support (high level)
 
@@ -84,6 +91,20 @@ cargo run -- read --input examples/sales.csv
 - `--mode preserve`: patches an existing Excel file, keeping cells outside the target range intact.
 - `--mode overwrite`: replaces the target range area directly.
 
+### CLI command overview
+
+**I/O**: `read`, `write`, `convert`, `sheets`, `read-all`, `write-range`, `append`
+
+**Transforms**: `sort`, `filter`, `replace`, `dedupe`, `transpose`, `select`, `mutate`, `rename`, `drop`, `fillna`, `dropna`, `astype`, `unique`, `clip`, `normalize`, `zscore`
+
+**Analytics**: `head`, `tail`, `sample`, `describe`, `value-counts`, `corr`, `info`, `dtypes`, `groupby`, `join`, `concat`, `pivot`, `rolling`, `crosstab`, `melt`, `query`, `parse-date`, `regex-filter`, `regex-replace`, `diff`, `histogram`
+
+**Advanced**: `formula`, `apply-formula-range`, `chart`, `add-chart`, `add-sparkline`, `conditional-format`, `export-styled`, `validate`, `profile`, `schema`, `to-sql`, `encrypt`, `decrypt`, `batch`, `plugin`, `stream`, `examples-generate`, `config-init`, `completions`, `gsheets-list`, `gsheets-auth`, `gsheets-set-default`
+
+**Server**: `serve` (starts MCP server), `watch` (file watcher; requires `watch` feature)
+
+Run `cargo run -- --help` or `xls-rs --help` for the full list.
+
 ### Generate examples
 
 ```bash
@@ -102,11 +123,21 @@ The CLI loads config from the first existing path:
 
 ## MCP server
 
-`XlsRsMcpServer` exposes tools for programmatic automation. It also includes a `capabilities` tool that returns supported operations and formats.
+`XlsRsMcpServer` exposes tools for programmatic automation via the Model Context Protocol. It delegates to the same `CapabilityRegistry` used by the CLI, so behavior is identical across surfaces. It also includes a `capabilities` tool that returns supported operations and formats at runtime.
+
+### Error parity
+
+CLI and MCP share the same error taxonomy. `ErrorKind` provides stable string codes (e.g., `column_not_found`, `invalid_cell_ref`, `unsupported_format`) that appear in MCP `error.data.code` for programmatic handling.
 
 ## Test
 
 ```bash
 cargo test
+```
+
+### Benchmarks
+
+```bash
+cargo bench -p xls-rs --bench performance
 ```
 

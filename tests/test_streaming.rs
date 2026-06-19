@@ -163,7 +163,7 @@ fn test_csv_streaming_reader_reads_chunks_and_stops() {
 
     let mut reader = CsvStreamingReader::new(temp.path().to_str().unwrap()).unwrap();
 
-    // csv::Reader treats first line as header by default, so records() yields 5 data rows
+    // has_headers(false) means all 6 rows are treated as data
     let chunk1 = reader.read_chunk(2).unwrap();
     assert!(chunk1.is_some());
     let chunk1 = chunk1.unwrap();
@@ -179,8 +179,7 @@ fn test_csv_streaming_reader_reads_chunks_and_stops() {
     let chunk3 = reader.read_chunk(2).unwrap();
     assert!(chunk3.is_some());
     let chunk3 = chunk3.unwrap();
-    assert_eq!(chunk3.data.len(), 1); // last remaining data row
-    // has_more stays true until an empty read actually occurs
+    assert_eq!(chunk3.data.len(), 2); // last 2 rows
     assert!(reader.has_more());
 
     let chunk4 = reader.read_chunk(2).unwrap();
