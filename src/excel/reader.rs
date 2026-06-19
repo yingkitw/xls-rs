@@ -174,6 +174,30 @@ impl ExcelHandler {
         Ok(index - 1)
     }
 
+    /// Read a sheet into structured data without CSV serialization
+    pub fn read_sheet_data(&self, path: &str, sheet_name: Option<&str>) -> Result<Vec<Vec<String>>> {
+        let mut workbook: Xlsx<_> =
+            open_workbook(path).with_context(|| format!("Failed to open Excel file: {path}"))?;
+
+        let metadata = self.get_metadata(path)?;
+        let sheet_name = Self::resolve_sheet_selection(sheet_name, &metadata.sheet_names)?;
+
+        let range = workbook
+            .worksheet_range(&sheet_name)
+            .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
+
+        let mut rows: Vec<Vec<String>> = Vec::with_capacity(range.height());
+        for row in range.rows() {
+            let mut row_data = Vec::with_capacity(range.width());
+            for cell in row.iter() {
+                row_data.push(cell.to_string());
+            }
+            rows.push(row_data);
+        }
+
+        Ok(rows)
+    }
+
     /// Read a specific range from Excel file
     pub fn read_range(
         &self,
@@ -334,13 +358,7 @@ impl ExcelHandler {
                 let cell_range = CellRange::parse(range_str)?;
                 return self.read_range(path, &cell_range, None);
             } else {
-                let csv_str = self.read_with_sheet(path, None)?;
-                let data = csv_str
-                    .lines()
-                    .filter(|l| !l.is_empty())
-                    .map(|l| l.split(',').map(|s| s.to_string()).collect())
-                    .collect();
-                return Ok(data);
+                return self.read_sheet_data(path, None);
             }
         }
 
@@ -350,24 +368,11 @@ impl ExcelHandler {
 
 impl DataReader for ExcelHandler {
     fn read(&self, path: &str) -> Result<Vec<Vec<String>>> {
-        let csv_str = self.read_with_sheet(path, None)?;
-        let result: Vec<Vec<String>> = csv_str
-            .lines()
-            .filter(|l| !l.is_empty())
-            .map(|l| l.split(',').map(|s| s.to_string()).collect())
-            .collect();
-        Ok(result)
+        self.read_sheet_data(path, None)
     }
 
     fn read_with_headers(&self, path: &str) -> Result<Vec<Vec<String>>> {
-        // Call the trait method explicitly to avoid conflict with inherent method
-        let csv_str = self.read_with_sheet(path, None)?;
-        let result: Vec<Vec<String>> = csv_str
-            .lines()
-            .filter(|l| !l.is_empty())
-            .map(|l| l.split(',').map(|s| s.to_string()).collect())
-            .collect();
-        Ok(result)
+        self.read_sheet_data(path, None)
     }
 
     fn read_range(&self, path: &str, range: &CellRange) -> Result<Vec<Vec<String>>> {

@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 use xls_rs::capabilities::{
-    CapabilityRegistry, ConvertCapability, FilterCapability, ProfileCapability, ReadExcelCapability,
-    SortCapability, StreamCapability, ValidateCapability,
+    BatchCapability, CapabilityRegistry, ConvertCapability, EncryptCapability, FilterCapability,
+    ProfileCapability, ReadExcelCapability, SortCapability, StreamCapability, ValidateCapability,
 };
 use xls_rs::{Converter, DataWriter};
 
@@ -173,4 +173,47 @@ fn registry_stream_copies_csv_in_chunks() {
         .unwrap();
     assert_eq!(data[0], vec!["A", "B"]);
     assert_eq!(data[1], vec!["1", "a"]);
+}
+
+#[test]
+fn registry_encrypts_file_with_xor() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in.txt");
+    let output = dir.path().join("out.enc");
+    std::fs::write(&input, "hello world").unwrap();
+
+    let reg = CapabilityRegistry::new();
+    reg.register(Arc::new(EncryptCapability));
+    let args = serde_json::json!({
+        "input": input.to_string_lossy(),
+        "output": output.to_string_lossy(),
+        "algorithm": "xor",
+        "key": "secret",
+    });
+    let r = reg.execute("encrypt", args).unwrap();
+    assert_eq!(r["status"], "success");
+    assert!(output.exists());
+}
+
+#[test]
+fn registry_batch_converts_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let input1 = dir.path().join("a.csv");
+    let input2 = dir.path().join("b.csv");
+    let output_dir = dir.path().join("out");
+    std::fs::write(&input1, "x,y\n1,2\n").unwrap();
+    std::fs::write(&input2, "x,y\n3,4\n").unwrap();
+
+    let reg = CapabilityRegistry::new();
+    reg.register(Arc::new(BatchCapability));
+    let args = serde_json::json!({
+        "inputs": format!("{}, {}", input1.to_string_lossy(), input2.to_string_lossy()),
+        "output_dir": output_dir.to_string_lossy(),
+        "operation": "convert",
+        "args": ["csv"],
+    });
+    let r = reg.execute("batch", args).unwrap();
+    assert_eq!(r["status"], "success");
+    assert_eq!(r["success"], 2);
+    assert_eq!(r["errors"], 0);
 }

@@ -606,3 +606,27 @@ fn test_cell_typing_consistency_across_writers() {
     fs::remove_file(&path2).ok();
     fs::remove_file(&path3).ok();
 }
+
+#[test]
+fn test_read_sheet_data_preserves_commas() {
+    let handler = ExcelHandler::new();
+    let data = vec![
+        vec!["Name".to_string(), "Description".to_string()],
+        vec!["Alice".to_string(), "Loves, commas".to_string()],
+        vec!["Bob".to_string(), "Also, loves, them".to_string()],
+    ];
+
+    let path = unique_path("commas", "xlsx");
+    handler.write(&path, &data, Default::default()).unwrap();
+
+    // read_sheet_data preserves commas correctly
+    let read = handler.read_sheet_data(&path, None).unwrap();
+    assert_eq!(read[1][1], "Loves, commas");
+    assert_eq!(read[2][1], "Also, loves, them");
+
+    // read_with_sheet CSV path splits on commas (documented behavior for string output)
+    let csv = handler.read_with_sheet(&path, None).unwrap();
+    assert!(csv.contains("Loves, commas"));
+
+    fs::remove_file(&path).ok();
+}

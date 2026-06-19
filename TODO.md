@@ -23,12 +23,13 @@
 
 ## XLS/XLSX manipulation (core)
 
-- [~] **Read parity**:
+- [x] **Read parity**:
   - [x] Range reads: CLI `read --range` and HTTP `api` read use `CellRange` + `filter_by_range` (same helper as columnar paths)
-  - [~] Range reads identical across all backends where semantics differ today
-  - [~] Sheet selection behavior consistent (default sheet, missing sheet errors)
+  - [x] Range reads identical across all backends where semantics differ today (`read_sheet_data` returns `Vec<Vec<String>>` directly for XLSX/XLS/ODS without CSV serialization round-trip; `read_range` also returns structured data)
+  - [x] Sheet selection behavior consistent (default sheet, missing sheet errors)
     - [x] Excel / ODS: exact sheet name required when specified; missing sheet error lists available names (`ExcelHandler::resolve_sheet_selection`)
-- [~] **Write parity**:
+    - [x] CSV / Parquet / Avro: no sheet concept; `sheet` parameter gracefully ignored
+- [x] **Write parity**:
   - [x] XLSX writer: formulas/styles/charts/sparklines/condfmt APIs reachable from CLI + MCP (`write_styled`, `add_chart`, `add_sparkline`, `conditional_format` capabilities + MCP tools)
   - [x] Cell typing rules (number/date/string/empty) consistent across writers (`classify_cell` / `add_cell_to_row` used by `XlsxWriter`, `StreamingXlsxWriter`, and `ExcelHandler` write paths)
 - [x] **Edit operations** (in-place style transforms):
@@ -45,7 +46,7 @@
   - [x] `.csv`
   - [x] `.parquet`
   - [x] `.avro`
-- [~] Ensure round-trip expectations are tested:
+- [x] Ensure round-trip expectations are tested:
   - [x] CSV → XLSX → CSV (`tests/test_converter.rs` — `test_roundtrip_csv_xlsx_csv_data_preserved`)
   - [x] XLSX → Parquet/Avro → CSV (`test_roundtrip_xlsx_parquet_csv_preserves_grid`, `test_roundtrip_xlsx_avro_csv_preserves_grid`)
 - [x] Add explicit constraints for unsupported features (merged cells, pivot tables, etc.) and fail with clear errors.
@@ -67,14 +68,18 @@
 ## MCP server (tooling completeness)
 
 - [x] Tool naming: consistent verbs and nouns (read/write/convert/sort/filter/…).
-- [~] Add missing tools for advanced operations (validation/profile/chart/encrypt/batch/stream) if not already exposed.
+- [x] Add missing tools for advanced operations (validation/profile/chart/encrypt/batch/stream).
   - [x] `convert_data` MCP tool + `ConvertCapability`
   - [x] `validate_data` MCP tool + `ValidateCapability`
   - [x] `profile_data` MCP tool + `ProfileCapability`
   - [x] `stream_data` MCP tool + `StreamCapability`
-  - [~] chart/encrypt/batch still optional
-- [~] Ensure MCP tools accept the same option schema as CLI flags (sheet, range, format, etc.).
-  - [x] `read_excel` accepts `format` (csv, jsonl, markdown)
+  - [x] `encrypt_file` MCP tool + `EncryptCapability`
+  - [x] `batch_process` MCP tool + `BatchCapability`
+  - [x] `add_chart` MCP tool + `AddChartCapability` (already existed)
+- [x] Ensure MCP tools accept the same option schema as CLI flags (sheet, range, format, etc.).
+  - [x] `read_excel` accepts `format` (csv, jsonl, markdown) via `format_read_result`
+  - [x] `convert_data` accepts `sheet` (same as CLI `--sheet`)
+  - [x] Core I/O options (input, output, sheet, range) present on all relevant MCP tools
 - [x] Add an MCP “capabilities” tool that returns the supported operations + formats at runtime.
 
 ## Performance & large files
@@ -86,7 +91,7 @@
 
 ## Safety & correctness
 
-- [~] Keep CSV formula-injection sanitization consistent across all write paths.
+- [x] Keep CSV formula-injection sanitization consistent across all write paths.
   - [x] `Converter`: stdout CSV (`-`) and temp CSV for Excel use `sanitize_csv_row` / `write_records_safe`
   - [x] Audit direct `write_record` paths: `DataWriter` for CSV uses `write_records_safe` / `append_records_safe`; `write_from_csv`, `write_range` flush, `StreamingCsvWriter::write_row`, and formula-evaluator CSV output sanitize (`src/csv_handler.rs`, `src/formula/evaluator.rs`). Low-level `write_records` / `append_records` remain for explicit/test use.
 - [x] Path validation rules consistent for CLI commands that write files.

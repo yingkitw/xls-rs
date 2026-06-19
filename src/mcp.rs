@@ -9,10 +9,11 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::capabilities::{
-    AddChartCapability, AddSparklineCapability, ApplyFormulaCapability, CapabilityRegistry,
-    ConditionalFormatCapability, ConvertCapability, FilterCapability, ListSheetsCapability,
-    ProfileCapability, ReadAllSheetsCapability, ReadExcelCapability, SortCapability,
-    StreamCapability, ValidateCapability, WorkflowCapability, WriteStyledCapability,
+    AddChartCapability, AddSparklineCapability, ApplyFormulaCapability, BatchCapability,
+    CapabilityRegistry, ConditionalFormatCapability, ConvertCapability, EncryptCapability,
+    FilterCapability, ListSheetsCapability, ProfileCapability, ReadAllSheetsCapability,
+    ReadExcelCapability, SortCapability, StreamCapability, ValidateCapability, WorkflowCapability,
+    WriteStyledCapability,
 };
 use rmcp::handler::server::tool::ToolRouter;
 use crate::capability_catalog;
@@ -225,6 +226,32 @@ pub struct StreamRequest {
     pub chunk_size: Option<usize>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct EncryptRequest {
+    #[schemars(description = "Input file path")]
+    pub input: String,
+    #[schemars(description = "Output encrypted file path")]
+    pub output: String,
+    #[schemars(description = "Encryption algorithm: aes256 or xor (default: xor)")]
+    pub algorithm: Option<String>,
+    #[schemars(description = "Encryption key string")]
+    pub key: Option<String>,
+    #[schemars(description = "Path to file containing encryption key")]
+    pub key_file: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct BatchRequest {
+    #[schemars(description = "Comma-separated input file paths or glob pattern")]
+    pub inputs: String,
+    #[schemars(description = "Output directory for results")]
+    pub output_dir: String,
+    #[schemars(description = "Operation: convert, sort, filter, dedupe, normalize, zscore, rolling")]
+    pub operation: String,
+    #[schemars(description = "Operation-specific arguments")]
+    pub args: Option<Vec<String>>,
+}
+
 #[tool_router]
 impl XlsRsMcpServer {
     pub fn new() -> Self {
@@ -238,6 +265,8 @@ impl XlsRsMcpServer {
         registry.register(Arc::new(ValidateCapability));
         registry.register(Arc::new(ProfileCapability));
         registry.register(Arc::new(StreamCapability));
+        registry.register(Arc::new(EncryptCapability));
+        registry.register(Arc::new(BatchCapability));
 
         // Register Excel read capabilities
         registry.register(Arc::new(ListSheetsCapability));
@@ -651,6 +680,41 @@ impl XlsRsMcpServer {
         match self.registry.execute("stream", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
             Err(e) => Err(tool_error("Failed to stream", e, ctx)),
+        }
+    }
+
+    #[tool(description = "Encrypt a file using AES-256 or XOR")]
+    async fn encrypt_file(
+        &self,
+        request: Parameters<EncryptRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.input.clone()),
+            input: Some(request.0.input.clone()),
+            output: Some(request.0.output.clone()),
+            ..Default::default()
+        };
+        match self.registry.execute("encrypt", args) {
+            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
+            Err(e) => Err(tool_error("Failed to encrypt", e, ctx)),
+        }
+    }
+
+    #[tool(description = "Batch process multiple files with the same operation")]
+    async fn batch_process(
+        &self,
+        request: Parameters<BatchRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        let args = serde_json::to_value(&request.0).map_err(serde_err)?;
+        let ctx = McpErrorContext {
+            file: Some(request.0.inputs.clone()),
+            input: Some(request.0.inputs.clone()),
+            ..Default::default()
+        };
+        match self.registry.execute("batch", args) {
+            Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),
+            Err(e) => Err(tool_error("Failed to batch process", e, ctx)),
         }
     }
 }

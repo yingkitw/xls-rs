@@ -66,12 +66,7 @@ impl Capability for ReadExcelCapability {
             let cell_range = CellRange::parse(range_str)?;
             handler.read_range(input, &cell_range, sheet)?
         } else {
-            let csv_str = handler.read_with_sheet(input, sheet)?;
-            csv_str
-                .lines()
-                .filter(|l| !l.is_empty())
-                .map(|l| l.split(',').map(|s| s.to_string()).collect())
-                .collect()
+            handler.read_sheet_data(input, sheet)?
         };
 
         Ok(json!({

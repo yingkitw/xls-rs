@@ -77,10 +77,7 @@ impl Converter {
 
         match format.as_str() {
             "ods" => self.excel_handler.read_ods_data(path, sheet_name),
-            "xlsx" | "xls" => {
-                let content = self.excel_handler.read_with_sheet(path, sheet_name)?;
-                Ok(self.parse_csv_data(&content))
-            }
+            "xlsx" | "xls" => self.excel_handler.read_sheet_data(path, sheet_name),
             "parquet" => {
                 use crate::columnar::ParquetHandler;
                 let handler = ParquetHandler::new();
