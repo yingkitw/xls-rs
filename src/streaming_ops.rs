@@ -82,7 +82,7 @@ impl ColumnType {
 /// * `n` - Number of rows to read (excluding headers if present)
 ///
 /// # Returns
-/// Vector of rows (as Vec<String>)
+/// Vector of rows (as `Vec<String>`)
 pub fn head(path: &str, n: usize) -> Result<Vec<Vec<String>>> {
     let mut reader = StreamingCsvReader::open(path)?;
     let mut result = Vec::with_capacity(n);
@@ -104,7 +104,7 @@ pub fn head(path: &str, n: usize) -> Result<Vec<Vec<String>>> {
 /// * `n` - Number of rows to read
 ///
 /// # Returns
-/// Vector of rows (as Vec<String>)
+/// Vector of rows (as `Vec<String>`)
 pub fn tail(path: &str, n: usize) -> Result<Vec<Vec<String>>> {
     let reader = StreamingCsvReader::open(path)?;
     let mut buffer: Vec<Vec<String>> = Vec::with_capacity(n);

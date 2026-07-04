@@ -43,7 +43,7 @@ impl Default for SparklineGroup {
     }
 }
 
-/// Generate sparkline XML as an extLst element to append inside <worksheet>.
+/// Generate sparkline XML as an extLst element to append inside `<worksheet>`.
 /// This uses the x14 extension namespace required by Excel for sparklines.
 pub fn generate_sparkline_ext_xml(
     groups: &[SparklineGroup],

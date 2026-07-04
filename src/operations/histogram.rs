@@ -6,7 +6,7 @@ use anyhow::Result;
 
 /// Compute histogram bins for numeric values
 ///
-/// Returns (bins, labels) where bins[i] is count for range [labels[i], labels[i+1])
+/// Returns (bins, labels) where `bins[i]` is count for range `[labels[i], labels[i+1])`
 pub fn histogram(
     data: &[Vec<String>],
     col_idx: usize,
