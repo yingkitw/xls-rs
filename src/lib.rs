@@ -35,6 +35,7 @@ pub mod quality;
 pub mod regex_cache;
 pub mod streaming;
 pub mod streaming_ops;
+pub mod string_distance;
 pub mod string_utils;
 pub mod text_analysis;
 pub mod text_analysis_handler;
@@ -91,6 +92,7 @@ pub use streaming::{
     StreamingProcessor,
 };
 pub use streaming_ops::{get_info, head, infer_schema, tail, ColumnType, Schema};
+pub use string_distance::{hamming, jaro, jaro_winkler, levenshtein};
 pub use string_utils::{
     join_cell_reference, join_with_capacity, string_with_capacity, StringBuilder,
     estimate_csv_row_capacity, estimate_json_array_capacity,

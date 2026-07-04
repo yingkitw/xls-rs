@@ -133,13 +133,14 @@ impl PandasCommandHandler {
         let ops = DataOperations::new();
         let corr_matrix = match method {
             "spearman" => ops.spearman_correlation(&data, &col_indices)?,
+            "kendall" => ops.kendall_tau_correlation(&data, &col_indices)?,
             "pearson" | _ => ops.correlation(&data, &col_indices)?,
         };
 
-        let label = if method == "spearman" {
-            "Spearman Rank Correlation"
-        } else {
-            "Pearson Correlation"
+        let label = match method {
+            "spearman" => "Spearman Rank Correlation",
+            "kendall" => "Kendall Tau-b Correlation",
+            _ => "Pearson Correlation",
         };
         println!("{} Matrix:", label);
         for row in &corr_matrix {

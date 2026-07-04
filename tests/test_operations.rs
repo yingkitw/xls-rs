@@ -649,3 +649,62 @@ fn test_spearman_correlation() {
     let r: f64 = corr[1][1].parse().unwrap();
     assert!((r - 1.0).abs() < 0.001);
 }
+
+#[test]
+fn test_kendall_tau_correlation() {
+    let ops = DataOperations::new();
+    let data = vec![
+        vec!["a".to_string(), "b".to_string()],
+        vec!["1".to_string(), "1".to_string()],
+        vec!["2".to_string(), "2".to_string()],
+        vec!["3".to_string(), "3".to_string()],
+    ];
+    let corr = ops.kendall_tau_correlation(&data, &[0, 1]).unwrap();
+    assert_eq!(corr.len(), 3); // header + 2 rows
+    // Perfect monotonic relationship → tau = 1.0
+    let r: f64 = corr[1][1].parse().unwrap();
+    assert!((r - 1.0).abs() < 0.001);
+    // Off-diagonal should also be 1.0
+    let r2: f64 = corr[1][2].parse().unwrap();
+    assert!((r2 - 1.0).abs() < 0.001);
+}
+
+#[test]
+fn test_kendall_tau_inverse() {
+    let ops = DataOperations::new();
+    let data = vec![
+        vec!["a".to_string(), "b".to_string()],
+        vec!["1".to_string(), "3".to_string()],
+        vec!["2".to_string(), "2".to_string()],
+        vec!["3".to_string(), "1".to_string()],
+    ];
+    let corr = ops.kendall_tau_correlation(&data, &[0, 1]).unwrap();
+    // Perfect inverse relationship → tau = -1.0
+    let r: f64 = corr[1][2].parse().unwrap();
+    assert!((r - (-1.0)).abs() < 0.001);
+}
+
+#[test]
+fn test_string_distance_levenshtein() {
+    use xls_rs::levenshtein;
+    assert_eq!(levenshtein("kitten", "sitting"), 3);
+    assert_eq!(levenshtein("flaw", "lawn"), 2);
+    assert_eq!(levenshtein("", "abc"), 3);
+    assert_eq!(levenshtein("abc", "abc"), 0);
+}
+
+#[test]
+fn test_string_distance_jaro_winkler() {
+    use xls_rs::{jaro, jaro_winkler};
+    assert!((jaro("MARTHA", "MARHTA") - 0.9444).abs() < 0.001);
+    assert!((jaro_winkler("MARTHA", "MARHTA") - 0.9611).abs() < 0.001);
+    assert!((jaro_winkler("abc", "abc") - 1.0).abs() < 1e-9);
+}
+
+#[test]
+fn test_string_distance_hamming() {
+    use xls_rs::hamming;
+    assert_eq!(hamming("toned", "roses"), Some(3));
+    assert_eq!(hamming("abc", "abc"), Some(0));
+    assert_eq!(hamming("abc", "abcd"), None);
+}

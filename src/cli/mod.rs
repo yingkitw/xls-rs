@@ -534,6 +534,16 @@ pub enum Commands {
         replacement: String,
     },
 
+    /// Compute string distance between two strings
+    StrDistance {
+        #[arg(short, long)]
+        a: String,
+        #[arg(short, long)]
+        b: String,
+        #[arg(short, long, value_name = "METHOD", default_value = "levenshtein")]
+        method: String,
+    },
+
     /// Compare two datasets (diff)
     Diff {
         #[arg(short, long)]

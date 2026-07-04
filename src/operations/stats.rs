@@ -102,6 +102,57 @@ impl DataOperations {
         Ok(result)
     }
 
+    /// Kendall tau-b rank correlation matrix
+    pub fn kendall_tau_correlation(
+        &self,
+        data: &[Vec<String>],
+        columns: &[usize],
+    ) -> Result<Vec<Vec<String>>> {
+        if data.is_empty() || columns.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let header = &data[0];
+
+        let mut col_data: Vec<Vec<f64>> = vec![Vec::new(); columns.len()];
+        for row in data.iter().skip(1) {
+            for (i, &col_idx) in columns.iter().enumerate() {
+                if let Some(val) = row.get(col_idx).and_then(|v| v.parse::<f64>().ok()) {
+                    col_data[i].push(val);
+                }
+            }
+        }
+
+        let mut result = Vec::new();
+
+        let mut corr_header = vec!["".to_string()];
+        for &col_idx in columns {
+            corr_header.push(
+                header
+                    .get(col_idx)
+                    .cloned()
+                    .unwrap_or_else(|| format!("col_{}", col_idx)),
+            );
+        }
+        result.push(corr_header);
+
+        for (i, &col_i) in columns.iter().enumerate() {
+            let col_name = header
+                .get(col_i)
+                .cloned()
+                .unwrap_or_else(|| format!("col_{}", col_i));
+            let mut row = vec![col_name];
+
+            for (j, _) in columns.iter().enumerate() {
+                let corr = kendall_tau_b(&col_data[i], &col_data[j]);
+                row.push(format!("{:.4}", corr));
+            }
+            result.push(row);
+        }
+
+        Ok(result)
+    }
+
     /// Simple linear regression: slope, intercept, and r_squared for two numeric columns
     pub fn simple_linear_regression(
         &self,
@@ -549,6 +600,49 @@ fn rank_values(values: &[f64]) -> Vec<f64> {
         i = j;
     }
     ranks
+}
+
+/// Kendall tau-b rank correlation coefficient (handles ties)
+fn kendall_tau_b(x: &[f64], y: &[f64]) -> f64 {
+    let n = x.len().min(y.len());
+    if n < 2 {
+        return 0.0;
+    }
+
+    let mut concordant = 0_i64;
+    let mut discordant = 0_i64;
+    let mut tied_x = 0_i64;
+    let mut tied_y = 0_i64;
+
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let dx = x[i] - x[j];
+            let dy = y[i] - y[j];
+            if dx == 0.0 && dy == 0.0 {
+                // tied on both — neither concordant nor discordant
+            } else if dx == 0.0 {
+                tied_x += 1;
+            } else if dy == 0.0 {
+                tied_y += 1;
+            } else if (dx > 0.0) == (dy > 0.0) {
+                concordant += 1;
+            } else {
+                discordant += 1;
+            }
+        }
+    }
+
+    let numerator = (concordant - discordant) as f64;
+    let n0 = (n as f64) * (n as f64 - 1.0) / 2.0;
+    let n1 = tied_x as f64;
+    let n2 = tied_y as f64;
+    let denom = ((n0 - n1) * (n0 - n2)).sqrt();
+
+    if denom == 0.0 {
+        return 0.0;
+    }
+
+    numerator / denom
 }
 
 /// Pearson correlation on already-numeric slices (no parsing)

@@ -9,7 +9,7 @@ Supported formats include CSV, Excel (`.xlsx`, `.xls`), ODS, Parquet, and Avro, 
 
 ## What's New
 
-- **Extended Statistics**: `describe` now reports 10/25/50/75/90/95/99 percentiles, skewness, and kurtosis (NumPy-compatible interpolation). `corr` supports `--method spearman` for rank correlation. `regress` computes simple linear regression (slope, intercept, r²).
+- **Extended Statistics**: `describe` now reports 10/25/50/75/90/95/99 percentiles, skewness, and kurtosis (NumPy-compatible interpolation). `corr` supports `--method spearman` for rank correlation and `--method kendall` for Kendall tau-b. `regress` computes simple linear regression (slope, intercept, r²). `str-distance` computes Levenshtein, Jaro-Winkler, and Hamming distance between strings.
 - **Excel Grouping (Outline)**: Collapsible row/column groups via `XlsxWriter::add_row_group()` / `add_col_group()` with configurable outline level and collapse state.
 - **HTML Output**: `read` and inspect commands support `--format html` for HTML table output.
 - **Modified Z-score Outlier Detection**: `AnomalyMethod::ModifiedZScore` uses MAD (Median Absolute Deviation) for robust outlier detection.
@@ -28,7 +28,7 @@ Unlike single-purpose libraries, xls-rs provides a **unified surface** across li
 - **Production Safety**: CSV formula-injection sanitization on all write paths; overwrite guards (`--overwrite` required); stable error codes across CLI and MCP
 - **Advanced Excel Features**: Charts, conditional formatting, sparklines, grouping (outline), merged cells, hyperlinks, comments, data validation, print setup, freeze panes, auto-filter — not just raw cell values
 - **Data Quality Built-in**: Validation rules, profiling, anomaly detection, and data lineage tracking
-- **Pandas-Style Ops**: `head`, `tail`, `describe` (with percentiles/skewness/kurtosis), `sort`, `filter`, `dedupe`, `transpose`, `select`, `join`, `concat`, `groupby`, `pivot`, `melt`, `rolling`, `crosstab`, `sample`, `clip`, `normalize`, `zscore`, `fillna`, `dropna`, `rename`, `drop`, `mutate`, `astype`, `unique`, `value-counts`, `corr` (Pearson & Spearman), `regress`
+- **Pandas-Style Ops**: `head`, `tail`, `describe` (with percentiles/skewness/kurtosis), `sort`, `filter`, `dedupe`, `transpose`, `select`, `join`, `concat`, `groupby`, `pivot`, `melt`, `rolling`, `crosstab`, `sample`, `clip`, `normalize`, `zscore`, `fillna`, `dropna`, `rename`, `drop`, `mutate`, `astype`, `unique`, `value-counts`, `corr` (Pearson, Spearman & Kendall tau-b), `regress`, `str-distance` (Levenshtein, Jaro-Winkler, Hamming)
 - **Formula Evaluation**: Built-in evaluator for Excel formulas (not just reading stored values)
 - **Encryption**: File-level encryption/decryption support for sensitive data
 - **Parquet & Avro**: Native columnar format support with schema inference from headers

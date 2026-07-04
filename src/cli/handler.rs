@@ -452,6 +452,39 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 self.transform.handle_diff(left, right, key)
             }
 
+            Commands::StrDistance { a, b, method } => {
+                use xls_rs::string_distance;
+                match method.as_str() {
+                    "levenshtein" => {
+                        let d = string_distance::levenshtein(&a, &b);
+                        println!("Levenshtein distance: {}", d);
+                    }
+                    "jaro" => {
+                        let s = string_distance::jaro(&a, &b);
+                        println!("Jaro similarity: {:.4}", s);
+                    }
+                    "jaro-winkler" | "jaro_winkler" => {
+                        let s = string_distance::jaro_winkler(&a, &b);
+                        println!("Jaro-Winkler similarity: {:.4}", s);
+                    }
+                    "hamming" => {
+                        match string_distance::hamming(&a, &b) {
+                            Some(d) => println!("Hamming distance: {}", d),
+                            None => anyhow::bail!(
+                                "Hamming distance requires strings of equal length (got {} and {})",
+                                a.len(),
+                                b.len()
+                            ),
+                        }
+                    }
+                    _ => anyhow::bail!(
+                        "Unknown method '{}'. Use: levenshtein, jaro, jaro-winkler, hamming",
+                        method
+                    ),
+                }
+                Ok(())
+            }
+
             Commands::Histogram {
                 input,
                 column,

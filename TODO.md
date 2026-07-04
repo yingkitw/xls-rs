@@ -195,9 +195,9 @@ Still open:
 - [x] **Percentile / quantile**: `describe` now includes 10th, 25th, 50th, 75th, 90th, 95th, 99th percentiles using linear interpolation (NumPy-compatible). API: `DataOperations::describe(data)`.
 - [x] **Skewness & kurtosis**: Added to `describe` output. Uses population moment definitions (excess kurtosis = Fisher-1). API: `DataOperations::describe(data)`.
 - [x] **Correlation methods**: Spearman rank correlation added. CLI: `--method spearman` on `corr` command. API: `DataOperations::spearman_correlation(data, columns)`.
-- [ ] **Kendall tau correlation**: Not yet implemented.
+- [x] **Kendall tau correlation**: Kendall tau-b rank correlation with tie handling. CLI: `--method kendall` on `corr` command. API: `DataOperations::kendall_tau_correlation(data, columns)`.
 - [x] **Regression (simple linear)**: `slope`, `intercept`, `r_squared` for two numeric columns. CLI: `regress --x-column X --y-column Y`. API: `DataOperations::simple_linear_regression(data, x_col, y_col)`.
-- [ ] **String distance metrics**: Levenshtein, Jaro-Winkler, Hamming for fuzzy matching. `strsim-rs` crate.
+- [x] **String distance metrics**: Levenshtein, Jaro, Jaro-Winkler, and Hamming distance for fuzzy matching. CLI: `str-distance --a <s1> --b <s2> --method <levenshtein|jaro|jaro-winkler|hamming>`. API: `xls_rs::string_distance::{levenshtein, jaro, jaro_winkler, hamming}`.
 - [x] **Z-score outlier detection**: Population Z-score via `AnomalyMethod::ZScore { threshold }`. Uses mean and std dev.
 - [x] **Modified Z-score outlier detection**: Robust outlier detection via `AnomalyMethod::ModifiedZScore { threshold }`. Uses median and MAD (Median Absolute Deviation).
 - [ ] **Isolation Forest**: Even a simple version. sklearn territory.
