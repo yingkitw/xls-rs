@@ -232,6 +232,12 @@ pub enum Commands {
         seed: Option<u64>,
         #[arg(short = 'f', long, default_value = "csv")]
         format: OutputFormat,
+        /// Sampling method: random, stratified, systematic
+        #[arg(short, long, default_value = "random")]
+        method: String,
+        /// Column name for stratified sampling (required with --method stratified)
+        #[arg(long)]
+        stratum_column: Option<String>,
     },
 
     /// Show descriptive statistics

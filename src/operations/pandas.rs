@@ -81,6 +81,125 @@ impl DataOperations {
         result
     }
 
+    /// Stratified sample: sample `n` rows proportionally from each stratum
+    /// defined by the value in `stratum_col`. Preserves header row.
+    pub fn stratified_sample(
+        &self,
+        data: &[Vec<String>],
+        n: usize,
+        stratum_col: usize,
+        seed: Option<u64>,
+    ) -> Result<Vec<Vec<String>>> {
+        if data.len() <= 1 {
+            return Ok(data.to_vec());
+        }
+
+        let header = &data[0];
+        let data_rows = &data[1..];
+
+        if n >= data_rows.len() {
+            return Ok(data.to_vec());
+        }
+
+        use std::collections::HashMap;
+        let mut strata: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, row) in data_rows.iter().enumerate() {
+            let key = row.get(stratum_col).cloned().unwrap_or_default();
+            strata.entry(key).or_default().push(i);
+        }
+
+        let total = data_rows.len();
+        let mut rng_state = seed.unwrap_or(42);
+        let mut next_rand = || {
+            rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
+            rng_state
+        };
+
+        let mut sampled_indices: Vec<usize> = Vec::with_capacity(n);
+
+        // Allocate proportionally, then distribute remainder
+        let stratum_keys: Vec<String> = strata.keys().cloned().collect();
+        let mut allocations: Vec<(String, usize)> = Vec::with_capacity(stratum_keys.len());
+        let mut allocated = 0usize;
+        for key in &stratum_keys {
+            let group_size = strata[key].len();
+            let proportion = (n * group_size) / total;
+            allocations.push((key.clone(), proportion));
+            allocated += proportion;
+        }
+        // Distribute remaining slots to largest strata
+        let mut remainder = n - allocated;
+        let mut by_size: Vec<usize> = (0..stratum_keys.len()).collect();
+        by_size.sort_by(|&a, &b| strata[&stratum_keys[b]].len().cmp(&strata[&stratum_keys[a]].len()));
+        for &i in &by_size {
+            if remainder == 0 {
+                break;
+            }
+            let available = strata[&stratum_keys[i]].len() - allocations[i].1;
+            let extra = remainder.min(available);
+            allocations[i].1 += extra;
+            remainder -= extra;
+        }
+
+        for (key, count) in &allocations {
+            let members = &strata[key];
+            if members.is_empty() || *count == 0 {
+                continue;
+            }
+            let mut picked: std::collections::HashSet<usize> = std::collections::HashSet::new();
+            while picked.len() < *count && picked.len() < members.len() {
+                let idx = (next_rand() as usize) % members.len();
+                picked.insert(members[idx]);
+            }
+            sampled_indices.extend(picked);
+        }
+
+        sampled_indices.sort();
+        let mut result = vec![header.clone()];
+        for idx in sampled_indices {
+            result.push(data_rows[idx].clone());
+        }
+        Ok(result)
+    }
+
+    /// Systematic sample: pick every k-th row starting at a random offset.
+    /// `k` is computed as `total_rows / n`. Preserves header row.
+    pub fn systematic_sample(
+        &self,
+        data: &[Vec<String>],
+        n: usize,
+        seed: Option<u64>,
+    ) -> Vec<Vec<String>> {
+        if data.len() <= 1 {
+            return data.to_vec();
+        }
+
+        let header = &data[0];
+        let data_rows = &data[1..];
+        let total = data_rows.len();
+
+        if n >= total {
+            return data.to_vec();
+        }
+
+        let k = total / n;
+        if k == 0 {
+            return data.to_vec();
+        }
+
+        let mut rng_state = seed.unwrap_or(42);
+        rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let start = (rng_state as usize) % k;
+
+        let mut result = vec![header.clone()];
+        let mut i = start;
+        while i < total && result.len() <= n {
+            result.push(data_rows[i].clone());
+            i += k;
+        }
+        result
+    }
+
     /// Drop columns by index
     pub fn drop_columns(&self, data: &[Vec<String>], columns: &[usize]) -> Vec<Vec<String>> {
         let drop_set: std::collections::HashSet<usize> = columns.iter().copied().collect();

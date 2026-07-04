@@ -54,21 +54,31 @@ impl PandasCommandHandler {
 
     /// Handle the sample command
     ///
-    /// Displays a random sample of N rows.
+    /// Displays a sample of N rows using the specified method.
     pub fn handle_sample(
         &self,
         input: String,
         n: usize,
         seed: Option<u64>,
         format: OutputFormat,
+        method: String,
+        stratum_column: Option<String>,
     ) -> Result<()> {
         let converter = Converter::new();
         let data = converter.read_any_data(&input, None)?;
 
         let ops = DataOperations::new();
-        let sample_data = ops.sample(&data, n, seed);
+        let sample_data = match method.as_str() {
+            "stratified" => {
+                let col_name = stratum_column
+                    .ok_or_else(|| anyhow::anyhow!("--stratum-column is required for stratified sampling"))?;
+                let col_idx = self.find_column_index(&data, &col_name)?;
+                ops.stratified_sample(&data, n, col_idx, seed)?
+            }
+            "systematic" => ops.systematic_sample(&data, n, seed),
+            "random" | _ => ops.sample(&data, n, seed),
+        };
 
-        // Output in requested format
         self.print_data(&sample_data, format)?;
 
         Ok(())

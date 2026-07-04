@@ -182,7 +182,9 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 n,
                 seed,
                 format,
-            } => self.pandas.handle_sample(input, n, seed, format),
+                method,
+                stratum_column,
+            } => self.pandas.handle_sample(input, n, seed, format, method, stratum_column),
 
             Commands::Describe { input, format } => self.pandas.handle_describe(input, format),
 

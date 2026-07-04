@@ -9,7 +9,7 @@ Supported formats include CSV, Excel (`.xlsx`, `.xls`), ODS, Parquet, and Avro, 
 
 ## What's New
 
-- **Extended Statistics**: `describe` now reports 10/25/50/75/90/95/99 percentiles, skewness, and kurtosis (NumPy-compatible interpolation). `corr` supports `--method spearman` for rank correlation and `--method kendall` for Kendall tau-b. `regress` computes simple linear regression (slope, intercept, r²). `str-distance` computes Levenshtein, Jaro-Winkler, and Hamming distance between strings.
+- **Extended Statistics**: `describe` now reports 10/25/50/75/90/95/99 percentiles, skewness, and kurtosis (NumPy-compatible interpolation). `corr` supports `--method spearman` for rank correlation and `--method kendall` for Kendall tau-b. `regress` computes simple linear regression (slope, intercept, r²). `str-distance` computes Levenshtein, Jaro-Winkler, and Hamming distance between strings. `sample` supports `--method stratified` and `--method systematic`.
 - **Excel Grouping (Outline)**: Collapsible row/column groups via `XlsxWriter::add_row_group()` / `add_col_group()` with configurable outline level and collapse state.
 - **HTML Output**: `read` and inspect commands support `--format html` for HTML table output.
 - **Modified Z-score Outlier Detection**: `AnomalyMethod::ModifiedZScore` uses MAD (Median Absolute Deviation) for robust outlier detection.

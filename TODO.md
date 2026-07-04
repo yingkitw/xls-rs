@@ -201,7 +201,7 @@ Still open:
 - [x] **Z-score outlier detection**: Population Z-score via `AnomalyMethod::ZScore { threshold }`. Uses mean and std dev.
 - [x] **Modified Z-score outlier detection**: Robust outlier detection via `AnomalyMethod::ModifiedZScore { threshold }`. Uses median and MAD (Median Absolute Deviation).
 - [ ] **Isolation Forest**: Even a simple version. sklearn territory.
-- [ ] **Sampling methods**: Stratified sampling, systematic sampling (not just random). pandas / R.
+- [x] **Sampling methods**: Stratified sampling (proportional allocation per stratum) and systematic sampling (every k-th row). CLI: `sample --method stratified --stratum-column <col>` and `sample --method systematic`. API: `DataOperations::stratified_sample(data, n, col, seed)`, `DataOperations::systematic_sample(data, n, seed)`.
 - [ ] **Reshape (wider / longer)**: `pivot_wider` and `pivot_longer` as first-class tidyverse-style operations. tidyr / dplyr.
 
 ### Distribution & deployment

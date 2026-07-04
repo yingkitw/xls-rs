@@ -708,3 +708,53 @@ fn test_string_distance_hamming() {
     assert_eq!(hamming("abc", "abc"), Some(0));
     assert_eq!(hamming("abc", "abcd"), None);
 }
+
+#[test]
+fn test_stratified_sample() {
+    let ops = DataOperations::new();
+    // 3 strata: A (4 rows), B (4 rows), C (2 rows) = 10 data rows
+    let data = vec![
+        vec!["category".to_string(), "value".to_string()],
+        vec!["A".to_string(), "1".to_string()],
+        vec!["A".to_string(), "2".to_string()],
+        vec!["A".to_string(), "3".to_string()],
+        vec!["A".to_string(), "4".to_string()],
+        vec!["B".to_string(), "5".to_string()],
+        vec!["B".to_string(), "6".to_string()],
+        vec!["B".to_string(), "7".to_string()],
+        vec!["B".to_string(), "8".to_string()],
+        vec!["C".to_string(), "9".to_string()],
+        vec!["C".to_string(), "10".to_string()],
+    ];
+    let sample = ops.stratified_sample(&data, 5, 0, Some(42)).unwrap();
+    // header + 5 sampled rows
+    assert_eq!(sample.len(), 6);
+    // Each row should have the header preserved
+    assert_eq!(sample[0], vec!["category", "value"]);
+    // All sampled rows should be from the original data
+    for row in &sample[1..] {
+        assert!(data.iter().any(|d| d == row));
+    }
+}
+
+#[test]
+fn test_systematic_sample() {
+    let ops = DataOperations::new();
+    let data: Vec<Vec<String>> = (0..21)
+        .map(|i| {
+            if i == 0 {
+                vec!["id".to_string(), "val".to_string()]
+            } else {
+                vec![(i - 1).to_string(), (i * 10).to_string()]
+            }
+        })
+        .collect();
+    let sample = ops.systematic_sample(&data, 5, Some(42));
+    // header + 5 rows
+    assert_eq!(sample.len(), 6);
+    assert_eq!(sample[0], vec!["id", "val"]);
+    // Every sampled row should be from the original
+    for row in &sample[1..] {
+        assert!(data.iter().any(|d| d == row));
+    }
+}
