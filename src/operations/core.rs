@@ -382,27 +382,20 @@ impl TransformOperator for DataOperations {
                         && formula_str.contains(|c: char| c.is_ascii_digit());
 
                     if has_cell_refs {
-                        // Per-row formula evaluation: evaluate formula for each row
-                        // with row-specific cell references (A1 for row 0, A2 for row 1, etc.)
-                        // Clone data first to avoid borrow issues
-                        let data_clone = data.clone();
-                        for (row_idx, row) in data.iter_mut().enumerate() {
-                            // Replace row number in cell references with current row index
-                            // e.g., A1 -> A{row_idx+1}, B2 -> B{row_idx+1}
-                            let row_formula = adjust_cell_references_for_row(&formula_str, row_idx);
+                        let values: Vec<String> = (0..data.len())
+                            .map(|row_idx| {
+                                let row_formula =
+                                    adjust_cell_references_for_row(&formula_str, row_idx);
+                                match evaluator.evaluate_formula_full(&row_formula, data) {
+                                    Ok(crate::formula::FormulaResult::Number(n)) => n.to_string(),
+                                    Ok(crate::formula::FormulaResult::Text(s)) => s,
+                                    Err(_) => format!("#ERROR: {}", name),
+                                }
+                            })
+                            .collect();
 
-                            match evaluator.evaluate_formula_full(&row_formula, &data_clone) {
-                                Ok(result) => {
-                                    let value = match result {
-                                        crate::formula::FormulaResult::Number(n) => n.to_string(),
-                                        crate::formula::FormulaResult::Text(s) => s,
-                                    };
-                                    row.push(value);
-                                }
-                                Err(_) => {
-                                    row.push(format!("#ERROR: {}", name));
-                                }
-                            }
+                        for (row, value) in data.iter_mut().zip(values) {
+                            row.push(value);
                         }
                     } else {
                         // Aggregate formula: evaluate once for all rows (SUM, AVERAGE, etc.)

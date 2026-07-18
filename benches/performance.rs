@@ -2,9 +2,12 @@
 //!
 //! Run with: `cargo bench -p xls-rs --bench performance`
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
 use tempfile::TempDir;
-use xls_rs::{CellRange, Converter, ExcelHandler, WriteOptions};
+use xls_rs::{
+    CellRange, Converter, DataOperations, ExcelHandler, TransformOperation, TransformOperator,
+    WriteOptions, tail,
+};
 
 fn create_test_data(rows: usize, cols: usize) -> Vec<Vec<String>> {
     (0..rows)
@@ -123,11 +126,48 @@ fn bench_range_read_xlsx(c: &mut Criterion) {
     });
 }
 
+fn bench_tail_csv(c: &mut Criterion) {
+    let dir = TempDir::new().unwrap();
+    let csv_path = dir.path().join("test.csv");
+    let data = create_test_data(100_000, 2);
+    write_test_csv(&csv_path, &data);
+
+    c.bench_function("tail_csv_100000x2_last10000", |b| {
+        b.iter(|| {
+            black_box(tail(black_box(csv_path.to_str().unwrap()), black_box(10_000)).unwrap())
+        })
+    });
+}
+
+fn bench_add_column_formula(c: &mut Criterion) {
+    let data: Vec<Vec<String>> = (0..25_000)
+        .map(|row| (0..10).map(|col| (row + col).to_string()).collect())
+        .collect();
+    let operation = TransformOperation::AddColumn {
+        name: "sum".to_string(),
+        formula: Some("A1+B1".to_string()),
+    };
+    let ops = DataOperations::new();
+
+    c.bench_function("add_column_formula_25000x10", |b| {
+        b.iter_batched(
+            || (data.clone(), operation.clone()),
+            |(mut input, operation)| {
+                ops.transform(&mut input, operation).unwrap();
+                black_box(input)
+            },
+            BatchSize::LargeInput,
+        )
+    });
+}
+
 criterion_group!(
     benches,
     bench_read_xlsx,
     bench_write_xlsx,
     bench_convert_to_parquet,
-    bench_range_read_xlsx
+    bench_range_read_xlsx,
+    bench_tail_csv,
+    bench_add_column_formula
 );
 criterion_main!(benches);

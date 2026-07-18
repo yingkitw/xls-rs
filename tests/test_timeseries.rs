@@ -1,6 +1,6 @@
 //! Tests for time series operations
 
-use chrono::{Datelike, Duration, NaiveDate, Timelike};
+use chrono::{Datelike, Duration, NaiveDate};
 use xls_rs::{
     ResampleInterval, RollingWindow, TimeSeriesAgg, TimeSeriesPoint, TimeSeriesProcessor,
     TrendDirection,

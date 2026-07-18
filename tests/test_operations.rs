@@ -1,7 +1,7 @@
 mod common;
 
-use xls_rs::{AggFunc, DataOperations, JoinType, SortOrder};
 use std::fs;
+use xls_rs::{AggFunc, DataOperations, JoinType, SortOrder, TransformOperation, TransformOperator};
 
 fn read_example_csv(name: &str) -> Vec<Vec<String>> {
     common::ensure_example_fixtures();
@@ -236,6 +236,29 @@ fn test_rename_columns() {
 
     assert_eq!(data[0][0], "Column_A");
     assert_eq!(data[0][1], "Column_B");
+}
+
+#[test]
+fn test_transform_add_column_per_row_formula() {
+    let ops = DataOperations::new();
+    let mut data = vec![
+        vec!["1".to_string(), "2".to_string()],
+        vec!["x".to_string(), "4".to_string()],
+        vec!["5".to_string(), "6".to_string()],
+    ];
+
+    ops.transform(
+        &mut data,
+        TransformOperation::AddColumn {
+            name: "sum".to_string(),
+            formula: Some("A1+B1".to_string()),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(data[0], vec!["1", "2", "3"]);
+    assert_eq!(data[1], vec!["x", "4", "#ERROR: sum"]);
+    assert_eq!(data[2], vec!["5", "6", "11"]);
 }
 
 // ============ Fill NA Tests ============

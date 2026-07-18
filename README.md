@@ -1,147 +1,312 @@
 # xls-rs
 
-`xls-rs` is a Rust CLI for reading, writing, converting, and transforming spreadsheet-like files.
+**xls-rs is a Rust spreadsheet CLI, library, and Model Context Protocol (MCP) server for reading, writing, converting, and analyzing Excel, CSV, ODS, Parquet, and Avro files.** It combines pandas-style data operations, Excel formula evaluation, native XLSX authoring, streaming CSV processing, and data-quality tools without requiring Microsoft Excel.
 
-- **CLI binary**: `xls-rs`
-- **Rust library crate**: `xls_rs` (this is the crate name you `use` in Rust code)
-
-Supported formats include CSV, Excel (`.xlsx`, `.xls`), ODS, Parquet, and Avro, with formula evaluation and a growing set of pandas-style operations.
-
-## What's New
-
-- **Extended Statistics**: `describe` now reports 10/25/50/75/90/95/99 percentiles, skewness, and kurtosis (NumPy-compatible interpolation). `corr` supports `--method spearman` for rank correlation and `--method kendall` for Kendall tau-b. `regress` computes simple linear regression (slope, intercept, r²). `str-distance` computes Levenshtein, Jaro-Winkler, and Hamming distance between strings. `sample` supports `--method stratified` and `--method systematic`.
-- **Excel Grouping (Outline)**: Collapsible row/column groups via `XlsxWriter::add_row_group()` / `add_col_group()` with configurable outline level and collapse state.
-- **HTML Output**: `read` and inspect commands support `--format html` for HTML table output.
-- **Modified Z-score Outlier Detection**: `AnomalyMethod::ModifiedZScore` uses MAD (Median Absolute Deviation) for robust outlier detection.
-- **MCP Server**: `XlsRsMcpServer` exposes all capabilities to AI agents and automation tools via the Model Context Protocol.
-- **Styled Excel Export**: Presets (`default`, `minimal`, `report`, `executive`) for professional formatting with charts, conditional formatting, and sparklines.
-- **Workflow Engine**: Config-driven batch operations via `WorkflowExecutor`.
-- **Streaming Mode**: Memory-efficient chunked CSV processing (`CsvStreamingReader` + CLI `stream` command).
-- **Time Series & Geospatial**: Temporal analysis and location-based data.
-
-## Why xls-rs?
-
-Unlike single-purpose libraries, xls-rs provides a **unified surface** across library, CLI, and MCP server — the same operations work identically everywhere.
-
-**Key differentiators:**
-
-- **Production Safety**: CSV formula-injection sanitization on all write paths; overwrite guards (`--overwrite` required); stable error codes across CLI and MCP
-- **Advanced Excel Features**: Charts, conditional formatting, sparklines, grouping (outline), merged cells, hyperlinks, comments, data validation, print setup, freeze panes, auto-filter — not just raw cell values
-- **Data Quality Built-in**: Validation rules, profiling, anomaly detection, and data lineage tracking
-- **Pandas-Style Ops**: `head`, `tail`, `describe` (with percentiles/skewness/kurtosis), `sort`, `filter`, `dedupe`, `transpose`, `select`, `join`, `concat`, `groupby`, `pivot`, `melt`, `rolling`, `crosstab`, `sample`, `clip`, `normalize`, `zscore`, `fillna`, `dropna`, `rename`, `drop`, `mutate`, `astype`, `unique`, `value-counts`, `corr` (Pearson, Spearman & Kendall tau-b), `regress`, `str-distance` (Levenshtein, Jaro-Winkler, Hamming)
-- **Formula Evaluation**: Built-in evaluator for Excel formulas (not just reading stored values)
-- **Encryption**: File-level encryption/decryption support for sensitive data
-- **Parquet & Avro**: Native columnar format support with schema inference from headers
-- **Google Sheets**: Full read/write/append via Google Sheets API v4 when `google_sheets.access_token` is configured; list sheets with `google_sheets.api_key`
-- **Text Analysis**: Keyword extraction, language detection, sentiment analysis
-- **Anomaly Detection**: Statistical outlier detection on numeric columns
-- **Data Lineage**: Track transformations through multi-step pipelines
-- **Regex Operations**: Filter and replace by regex pattern
-- **SQL Generation**: `to-sql` command generates `INSERT` statements from tabular data
-- **Shell Completions**: `completions --shell <shell>` generates tab-completion scripts
-- **File Watch**: `watch` feature re-runs a command when input files change
-
-## Format support (high level)
-
-| Format | Read (library / CLI) | Write (library / CLI) | Notes |
-|--------|----------------------|-------------------------|--------|
-| `.csv` | Yes | Yes | Formula-injection sanitization on writes |
-| `.xlsx` | Yes | Yes | Charts, conditional formatting, sparklines, etc. via library APIs |
-| `.xls` | Yes | Yes | Legacy Excel; same pipeline as xlsx in many paths |
-| `.ods` | Yes | Via conversion paths | OpenDocument spreadsheet |
-| `.parquet` | Yes | Yes | Columnar; schema from headers when present |
-| `.avro` | Yes | Yes | Columnar; field names from headers when present |
-| Google Sheets (`gsheet://`, URL, ID) | Yes (access token) | Yes (access token) | `list` with `api_key`; read/write/append with `access_token` |
-
-For the latest parity detail across library, CLI, and MCP, see `TODO.md` and `src/capability_catalog.rs`.
-
-### Read limitations (grid extraction)
-
-Grid reads return tabular data similar to CSV: they do **not** execute VBA macros or expand pivot tables. **Merged cells** usually appear as a value on the top-left cell only; other cells in the merge range may be empty. For full-fidelity layout and features, open the file in the authoring application.
-
-## Install / build
+[![Crates.io](https://img.shields.io/crates/v/xls-rs.svg)](https://crates.io/crates/xls-rs)
+[![Documentation](https://docs.rs/xls-rs/badge.svg)](https://docs.rs/xls-rs)
+[![License](https://img.shields.io/crates/l/xls-rs.svg)](#license)
+[![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
 
 ```bash
-cargo build
+cargo install xls-rs
+xls-rs --help
 ```
 
-## Run
+## What is xls-rs?
+
+xls-rs is a command-line tool and embeddable Rust crate for spreadsheet and tabular-data workflows. Use it to convert CSV to XLSX, XLSX to Parquet, Excel to CSV, or Avro to CSV; inspect and transform data from the terminal; generate styled Excel workbooks; or expose selected spreadsheet tools to AI agents through MCP.
+
+| Surface | Name | Best for |
+|---|---|---|
+| CLI | `xls-rs` | Shell scripts, CI/CD, ETL, and interactive analysis |
+| Rust library | `xls_rs` | Rust services and custom data pipelines |
+| MCP server type | `XlsRsMcpServer` | AI agents and spreadsheet automation |
+| Optional HTTP API | `ApiServer` with the `api` feature | Embedding spreadsheet endpoints in a Rust application |
+
+## Why use xls-rs?
+
+- **One Rust toolkit for common spreadsheet formats:** CSV, XLSX, XLS, ODS, Parquet, Avro, and Google Sheets.
+- **Pandas-style operations from the shell:** sort, filter, join, groupby, pivot, melt, describe, correlation, regression, sampling, missing-value handling, and more.
+- **Native XLSX generation:** formulas, styles, charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, validation, print setup, freeze panes, and auto-filter.
+- **Production-oriented CSV safety:** formula-injection sanitization on write paths and explicit overwrite guards.
+- **Large-file support:** buffered and chunked CSV readers, writers, and streaming commands.
+- **AI integration:** 18 MCP tools, including capability discovery, conversion, filtering, validation, profiling, and Excel authoring.
+- **No Microsoft Excel dependency:** reads use Calamine and writes use native Rust format handlers.
+
+### Who is it for?
+
+- Data engineers converting spreadsheet and columnar formats in ETL pipelines.
+- Rust developers who need an Excel and CSV library with a CLI surface.
+- Analysts looking for pandas-style spreadsheet operations without Python.
+- AI-agent developers building an MCP spreadsheet server or automation workflow.
+
+## Format support
+
+| Format | Read | Native write | Notes |
+|---|---:|---:|---|
+| CSV (`.csv`) | Yes | Yes | Formula-injection sanitization on safe write paths |
+| Excel (`.xlsx`) | Yes | Yes | Full native writer and advanced Excel features |
+| Legacy Excel (`.xls`) | Yes | No | Convert XLS input to CSV, XLSX, Parquet, or Avro |
+| OpenDocument (`.ods`) | Yes | No | Convert ODS input to a supported writable format |
+| Parquet (`.parquet`) | Yes | Yes | Apache Arrow-based columnar data |
+| Avro (`.avro`) | Yes | Yes | Schema generated from tabular headers |
+| Google Sheets | Yes | Yes | Access token required for read/write/append; API key supports sheet listing |
+
+JSON, JSONL, Markdown, and HTML are available as presentation output formats for read and inspection commands. They are not first-class storage handlers.
+
+For operation-level parity across the library, CLI, and MCP surfaces, see [`TODO.md`](TODO.md) and [`src/capability_catalog.rs`](src/capability_catalog.rs).
+
+## Installation
+
+### Install the CLI from crates.io
 
 ```bash
-cargo run -- --help
+cargo install xls-rs
 ```
 
-Example:
+### Build from source
 
 ```bash
-cargo run -- read --input examples/sales.csv
+git clone https://github.com/yingkitw/xls-rs.git
+cd xls-rs
+cargo build --release
+./target/release/xls-rs --help
 ```
+
+The default build enables file watching and shell completions. To compile every optional surface:
+
+```bash
+cargo build --release --all-features
+```
+
+## Quick start
+
+### Read Excel or CSV without Microsoft Excel
+
+```bash
+xls-rs read --input examples/sales.csv
+xls-rs read --input report.xlsx --sheet Sheet1 --range A1:C20 --format markdown
+```
+
+`--format` accepts `csv`, `json`, `jsonl`, `markdown`, or `html`.
+
+### Convert CSV to XLSX
+
+```bash
+xls-rs convert --input sales.csv --output sales.xlsx
+```
+
+### Convert XLSX to Parquet or CSV
+
+```bash
+xls-rs convert --input report.xlsx --output report.parquet
+xls-rs convert --input report.xlsx --output report.csv --sheet Sheet1
+```
+
+### Analyze tabular data
+
+```bash
+xls-rs describe --input sales.csv --format markdown
+xls-rs corr --input sales.csv --columns Price,Quantity --method spearman
+xls-rs regress --input sales.csv --x-column Price --y-column Quantity
+xls-rs filter --input sales.csv --output premium.csv --where-clause "Price > 100"
+```
+
+### Use xls-rs as a Rust spreadsheet library
+
+```rust
+use xls_rs::{Converter, DataOperations};
+
+fn main() {
+    let converter = Converter::new();
+    let data = converter
+        .read_any_data("sales.csv", None)
+        .expect("failed to read data");
+
+    let summary = DataOperations::new()
+        .describe(&data)
+        .expect("failed to describe data");
+
+    println!("{summary:#?}");
+}
+```
+
+Convert between supported formats with the library API:
+
+```rust
+use xls_rs::Converter;
+
+Converter::new()
+    .convert("sales.csv", "sales.xlsx", None)
+    .expect("conversion failed");
+```
+
+## Capabilities
+
+| Capability | Library | CLI | MCP |
+|---|---:|---:|---:|
+| Read and convert tabular files | Yes | Yes | Selected tools |
+| Sort and filter | Yes | Yes | Yes |
+| Join, groupby, pivot, melt, and rolling operations | Yes | Yes | Workflow only |
+| Descriptive statistics, correlation, and regression | Yes | Yes | No |
+| XLSX styles, charts, sparklines, and conditional formatting | Yes | Yes | Yes |
+| Validation and data-quality profiling | Yes | Yes | Yes |
+| Chunked CSV streaming | Yes | Yes | Yes |
+| Anomaly, time-series, geospatial, lineage, and text analysis | Yes | No | No |
+| Google Sheets read/write/append | Yes | Yes (generic I/O commands) | No |
+
+### Pandas-style operations
+
+The CLI and `DataOperations` API include:
+
+- Inspection: `head`, `tail`, `sample`, `describe`, `info`, `dtypes`, `value-counts`, `unique`.
+- Transformations: `sort`, `filter`, `replace`, `dedupe`, `transpose`, `select`, `rename`, `drop`, `mutate`, `astype`, `clip`, `normalize`, `zscore`, `fillna`, `dropna`.
+- Reshaping and combining: `groupby`, `join`, `concat`, `pivot`, `melt`, `rolling`, `crosstab`.
+- Statistics: Pearson, Spearman, and Kendall tau-b correlation; percentiles; skewness; kurtosis; and simple linear regression.
+- Text and utility operations: regex filtering/replacement, histograms, date parsing, diffs, and Levenshtein, Jaro, Jaro-Winkler, and Hamming distances.
+
+### Advanced XLSX authoring
+
+The native XLSX writer supports:
+
+- Cell formulas and typed values.
+- Styles and styled export presets: `default`, `minimal`, `report`, and `executive`.
+- Column, bar, line, area, pie, doughnut, and scatter charts.
+- Sparklines and conditional formatting.
+- Row and column grouping, merged cells, hyperlinks, comments, and data validation.
+- Freeze panes, auto-filter, print areas, margins, orientation, scale, and fit-to-page settings.
+
+## CLI reference
 
 ### Global flags
 
-- `--config <path>`: use a specific config file (overrides discovery)
-- `--quiet`: suppress non-data output (logs/progress)
-- `--verbose`: print additional debug logs
-- `--overwrite`: allow overwriting output files
+- `--config <path>`: use a specific configuration file.
+- `--quiet`: suppress non-data logs and progress output.
+- `--verbose`: print additional diagnostics.
+- `--overwrite`: allow destructive output replacement; place it before the subcommand.
 
-### `read` output format
+### Command groups
 
-- With `-f` / `--format`: use that output (`csv`, `json`, `jsonl`, `markdown`).
-- Without `--format`: uses `default_format` from the resolved config file if set; otherwise `csv`.
+- **I/O:** `read`, `write`, `convert`, `sheets`, `read-all`, `write-range`, `append`.
+- **Transforms:** `sort`, `filter`, `replace`, `dedupe`, `transpose`, `select`, `mutate`, `rename`, `drop`, `fillna`, `dropna`, `astype`, `unique`, `clip`, `normalize`, `zscore`.
+- **Analytics:** `head`, `tail`, `sample`, `describe`, `value-counts`, `corr`, `regress`, `info`, `dtypes`, `groupby`, `join`, `concat`, `pivot`, `rolling`, `crosstab`, `melt`, `query`, `parse-date`, `regex-filter`, `regex-replace`, `diff`, `histogram`, `str-distance`.
+- **Advanced:** `formula`, `apply-formula-range`, `chart`, `add-chart`, `add-sparkline`, `conditional-format`, `export-styled`, `validate`, `profile`, `schema`, `to-sql`, `encrypt`, `decrypt`, `batch`, `plugin`, `stream`.
+- **Project and integration:** `examples-generate`, `config-init`, `completions`, `watch`, `gsheets-list`, `gsheets-auth`, `gsheets-set-default`, `serve`.
 
-### `write-range` modes
+`query` currently provides WHERE-style filtering rather than a general SQL engine. Run `xls-rs <command> --help` for command-specific arguments.
 
-- `--mode expand` (default): writes data starting at the given cell, expanding sheet bounds if needed.
-- `--mode preserve`: patches an existing Excel file, keeping cells outside the target range intact.
-- `--mode overwrite`: replaces the target range area directly.
+### Write-range modes
 
-### CLI command overview
+- `--mode expand` (default): write from the target cell and expand sheet bounds.
+- `--mode preserve`: patch an existing workbook while keeping cells outside the range.
+- `--mode overwrite`: replace the target range area.
 
-**I/O**: `read`, `write`, `convert`, `sheets`, `read-all`, `write-range`, `append`
+## MCP spreadsheet server
 
-**Transforms**: `sort`, `filter`, `replace`, `dedupe`, `transpose`, `select`, `mutate`, `rename`, `drop`, `fillna`, `dropna`, `astype`, `unique`, `clip`, `normalize`, `zscore`
+`XlsRsMcpServer` exposes 18 Model Context Protocol tools. Each tool delegates to the shared capability registry for consistent request handling and errors.
 
-**Analytics**: `head`, `tail`, `sample`, `describe`, `value-counts`, `corr`, `regress`, `info`, `dtypes`, `groupby`, `join`, `concat`, `pivot`, `rolling`, `crosstab`, `melt`, `query`, `parse-date`, `regex-filter`, `regex-replace`, `diff`, `histogram`
+Available tools:
 
-**Advanced**: `formula`, `apply-formula-range`, `chart`, `add-chart`, `add-sparkline`, `conditional-format`, `export-styled`, `validate`, `profile`, `schema`, `to-sql`, `encrypt`, `decrypt`, `batch`, `plugin`, `stream`, `examples-generate`, `config-init`, `completions`, `gsheets-list`, `gsheets-auth`, `gsheets-set-default`
+- `capabilities`, `read_excel`, `read_all_sheets`, and `list_sheets`.
+- `convert_data`, `sort_data`, `filter_data`, and `execute_workflow`.
+- `write_styled`, `add_chart`, `add_sparkline`, and `conditional_format`.
+- `apply_formula`, `validate_data`, `profile_data`, and `stream_data`.
+- `encrypt_file` and `batch_process`.
 
-**Server**: `serve` (starts MCP server), `watch` (file watcher; requires `watch` feature)
+The `xls-rs serve` command is currently an informational placeholder; it does not start an MCP transport. Embed the server type in a Tokio/RMCP host and choose the transport required by your agent runtime:
 
-Run `cargo run -- --help` or `xls-rs --help` for the full list.
+```rust
+use xls_rs::XlsRsMcpServer;
 
-### Generate examples
-
-```bash
-cargo run -- examples-generate
+fn main() {
+    let _server = XlsRsMcpServer::new();
+}
 ```
 
-This creates deterministic files under `./examples/` (CSV fixtures plus derived artifacts like `sales.xlsx` and `sales.parquet`).
+CLI and MCP operations share stable error codes such as `column_not_found`, `invalid_cell_ref`, and `unsupported_format`.
 
 ## Configuration
 
-The CLI loads config from the first existing path:
+Run `xls-rs config-init` to generate a configuration file. The CLI checks the first existing path:
 
-- `.xls-rs.toml` (project directory)
-- `~/.xls-rs.toml`
-- `$XDG_CONFIG_HOME/xls-rs/config.toml`
+1. `.xls-rs.toml` in the project directory.
+2. `~/.xls-rs.toml`.
+3. The platform configuration directory, such as `~/.config/xls-rs/config.toml` on Linux.
 
-## MCP server
+Google Sheets read/write/append requires `google_sheets.access_token`. Sheet-title listing can use `google_sheets.api_key`.
 
-`XlsRsMcpServer` exposes tools for programmatic automation via the Model Context Protocol. It delegates to the same `CapabilityRegistry` used by the CLI, so behavior is identical across surfaces. It also includes a `capabilities` tool that returns supported operations and formats at runtime.
+## Performance and large files
 
-### Error parity
+xls-rs includes buffered CSV I/O, chunked streaming, a bounded-memory `tail`, cached cell-reference matching, and reduced-allocation XLSX generation. Criterion benchmarks cover XLSX read/write, range reads, CSV-to-Parquet conversion, streaming tail, and formula-derived columns.
 
-CLI and MCP share the same error taxonomy. `ErrorKind` provides stable string codes (e.g., `column_not_found`, `invalid_cell_ref`, `unsupported_format`) that appear in MCP `error.data.code` for programmatic handling.
+```bash
+cargo bench --bench performance
+```
 
-## Test
+For large CSV files, use `xls-rs stream` or the `CsvStreamingReader` API. XLSX reads currently materialize worksheets through Calamine.
+
+## Current limitations
+
+- **MCP hosting:** `xls-rs serve` does not yet launch a transport; embed `XlsRsMcpServer` in an async host.
+- **Legacy writes:** native `.xls` and `.ods` output is not implemented. Writer routing may accept those extensions but emits XLSX content, so write `.xlsx` instead.
+- **Encryption:** `EncryptionAlgorithm::Aes256` currently delegates to the XOR test implementation. Do not use the encryption API for production security.
+- **Excel fidelity:** grid reads do not execute VBA macros or expand pivot tables. Merged ranges usually expose only the top-left value.
+- **Sheet enumeration:** `sheets` and `read-all` currently use the XLSX-specific reader path.
+- **Streaming:** CSV supports chunked processing; XLSX does not yet provide a true row-by-row SAX reader.
+- **Formula coverage:** the built-in evaluator supports a practical subset of Excel formulas, not the complete Excel calculation engine.
+- **Surface parity:** advanced library analytics are not all exposed through CLI and MCP.
+
+## FAQ
+
+### Can xls-rs convert CSV to Excel XLSX?
+
+Yes. Run `xls-rs convert --input data.csv --output data.xlsx` or call `Converter::convert` from Rust.
+
+### Can xls-rs read XLSX files without Microsoft Excel?
+
+Yes. xls-rs reads Excel files natively through Calamine and does not require Office, LibreOffice, or a JVM.
+
+### Is xls-rs an alternative to openpyxl, Calamine, xsv, or Polars?
+
+It overlaps with each tool but has a different scope. Compared with Calamine, xls-rs adds native XLSX writing, conversion, analytics, CLI, and MCP surfaces. Compared with openpyxl, it is Rust-native and supports Parquet and Avro, but has less template and macro fidelity. Compared with Polars or xsv, it focuses more on spreadsheet formats and Excel authoring than on a full lazy query engine.
+
+### Does xls-rs support pandas-style DataFrame operations?
+
+It supports many familiar tabular operations, including groupby, join, pivot, melt, describe, correlation, sampling, and missing-value handling. It is not a drop-in pandas DataFrame implementation and does not yet include lazy query planning.
+
+### Is the MCP server ready to use from the CLI?
+
+The MCP tool implementation is available through `XlsRsMcpServer`, but the `serve` subcommand does not yet host a transport. Embed the type in an RMCP/Tokio application.
+
+### Is the encryption feature secure?
+
+No. The current `Aes256` enum path uses the XOR test implementation and must not be used to protect sensitive data.
+
+### What is the minimum supported Rust version?
+
+The current package metadata requires Rust 1.88 or newer.
+
+## Development
 
 ```bash
 cargo test
+cargo clippy --all-targets --all-features
+cargo bench --bench performance
 ```
 
-### Benchmarks
+Additional project documentation:
 
-```bash
-cargo bench -p xls-rs --bench performance
-```
+- [Architecture](ARCHITECTURE.md)
+- [Technical specification](SPEC.md)
+- [Roadmap and capability parity](TODO.md)
 
+## License
+
+Licensed under the Apache License 2.0. The SPDX license declaration is defined in [`Cargo.toml`](Cargo.toml).
+
+## Links
+
+- [Source repository](https://github.com/yingkitw/xls-rs)
+- [Crate on crates.io](https://crates.io/crates/xls-rs)
+- [API documentation on docs.rs](https://docs.rs/xls-rs)
+- [Issue tracker](https://github.com/yingkitw/xls-rs/issues)

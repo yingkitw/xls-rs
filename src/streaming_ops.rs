@@ -5,7 +5,7 @@
 
 use crate::csv_handler::StreamingCsvReader;
 use anyhow::Result;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 /// Schema information for a dataset
 #[derive(Debug, Clone)]
@@ -107,19 +107,21 @@ pub fn head(path: &str, n: usize) -> Result<Vec<Vec<String>>> {
 /// Vector of rows (as `Vec<String>`)
 pub fn tail(path: &str, n: usize) -> Result<Vec<Vec<String>>> {
     let reader = StreamingCsvReader::open(path)?;
-    let mut buffer: Vec<Vec<String>> = Vec::with_capacity(n);
+    if n == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut buffer = VecDeque::with_capacity(n);
 
     for row_result in reader {
         let row = row_result?;
-        buffer.push(row);
-
-        // Keep only last N rows
-        if buffer.len() > n {
-            buffer.remove(0);
+        if buffer.len() == n {
+            buffer.pop_front();
         }
+        buffer.push_back(row);
     }
 
-    Ok(buffer)
+    Ok(buffer.into())
 }
 
 /// Infer schema from a CSV file by sampling the first N rows
@@ -266,7 +268,6 @@ pub fn count_rows(path: &str) -> Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use tempfile::TempDir;
 
     #[test]

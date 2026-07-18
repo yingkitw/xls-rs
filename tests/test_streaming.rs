@@ -1,7 +1,10 @@
 //! Tests for streaming module
 
 use std::io::Write;
-use xls_rs::streaming::{ChunkMetadata, CsvStreamingReader, DataChunk, StreamingDataReader, StreamingProcessor};
+use xls_rs::streaming::{
+    ChunkMetadata, CsvStreamingReader, DataChunk, StreamingDataReader, StreamingProcessor,
+};
+use xls_rs::tail;
 
 #[test]
 fn test_data_chunk_creation() {
@@ -185,6 +188,23 @@ fn test_csv_streaming_reader_reads_chunks_and_stops() {
     let chunk4 = reader.read_chunk(2).unwrap();
     assert!(chunk4.is_none());
     assert!(!reader.has_more());
+}
+
+#[test]
+fn test_tail_various_sizes() {
+    let mut temp = tempfile::NamedTempFile::with_suffix(".csv").unwrap();
+    for i in 0..20 {
+        writeln!(temp, "{i}").unwrap();
+    }
+    temp.flush().unwrap();
+
+    for n in [0, 1, 5, 19, 20, 21, 1000] {
+        let expected: Vec<Vec<String>> = ((20usize.saturating_sub(n))..20)
+            .map(|i| vec![i.to_string()])
+            .collect();
+        let actual = tail(temp.path().to_str().unwrap(), n).unwrap();
+        assert_eq!(actual, expected, "n={n}");
+    }
 }
 
 #[test]

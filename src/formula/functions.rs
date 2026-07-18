@@ -1,6 +1,7 @@
 //! Formula function implementations
 
 use super::evaluator::FormulaEvaluator;
+use crate::regex_cache::cell_reference_regex;
 use anyhow::Result;
 
 impl FormulaEvaluator {
@@ -417,13 +418,21 @@ impl FormulaEvaluator {
     }
 
     pub(crate) fn evaluate_arithmetic(&self, formula: &str, data: &[Vec<String>]) -> Result<f64> {
-        let cell_ref_regex = regex::Regex::new(r"([A-Z]+[0-9]+)")?;
+        let mut error = None;
+        let expr = cell_reference_regex().replace_all(formula, |caps: &regex::Captures| {
+            match self.get_cell_value(&caps[0], data) {
+                Ok(value) => value.to_string(),
+                Err(err) => {
+                    if error.is_none() {
+                        error = Some(err);
+                    }
+                    String::new()
+                }
+            }
+        });
 
-        let mut expr = formula.to_string();
-        for cap in cell_ref_regex.captures_iter(formula) {
-            let cell_ref = &cap[1];
-            let value = self.get_cell_value(cell_ref, data)?;
-            expr = expr.replace(cell_ref, &value.to_string());
+        if let Some(error) = error {
+            return Err(error);
         }
 
         self.evaluate_simple_arithmetic(&expr)

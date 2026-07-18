@@ -406,14 +406,14 @@ mod tests {
         assert_eq!(CellValue::parse("true"), CellValue::Boolean(true));
         assert_eq!(CellValue::parse("false"), CellValue::Boolean(false));
         assert_eq!(CellValue::parse("42"), CellValue::Integer(42));
-        assert_eq!(CellValue::parse("3.14"), CellValue::Number(3.14));
+        assert_eq!(CellValue::parse("2.5"), CellValue::Number(2.5));
         assert_eq!(CellValue::parse("hello"), CellValue::String("hello".to_string()));
     }
 
     #[test]
     fn test_cell_value_numeric() {
         assert!(CellValue::Integer(42).is_numeric());
-        assert!(CellValue::Number(3.14).is_numeric());
+        assert!(CellValue::Number(2.5).is_numeric());
         assert!(!CellValue::String("42".to_string()).is_numeric());
         assert!(!CellValue::Boolean(true).is_numeric());
     }
@@ -421,7 +421,7 @@ mod tests {
     #[test]
     fn test_cell_value_as_number() {
         assert_eq!(CellValue::Integer(42).as_number(), Some(42.0));
-        assert_eq!(CellValue::Number(3.14).as_number(), Some(3.14));
+        assert_eq!(CellValue::Number(2.5).as_number(), Some(2.5));
         assert_eq!(CellValue::String("42".to_string()).as_number(), None);
     }
 

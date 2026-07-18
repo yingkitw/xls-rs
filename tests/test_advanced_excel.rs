@@ -8,7 +8,7 @@
 use xls_rs::{
     CellStyle, ChartConfig, ConditionalFormat, ConditionalRule, DataChartType, ExcelHandler,
     RowData, Sparkline, SparklineGroup, SparklineType, StreamingXlsxWriter, XlsxWriter,
-    WriteOptions, Converter,
+    WriteOptions,
     sanitize_csv_value, sanitize_csv_row, CsvHandler,
 };
 use std::fs;

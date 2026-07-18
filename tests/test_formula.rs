@@ -33,6 +33,25 @@ fn test_formula_addition() {
 }
 
 #[test]
+fn test_formula_overlapping_cell_references() {
+    let evaluator = FormulaEvaluator::new();
+    let input = unique_path("overlap_in");
+    let output = unique_path("overlap_out");
+
+    fs::write(&input, "2\n0\n0\n0\n0\n0\n0\n0\n0\n3\n").unwrap();
+
+    evaluator
+        .apply_to_csv(&input, &output, "A1+A10", "B1")
+        .unwrap();
+
+    let content = fs::read_to_string(&output).unwrap();
+    assert_eq!(content.lines().next(), Some("2,5"));
+
+    fs::remove_file(&input).ok();
+    fs::remove_file(&output).ok();
+}
+
+#[test]
 fn test_formula_subtraction() {
     let evaluator = FormulaEvaluator::new();
     let input = unique_path("sub_in");

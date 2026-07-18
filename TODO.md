@@ -150,6 +150,9 @@
 - [x] **`escape_xml` rewrite**: Eliminated per-character `Vec` allocations (from `flat_map` + `collect` to pre-allocated `String` with capacity). Reduces allocations by ~O(n) per string cell in XLSX write.
 - [x] **`describe()` sort-once**: Replaced 7 sorts per column (one per percentile) with a single sort via `ColumnStats` struct. Sort complexity reduced from O(7n log n) to O(n log n) per column.
 - [x] **`sort_unstable` profiling**: Switched `calculate_numeric_stats` and `calculate_length_stats` from `sort_by` to `sort_unstable_by` for faster constant factor.
+- [x] **Streaming `tail()` ring buffer**: Replaced front-removal from `Vec` with `VecDeque`, reducing last-N row retention from O(rows × N) shifting to O(rows).
+- [x] **Formula `AddColumn` two-phase evaluation**: Removed a deep clone of the full dataset by evaluating new values before mutating rows, reducing temporary memory from O(rows × columns) cells to O(rows).
+- [x] **Cached arithmetic cell-reference parsing**: Reused the shared cell-reference regex and substituted references in one pass instead of compiling and repeatedly scanning per formula evaluation.
 
 Still open:
 - [ ] **CSV index (xsv-style)**: Build a lightweight index (row offsets per block) so `head`/`tail`/random access on huge CSVs is O(1) instead of O(n). xsv does this via `xsv index`.

@@ -551,7 +551,7 @@ pub fn add_comment_content_types(xml: &mut String, comment_flags: &[bool]) {
 }
 
 fn generate_data_validation_xml(dv: &super::types::DataValidation) -> String {
-    use super::types::{Operator, ValidationType};
+    use super::types::ValidationType;
 
     let type_str = match &dv.validation_type {
         ValidationType::List { .. } => "list",
