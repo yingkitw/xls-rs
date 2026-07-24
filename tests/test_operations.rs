@@ -781,3 +781,131 @@ fn test_systematic_sample() {
         assert!(data.iter().any(|d| d == row));
     }
 }
+
+// ============ Pivot Longer / Pivot Wider ============
+
+#[test]
+fn test_pivot_longer_basic() {
+    let ops = DataOperations::new();
+    let data = vec![
+        vec!["id".to_string(), "Q1".to_string(), "Q2".to_string(), "Q3".to_string()],
+        vec!["A".to_string(), "10".to_string(), "20".to_string(), "30".to_string()],
+        vec!["B".to_string(), "40".to_string(), "50".to_string(), "60".to_string()],
+    ];
+    let long = ops.pivot_longer(&data, &[1, 2, 3], "quarter", "sales").unwrap();
+    assert_eq!(long[0], vec!["id", "quarter", "sales"]);
+    // 2 rows × 3 pivoted cols = 6 data rows + 1 header
+    assert_eq!(long.len(), 7);
+    assert_eq!(long[1], vec!["A", "Q1", "10"]);
+    assert_eq!(long[2], vec!["A", "Q2", "20"]);
+    assert_eq!(long[3], vec!["A", "Q3", "30"]);
+    assert_eq!(long[4], vec!["B", "Q1", "40"]);
+    assert_eq!(long[5], vec!["B", "Q2", "50"]);
+    assert_eq!(long[6], vec!["B", "Q3", "60"]);
+}
+
+#[test]
+fn test_pivot_longer_custom_names() {
+    let ops = DataOperations::new();
+    let data = vec![
+        vec!["name".to_string(), "mon".to_string(), "tue".to_string()],
+        vec!["alice".to_string(), "100".to_string(), "200".to_string()],
+    ];
+    let long = ops.pivot_longer(&data, &[1, 2], "day", "hours").unwrap();
+    assert_eq!(long[0], vec!["name", "day", "hours"]);
+    assert_eq!(long[1], vec!["alice", "mon", "100"]);
+    assert_eq!(long[2], vec!["alice", "tue", "200"]);
+}
+
+#[test]
+fn test_pivot_longer_empty() {
+    let ops = DataOperations::new();
+    let long = ops.pivot_longer(&[], &[1], "name", "value").unwrap();
+    assert!(long.is_empty());
+}
+
+#[test]
+fn test_pivot_longer_out_of_range() {
+    let ops = DataOperations::new();
+    let data = vec![
+        vec!["id".to_string(), "A".to_string()],
+        vec!["1".to_string(), "10".to_string()],
+    ];
+    assert!(ops.pivot_longer(&data, &[5], "name", "value").is_err());
+}
+
+#[test]
+fn test_pivot_wider_basic() {
+    let ops = DataOperations::new();
+    let long = vec![
+        vec!["id".to_string(), "quarter".to_string(), "sales".to_string()],
+        vec!["A".to_string(), "Q1".to_string(), "10".to_string()],
+        vec!["A".to_string(), "Q2".to_string(), "20".to_string()],
+        vec!["A".to_string(), "Q3".to_string(), "30".to_string()],
+        vec!["B".to_string(), "Q1".to_string(), "40".to_string()],
+        vec!["B".to_string(), "Q2".to_string(), "50".to_string()],
+        vec!["B".to_string(), "Q3".to_string(), "60".to_string()],
+    ];
+    let wide = ops.pivot_wider(&long, 1, 2, &[0]).unwrap();
+    assert_eq!(wide[0], vec!["id", "Q1", "Q2", "Q3"]);
+    assert_eq!(wide.len(), 3); // header + 2 id rows
+    // Row for "A"
+    let row_a = wide.iter().find(|r| r[0] == "A").unwrap();
+    assert_eq!(row_a, &vec!["A", "10", "20", "30"]);
+    // Row for "B"
+    let row_b = wide.iter().find(|r| r[0] == "B").unwrap();
+    assert_eq!(row_b, &vec!["B", "40", "50", "60"]);
+}
+
+#[test]
+fn test_pivot_wider_infer_id_cols() {
+    let ops = DataOperations::new();
+    let long = vec![
+        vec!["name".to_string(), "day".to_string(), "hours".to_string()],
+        vec!["alice".to_string(), "mon".to_string(), "100".to_string()],
+        vec!["alice".to_string(), "tue".to_string(), "200".to_string()],
+        vec!["bob".to_string(), "mon".to_string(), "150".to_string()],
+    ];
+    // id_cols empty → infer all columns except names_from and values_from
+    let wide = ops.pivot_wider(&long, 1, 2, &[]).unwrap();
+    assert_eq!(wide[0], vec!["name", "mon", "tue"]);
+    let alice = wide.iter().find(|r| r[0] == "alice").unwrap();
+    assert_eq!(alice, &vec!["alice", "100", "200"]);
+    let bob = wide.iter().find(|r| r[0] == "bob").unwrap();
+    assert_eq!(bob, &vec!["bob", "150", ""]);
+}
+
+#[test]
+fn test_pivot_wider_empty() {
+    let ops = DataOperations::new();
+    let wide = ops.pivot_wider(&[], 1, 2, &[]).unwrap();
+    assert!(wide.is_empty());
+}
+
+#[test]
+fn test_pivot_wider_out_of_range() {
+    let ops = DataOperations::new();
+    let data = vec![
+        vec!["id".to_string(), "key".to_string(), "val".to_string()],
+        vec!["1".to_string(), "a".to_string(), "10".to_string()],
+    ];
+    assert!(ops.pivot_wider(&data, 10, 2, &[]).is_err());
+    assert!(ops.pivot_wider(&data, 1, 10, &[]).is_err());
+}
+
+#[test]
+fn test_pivot_longer_wider_roundtrip() {
+    let ops = DataOperations::new();
+    let original = vec![
+        vec!["id".to_string(), "Q1".to_string(), "Q2".to_string()],
+        vec!["X".to_string(), "100".to_string(), "200".to_string()],
+        vec!["Y".to_string(), "300".to_string(), "400".to_string()],
+    ];
+    let long = ops.pivot_longer(&original, &[1, 2], "quarter", "value").unwrap();
+    let wide = ops.pivot_wider(&long, 1, 2, &[0]).unwrap();
+    assert_eq!(wide[0], vec!["id", "Q1", "Q2"]);
+    let x = wide.iter().find(|r| r[0] == "X").unwrap();
+    assert_eq!(x, &vec!["X", "100", "200"]);
+    let y = wide.iter().find(|r| r[0] == "Y").unwrap();
+    assert_eq!(y, &vec!["Y", "300", "400"]);
+}

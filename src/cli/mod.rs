@@ -54,7 +54,7 @@ pub struct Cli {
 pub enum Commands {
     /// Read data from a file and display it
     Read {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short, long)]
         sheet: Option<String>,
@@ -77,9 +77,9 @@ pub enum Commands {
 
     /// Convert between file formats
     Convert {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         sheet: Option<String>,
@@ -100,13 +100,14 @@ pub enum Commands {
     },
 
     /// Start MCP server
+    #[cfg(feature = "mcp")]
     Serve,
 
     /// Sort data by column
     Sort {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         column: String,
@@ -116,9 +117,9 @@ pub enum Commands {
 
     /// Filter rows by condition
     Filter {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short = 'w', long)]
         where_clause: String,
@@ -126,9 +127,9 @@ pub enum Commands {
 
     /// Find and replace values
     Replace {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         find: String,
@@ -140,9 +141,9 @@ pub enum Commands {
 
     /// Remove duplicate rows
     Dedupe {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         columns: Option<String>,
@@ -150,9 +151,9 @@ pub enum Commands {
 
     /// Transpose data (rows to columns)
     Transpose {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
     },
 
@@ -194,9 +195,9 @@ pub enum Commands {
 
     /// Select specific columns
     Select {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         columns: String,
@@ -204,7 +205,7 @@ pub enum Commands {
 
     /// Show first N rows
     Head {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short = 'n', long, default_value = "10")]
         n: usize,
@@ -214,7 +215,7 @@ pub enum Commands {
 
     /// Show last N rows
     Tail {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short = 'n', long, default_value = "10")]
         n: usize,
@@ -224,7 +225,7 @@ pub enum Commands {
 
     /// Sample random rows
     Sample {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short = 'n', long, default_value = "10")]
         n: usize,
@@ -242,7 +243,7 @@ pub enum Commands {
 
     /// Show descriptive statistics
     Describe {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short = 'f', long, default_value = "csv")]
         format: OutputFormat,
@@ -250,7 +251,7 @@ pub enum Commands {
 
     /// Count unique values in column
     ValueCounts {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short, long)]
         column: String,
@@ -258,7 +259,7 @@ pub enum Commands {
 
     /// Calculate correlation matrix
     Corr {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short, long)]
         columns: Option<String>,
@@ -268,7 +269,7 @@ pub enum Commands {
 
     /// Simple linear regression (slope, intercept, r_squared)
     Regress {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short, long)]
         x_column: String,
@@ -278,9 +279,9 @@ pub enum Commands {
 
     /// Group by column with aggregation
     Groupby {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         by: String,
@@ -312,9 +313,9 @@ pub enum Commands {
 
     /// Add computed column
     Mutate {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         column: String,
@@ -324,9 +325,9 @@ pub enum Commands {
 
     /// Rename columns
     Rename {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         from: String,
@@ -336,9 +337,9 @@ pub enum Commands {
 
     /// Drop columns
     Drop {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         columns: String,
@@ -346,9 +347,9 @@ pub enum Commands {
 
     /// Fill missing values
     Fillna {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         value: String,
@@ -358,23 +359,23 @@ pub enum Commands {
 
     /// Drop rows with missing values
     Dropna {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
     },
 
     /// Show column data types
     Dtypes {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
     },
 
     /// Cast column types
     Astype {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         column: String,
@@ -384,7 +385,7 @@ pub enum Commands {
 
     /// Get unique values
     Unique {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short, long)]
         column: String,
@@ -392,15 +393,15 @@ pub enum Commands {
 
     /// Show dataset info
     Info {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
     },
 
     /// Clip values to range
     Clip {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         column: String,
@@ -412,9 +413,9 @@ pub enum Commands {
 
     /// Normalize column (0-1)
     Normalize {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         column: String,
@@ -422,9 +423,9 @@ pub enum Commands {
 
     /// Standardize column to z-scores (mean 0, std 1) for ML / statistics
     Zscore {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         column: String,
@@ -432,9 +433,9 @@ pub enum Commands {
 
     /// Query with SQL-like syntax
     Query {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short = 'w', long)]
         where_clause: String,
@@ -442,9 +443,9 @@ pub enum Commands {
 
     /// Create pivot table
     Pivot {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         index: String,
@@ -458,9 +459,9 @@ pub enum Commands {
 
     /// Rolling window mean or sum on a column (data rows ordered top to bottom)
     Rolling {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         column: String,
@@ -476,9 +477,9 @@ pub enum Commands {
 
     /// Crosstab counts for two categorical columns
     Crosstab {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         rows: String,
@@ -488,9 +489,9 @@ pub enum Commands {
 
     /// Melt / unpivot to long form (id columns + variable + value)
     Melt {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         /// Comma-separated id column names
         #[arg(long)]
@@ -500,11 +501,45 @@ pub enum Commands {
         value_vars: Option<String>,
     },
 
+    /// Pivot longer (tidyr-style): reshape wide data to long form
+    PivotLonger {
+        #[arg(short, long, default_value = "-")]
+        input: String,
+        #[arg(short, long, default_value = "-")]
+        output: String,
+        /// Comma-separated column names to pivot into key-value pairs
+        #[arg(long)]
+        cols: String,
+        /// Name for the new key column (default: "name")
+        #[arg(long, default_value = "name")]
+        names_to: String,
+        /// Name for the new value column (default: "value")
+        #[arg(long, default_value = "value")]
+        values_to: String,
+    },
+
+    /// Pivot wider (tidyr-style): reshape long data to wide form
+    PivotWider {
+        #[arg(short, long, default_value = "-")]
+        input: String,
+        #[arg(short, long, default_value = "-")]
+        output: String,
+        /// Column name whose values become new column names
+        #[arg(long)]
+        names_from: String,
+        /// Column name whose values fill the new columns
+        #[arg(long)]
+        values_from: String,
+        /// Comma-separated id column names (omit to use all other columns)
+        #[arg(long)]
+        id_cols: Option<String>,
+    },
+
     /// Parse and convert dates
     ParseDate {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         column: String,
@@ -516,9 +551,9 @@ pub enum Commands {
 
     /// Filter by regex pattern
     RegexFilter {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         column: String,
@@ -528,9 +563,9 @@ pub enum Commands {
 
     /// Replace by regex pattern
     RegexReplace {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         output: String,
         #[arg(short, long)]
         column: String,
@@ -562,7 +597,7 @@ pub enum Commands {
 
     /// Display ASCII histogram for numeric column
     Histogram {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short, long)]
         column: String,
@@ -575,7 +610,7 @@ pub enum Commands {
     /// Export schema (column names and types) as JSON
     #[command(name = "schema")]
     Schema {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short, long)]
         output: Option<String>,
@@ -584,7 +619,7 @@ pub enum Commands {
     /// Generate SQL INSERT statements from data
     #[command(name = "to-sql")]
     ToSql {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short, long)]
         table: String,
@@ -596,7 +631,7 @@ pub enum Commands {
 
     /// Profile data quality
     Profile {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short, long)]
         output: Option<String>,
@@ -604,7 +639,7 @@ pub enum Commands {
 
     /// Validate data with rules
     Validate {
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "-")]
         input: String,
         #[arg(short, long)]
         rules: String,
@@ -779,15 +814,18 @@ pub enum Commands {
     },
 
     /// List sheets in Google Sheets
+    #[cfg(feature = "gsheets")]
     GSheetsList {
         #[arg(short, long)]
         spreadsheet: String,
     },
 
     /// Authorize Google Sheets access
+    #[cfg(feature = "gsheets")]
     GSheetsAuth,
 
     /// Set default Google Sheets spreadsheet
+    #[cfg(feature = "gsheets")]
     GSheetsSetDefault {
         #[arg(short, long)]
         spreadsheet: String,

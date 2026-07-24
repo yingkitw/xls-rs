@@ -1,8 +1,8 @@
 [package]
 name = "xls-rs"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.86"
 license = "Apache-2.0"
 repository = "https://github.com/yingkitw/xls-rs"
 readme = "README.md"
@@ -39,9 +39,9 @@ name = "xls-rs"
 path = "src/main.rs"
 
 [dependencies]
-rmcp = { version = "0.14", features = ["server", "transport-io", "macros"] }
+rmcp = { version = "0.14", features = ["server", "transport-io", "macros"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "net"] }
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 calamine = "0.26"
 zip = "2.2"
 csv = "1.3"
@@ -49,15 +49,15 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
 regex = "1.10"
-parquet = { version = "54", features = ["arrow"] }
-arrow-array = "54"
-arrow-schema = "54"
-apache-avro = "0.17"
+parquet = { version = "54", features = ["arrow"], optional = true }
+arrow-array = { version = "54", optional = true }
+arrow-schema = { version = "54", optional = true }
+apache-avro = { version = "0.17", optional = true }
 toml = "0.8"
 dirs = "5.0"
 glob = "0.3"
 rayon = "1.10"
-ureq = "2.12"
+ureq = { version = "2.12", optional = true }
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
 axum = { version = "0.7", optional = true }
@@ -67,10 +67,14 @@ notify = { version = "6", optional = true }
 ctrlc = { version = "3", optional = true }
 
 [features]
-default = ["watch", "completions"]
+default = ["watch", "completions", "mcp", "parquet", "avro", "gsheets"]
 api = ["axum", "tower", "tower-http"]
 watch = ["dep:notify", "dep:ctrlc"]
 completions = ["dep:clap_complete"]
+mcp = ["dep:rmcp"]
+parquet = ["dep:parquet", "dep:arrow-array", "dep:arrow-schema"]
+avro = ["dep:apache-avro"]
+gsheets = ["dep:ureq"]
 
 # Smaller `target/` and fewer incremental rename failures when the disk is almost full.
 [profile.dev]
@@ -80,9 +84,28 @@ incremental = false
 incremental = false
 
 [dev-dependencies]
-criterion = "0.5"
 tempfile = "3.12"
 
-[[bench]]
-name = "performance"
-harness = false
+[[test]]
+name = "test_columnar"
+required-features = ["parquet", "avro"]
+
+[[test]]
+name = "test_converter"
+required-features = ["parquet", "avro"]
+
+[[test]]
+name = "test_traits"
+required-features = ["parquet", "avro"]
+
+[[test]]
+name = "test_google_sheets"
+required-features = ["gsheets"]
+
+[[test]]
+name = "generate_examples"
+required-features = ["parquet", "avro"]
+
+[[test]]
+name = "test_handler_registry"
+required-features = ["parquet", "avro"]

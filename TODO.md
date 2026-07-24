@@ -23,7 +23,8 @@
 
 ## XLS/XLSX manipulation (core)
 
-- [x] **Read parity**:
+- [x] **Native XLS (BIFF8) write from scratch** — implemented in `src/excel/xls_writer/` using only `std` (no `zip`, no `calamine` for the write path). Produces valid OLE2 / CFB containers with BIFF8 records. Supports multiple sheets, strings (ASCII + UTF-16, including astral codepoints), numbers, booleans, basic formulas (refs, ranges, arithmetic, comparisons, ~25 common functions), column widths, and auto-fit. Round-trips through `calamine`. Wired into `Converter::convert` for `*.xls` outputs and `ExcelHandler::write_xls` for the library API. CLI: `xls-rs convert --input foo.csv --output foo.xls`. Example: `examples/write_xls.rs`. 32 tests pass (20 unit + 12 integration).
+- [ ] **Native XLS (BIFF8) read from scratch** — currently we still use `calamine` to *read* XLS, even though we can write it from scratch. Implementing the CFB/BIFF8 parser would let us drop `calamine` as a dependency entirely.
   - [x] Range reads: CLI `read --range` and HTTP `api` read use `CellRange` + `filter_by_range` (same helper as columnar paths)
   - [x] Range reads identical across all backends where semantics differ today (`read_sheet_data` returns `Vec<Vec<String>>` directly for XLSX/XLS/ODS without CSV serialization round-trip; `read_range` also returns structured data)
   - [x] Sheet selection behavior consistent (default sheet, missing sheet errors)
@@ -205,7 +206,7 @@ Still open:
 - [x] **Modified Z-score outlier detection**: Robust outlier detection via `AnomalyMethod::ModifiedZScore { threshold }`. Uses median and MAD (Median Absolute Deviation).
 - [ ] **Isolation Forest**: Even a simple version. sklearn territory.
 - [x] **Sampling methods**: Stratified sampling (proportional allocation per stratum) and systematic sampling (every k-th row). CLI: `sample --method stratified --stratum-column <col>` and `sample --method systematic`. API: `DataOperations::stratified_sample(data, n, col, seed)`, `DataOperations::systematic_sample(data, n, seed)`.
-- [ ] **Reshape (wider / longer)**: `pivot_wider` and `pivot_longer` as first-class tidyverse-style operations. tidyr / dplyr.
+- [x] **Reshape (wider / longer)**: `pivot_wider` and `pivot_longer` as first-class tidyverse-style operations. CLI: `pivot-longer --cols Q1,Q2 --names-to quarter --values-to sales` and `pivot-wider --names-from quarter --values-from sales`. API: `DataOperations::pivot_longer(data, cols, names_to, values_to)`, `DataOperations::pivot_wider(data, names_from, values_from, id_cols)`. 9 tests pass.
 
 ### Distribution & deployment
 

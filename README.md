@@ -46,7 +46,7 @@ xls-rs is a command-line tool and embeddable Rust crate for spreadsheet and tabu
 |---|---:|---:|---|
 | CSV (`.csv`) | Yes | Yes | Formula-injection sanitization on safe write paths |
 | Excel (`.xlsx`) | Yes | Yes | Full native writer and advanced Excel features |
-| Legacy Excel (`.xls`) | Yes | No | Convert XLS input to CSV, XLSX, Parquet, or Avro |
+| Legacy Excel (`.xls`) | Yes | Yes | BIFF8 / OLE2 writer implemented from scratch with only `std`; supports multiple sheets, strings, numbers, booleans, basic formulas, and column widths |
 | OpenDocument (`.ods`) | Yes | No | Convert ODS input to a supported writable format |
 | Parquet (`.parquet`) | Yes | Yes | Apache Arrow-based columnar data |
 | Avro (`.avro`) | Yes | Yes | Schema generated from tabular headers |
@@ -55,6 +55,29 @@ xls-rs is a command-line tool and embeddable Rust crate for spreadsheet and tabu
 JSON, JSONL, Markdown, and HTML are available as presentation output formats for read and inspection commands. They are not first-class storage handlers.
 
 For operation-level parity across the library, CLI, and MCP surfaces, see [`TODO.md`](TODO.md) and [`src/capability_catalog.rs`](src/capability_catalog.rs).
+
+### XLS writer (BIFF8 / OLE2) — implemented from scratch
+
+The legacy `.xls` format (Microsoft Compound File Binary container + BIFF8 records) is implemented in pure Rust using only the standard library. No `zip`, no external file-format crates, and no platform-specific code are used in the write path.
+
+```rust
+use xls_rs::{XlsRowData, XlsWriter};
+
+let mut w = XlsWriter::new();
+w.add_sheet("People")?;
+let mut header = XlsRowData::new();
+header.add_string("Name");
+header.add_string("Age");
+w.add_row(header);
+let mut row = XlsRowData::new();
+row.add_string("Alice");
+row.add_number(30.0);
+row.add_bool(true);
+w.add_row(row);
+w.save("people.xls")?;
+```
+
+Currently supported: multiple sheets (31-char names, validated), strings (ASCII + UTF-16, including astral codepoints), numbers (`f64`), booleans, basic formulas (cell references, ranges, `+ - * / ^`, comparisons, function calls for SUM/AVERAGE/MIN/MAX/COUNT/IF/ABS/ROUND/IFERROR/VLOOKUP/etc.), column widths, and auto-fit. The output is verified to round-trip through `calamine` (used elsewhere in the crate) and any standard BIFF8 reader.
 
 ## Installation
 

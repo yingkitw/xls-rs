@@ -14,7 +14,7 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 ### I/O layer
 
 - `src/csv_handler.rs`: CSV read/write with formula-injection sanitization (`sanitize_csv_row` / `write_records_safe`).
-- `src/excel/`: Excel read (`calamine` based) + write (`XlsxWriter`, `StreamingXlsxWriter`). Includes `WriteMode` (Expand/Preserve/Overwrite). Writer supports charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping (outline), freeze panes, and auto-filter.
+- `src/excel/`: Excel read (`calamine` based for both `.xlsx` and `.xls`) + write (`XlsxWriter`, `StreamingXlsxWriter`, `XlsWriter`). Includes `WriteMode` (Expand/Preserve/Overwrite). Writer supports charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping (outline), freeze panes, and auto-filter. **XLS (BIFF8) write path is implemented from scratch in `src/excel/xls_writer/`** — see below.
 - `src/columnar/`: Parquet (`arrow` / `parquet`) and Avro (`apache-avro`) handlers.
 - `src/google_sheets.rs`: Google Sheets API v4 client for read/write/append/list; uses `ureq` for HTTP.
 - `src/converter.rs`: `Converter` — format-agnostic entry point that routes to the correct handler by extension.
@@ -62,6 +62,17 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 - `src/workflow.rs`: `WorkflowExecutor` for config-driven multi-step pipelines.
 - `src/plugins.rs`: Plugin registry for user-defined functions.
 
+### XLS (legacy BIFF8) writer — from scratch
+
+`src/excel/xls_writer/` implements the legacy `.xls` format using only `std`:
+
+- `cfb.rs` — OLE2 / Compound File Binary writer (v3, 512-byte sectors, mini-stream for streams < 4096 bytes, balanced directory tree, FAT / mini-FAT / DIFAT chains).
+- `biff.rs` — BIFF8 record encoder (BOF, CodePage, Window1, Font, XF, DateMode, BoundSheet, UseSelfs, Country, SST, Window2, BOF sheet, Dimensions, Window2, Row, cells, EOF).
+- `ptg.rs` — Basic Excel formula encoder (cell references, ranges, integer / float / boolean literals, arithmetic, comparisons, ~25 common functions).
+- `mod.rs` — `XlsWriter`, `XlsRowData`, `XlsSheetData` (mirrors the `XlsxWriter` API).
+
+The output is valid OLE2 / CFB + BIFF8. Round-tripped through `calamine` (still used for reading) in the integration tests under `tests/test_xls_writer.rs`.
+
 ## Data flow
 
 ```
@@ -76,6 +87,8 @@ Library API ──→ direct call ───────────────�
                                 ExcelHandler / Converter / DataOperations
                                             ↓
                                 calamine / csv / parquet / avro / ureq
+                                            ↓ (XLS write only)
+                                XlsWriter (src/excel/xls_writer/) — std only
 ```
 
 ## Testing layout

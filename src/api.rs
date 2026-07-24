@@ -270,6 +270,7 @@ async fn handle_write(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>, 
                 .write(&output, &data, options)
                 .map_err(ApiError)?;
         }
+        #[cfg(feature = "parquet")]
         "parquet" => {
             use crate::columnar::ParquetHandler;
             let handler = ParquetHandler::new();
@@ -288,6 +289,7 @@ async fn handle_write(Json(req): Json<ApiRequest>) -> Result<Json<ApiResponse>, 
                 .write(&output, body, col_names)
                 .map_err(ApiError)?;
         }
+        #[cfg(feature = "avro")]
         "avro" => {
             use crate::columnar::AvroHandler;
             let handler = AvroHandler::new();

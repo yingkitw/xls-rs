@@ -79,6 +79,9 @@ pub fn ensure_can_write(path: &str) -> anyhow::Result<()> {
 
 /// Validate input path for security (prevent directory traversal)
 pub fn ensure_safe_input(path: &str) -> anyhow::Result<()> {
+    if path == "-" {
+        return Ok(());
+    }
     if path.is_empty() {
         anyhow::bail!("Input path must not be empty");
     }

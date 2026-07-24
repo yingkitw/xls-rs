@@ -1,12 +1,17 @@
 //! Parquet and Avro file handling module
 
+#[cfg(feature = "avro")]
 mod avro;
+#[cfg(feature = "parquet")]
 mod parquet;
 
+#[cfg(feature = "avro")]
 pub use avro::AvroHandler;
+#[cfg(feature = "parquet")]
 pub use parquet::ParquetHandler;
 
 #[cfg(test)]
+#[cfg(all(feature = "parquet", feature = "avro"))]
 mod tests {
     use super::*;
     use std::fs;

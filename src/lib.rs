@@ -19,11 +19,14 @@ pub mod excel;
 pub mod format_detector;
 pub mod formula;
 pub mod geospatial;
+#[cfg(feature = "gsheets")]
 pub mod google_sheets;
 pub mod handler_registry;
 pub mod helpers;
 pub mod lineage;
+#[cfg(feature = "mcp")]
 mod mcp_enrichment;
+#[cfg(feature = "mcp")]
 pub mod mcp;
 #[cfg(test)]
 pub mod mocks;
@@ -48,7 +51,10 @@ pub mod capability_catalog;
 
 pub use anomaly::{Anomaly, AnomalyDetector, AnomalyMethod, AnomalyResult};
 pub use api::{ApiConfig, ApiRequest, ApiResponse, ApiServer};
-pub use columnar::{AvroHandler, ParquetHandler};
+#[cfg(feature = "avro")]
+pub use columnar::AvroHandler;
+#[cfg(feature = "parquet")]
+pub use columnar::ParquetHandler;
 pub use config::Config;
 pub use converter::Converter;
 pub use csv_handler::{
@@ -66,11 +72,13 @@ pub use excel::{
     ChartConfig, ColGroup, ConditionalFormat, ConditionalRule, DataChartType, DataValidation,
     ExcelHandler, FeatureDetector, FeatureSeverity, Hyperlink, MergeCell, PageMargins,
     PageOrientation, PrintSetup, RowData, RowGroup, Sparkline, SparklineGroup, SparklineType,
-    StreamingXlsxWriter, UnsupportedFeature, ValidationType, WriteMode, WriteOptions, XlsxWriter,
+    StreamingXlsxWriter, UnsupportedFeature, ValidationType, WriteMode, WriteOptions, XlsRowData,
+    XlsSheetData, XlsWriter, XlsxWriter,
 };
 pub use format_detector::DefaultFormatDetector;
 pub use formula::{FormulaEvaluator, FormulaResult};
 pub use geospatial::{Coordinate, GeospatialCalculator};
+#[cfg(feature = "gsheets")]
 pub use google_sheets::GoogleSheetsHandler;
 pub use handler_registry::HandlerRegistry;
 pub use helpers::{
@@ -80,6 +88,7 @@ pub use helpers::{
     validate_row_index, validate_column_index,
 };
 pub use lineage::{LineageNode, LineageTracker};
+#[cfg(feature = "mcp")]
 pub use mcp::XlsRsMcpServer;
 pub use operations::{
     AggFunc, DataOperations, JoinType, NoProgress, ProgressCallback, SortOrder, StderrProgress,

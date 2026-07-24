@@ -6,6 +6,7 @@ mod feature_detector;
 mod reader;
 pub mod types;
 mod writer;
+pub mod xls_writer;
 pub mod xlsx_writer;
 
 #[allow(unused_imports)]
@@ -17,6 +18,7 @@ pub use reader::ExcelHandler;
 pub use writer::WriteMode;
 #[allow(unused_imports)]
 pub use types::{CellStyle, WriteOptions};
+pub use xls_writer::{RowData as XlsRowData, SheetData as XlsSheetData, XlsWriter};
 pub use xlsx_writer::{
     CellComment, CellData, ColGroup, ConditionalFormat, ConditionalRule, DataValidation,
     Hyperlink, MergeCell, PageMargins, PageOrientation, PrintSetup, RowData, RowGroup, Sparkline,

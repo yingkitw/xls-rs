@@ -479,4 +479,154 @@ impl DataOperations {
 
         Ok(result)
     }
+
+    /// Pivot longer (tidyr-style): reshape wide data to long form.
+    ///
+    /// `cols` specifies which column indices to pivot into key-value pairs.
+    /// All other columns are kept as id columns. `names_to` and `values_to`
+    /// set the output column names for the key and value respectively.
+    pub fn pivot_longer(
+        &self,
+        data: &[Vec<String>],
+        cols: &[usize],
+        names_to: &str,
+        values_to: &str,
+    ) -> Result<Vec<Vec<String>>> {
+        use std::collections::HashSet;
+
+        if data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let header = &data[0];
+        let max_len = data.iter().map(|r| r.len()).max().unwrap_or(0);
+
+        let pivot_set: HashSet<usize> = cols.iter().copied().collect();
+        for &i in cols {
+            if i >= max_len {
+                anyhow::bail!("column index {} out of range", i);
+            }
+        }
+
+        let id_cols: Vec<usize> = (0..header.len()).filter(|i| !pivot_set.contains(i)).collect();
+
+        let mut out_header: Vec<String> = id_cols
+            .iter()
+            .map(|&i| {
+                header
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("col_{}", i))
+            })
+            .collect();
+        out_header.push(names_to.to_string());
+        out_header.push(values_to.to_string());
+
+        let mut result = vec![out_header];
+
+        for row in data.iter().skip(1) {
+            for &v in cols {
+                let mut new_row: Vec<String> = id_cols
+                    .iter()
+                    .map(|&i| row.get(i).cloned().unwrap_or_default())
+                    .collect();
+                let var_name = header
+                    .get(v)
+                    .cloned()
+                    .unwrap_or_else(|| format!("col_{}", v));
+                let val = row.get(v).cloned().unwrap_or_default();
+                new_row.push(var_name);
+                new_row.push(val);
+                result.push(new_row);
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Pivot wider (tidyr-style): reshape long data to wide form.
+    ///
+    /// `names_from` is the column index whose values become new column names.
+    /// `values_from` is the column index whose values fill the new columns.
+    /// `id_cols` lists the column indices that identify each output row;
+    /// if empty, all columns except `names_from` and `values_from` are used.
+    pub fn pivot_wider(
+        &self,
+        data: &[Vec<String>],
+        names_from: usize,
+        values_from: usize,
+        id_cols: &[usize],
+    ) -> Result<Vec<Vec<String>>> {
+        use std::collections::{BTreeSet, HashMap, HashSet};
+
+        if data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let header = &data[0];
+        let max_len = data.iter().map(|r| r.len()).max().unwrap_or(0);
+
+        if names_from >= max_len {
+            anyhow::bail!("names_from column index {} out of range", names_from);
+        }
+        if values_from >= max_len {
+            anyhow::bail!("values_from column index {} out of range", values_from);
+        }
+
+        let excluded: HashSet<usize> = [names_from, values_from].into_iter().collect();
+        let id_indices: Vec<usize> = if id_cols.is_empty() {
+            (0..header.len()).filter(|i| !excluded.contains(i)).collect()
+        } else {
+            for &i in id_cols {
+                if i >= max_len {
+                    anyhow::bail!("id column index {} out of range", i);
+                }
+            }
+            id_cols.to_vec()
+        };
+
+        let mut new_col_names: BTreeSet<String> = BTreeSet::new();
+        let mut id_values: BTreeSet<Vec<String>> = BTreeSet::new();
+        let mut cell_map: HashMap<(Vec<String>, String), String> = HashMap::new();
+
+        for row in data.iter().skip(1) {
+            let id_vals: Vec<String> = id_indices
+                .iter()
+                .map(|&i| row.get(i).cloned().unwrap_or_default())
+                .collect();
+            let col_name = row.get(names_from).cloned().unwrap_or_default();
+            let val = row.get(values_from).cloned().unwrap_or_default();
+
+            new_col_names.insert(col_name.clone());
+            id_values.insert(id_vals.clone());
+            cell_map.insert((id_vals, col_name), val);
+        }
+
+        let mut out_header: Vec<String> = id_indices
+            .iter()
+            .map(|&i| {
+                header
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("col_{}", i))
+            })
+            .collect();
+        out_header.extend(new_col_names.iter().cloned());
+
+        let mut result = vec![out_header];
+
+        for id_vals in &id_values {
+            let mut out_row = id_vals.clone();
+            for col_name in &new_col_names {
+                let val = cell_map
+                    .get(&(id_vals.clone(), col_name.clone()))
+                    .cloned()
+                    .unwrap_or_default();
+                out_row.push(val);
+            }
+            result.push(out_row);
+        }
+
+        Ok(result)
+    }
 }

@@ -545,6 +545,58 @@ impl PandasCommandHandler {
             .collect()
     }
 
+    /// Pivot longer (tidyr-style): reshape wide data to long form.
+    pub fn handle_pivot_longer(
+        &self,
+        input: String,
+        output: String,
+        cols: String,
+        names_to: String,
+        values_to: String,
+    ) -> Result<()> {
+        let converter = Converter::new();
+        let data = converter.read_any_data(&input, None)?;
+
+        let col_indices = self.parse_column_names(&data, &cols)?;
+
+        let ops = DataOperations::new();
+        let result = ops.pivot_longer(&data, &col_indices, &names_to, &values_to)?;
+
+        converter.write_any_data(&output, &result, None)?;
+        crate::cli::runtime::log(format!("Pivot longer; wrote {output}"));
+
+        Ok(())
+    }
+
+    /// Pivot wider (tidyr-style): reshape long data to wide form.
+    pub fn handle_pivot_wider(
+        &self,
+        input: String,
+        output: String,
+        names_from: String,
+        values_from: String,
+        id_cols: Option<String>,
+    ) -> Result<()> {
+        let converter = Converter::new();
+        let data = converter.read_any_data(&input, None)?;
+
+        let names_idx = self.find_column_index(&data, &names_from)?;
+        let values_idx = self.find_column_index(&data, &values_from)?;
+        let id_indices = if let Some(ids) = id_cols {
+            self.parse_column_names(&data, &ids)?
+        } else {
+            Vec::new()
+        };
+
+        let ops = DataOperations::new();
+        let result = ops.pivot_wider(&data, names_idx, values_idx, &id_indices)?;
+
+        converter.write_any_data(&output, &result, None)?;
+        crate::cli::runtime::log(format!("Pivot wider; wrote {output}"));
+
+        Ok(())
+    }
+
     /// Find column index by name
     fn find_column_index(&self, data: &[Vec<String>], column: &str) -> Result<usize> {
         if data.is_empty() {

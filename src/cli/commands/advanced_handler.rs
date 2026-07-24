@@ -120,6 +120,7 @@ impl AdvancedCommandHandler {
     }
 
     /// Handle the watch command
+    #[cfg(feature = "watch")]
     pub fn handle_watch(&self, input: String, command: String) -> Result<()> {
         advanced::handle_watch(input, command)
     }

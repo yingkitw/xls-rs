@@ -78,11 +78,13 @@ impl Converter {
         match format.as_str() {
             "ods" => self.excel_handler.read_ods_data(path, sheet_name),
             "xlsx" | "xls" => self.excel_handler.read_sheet_data(path, sheet_name),
+            #[cfg(feature = "parquet")]
             "parquet" => {
                 use crate::columnar::ParquetHandler;
                 let handler = ParquetHandler::new();
                 handler.read_with_headers(path)
             }
+            #[cfg(feature = "avro")]
             "avro" => {
                 use crate::columnar::AvroHandler;
                 let handler = AvroHandler::new();
@@ -111,7 +113,11 @@ impl Converter {
         let format = self.format_detector.detect_format(path)?;
 
         match format.as_str() {
-            "xlsx" | "xls" => {
+            "xls" => {
+                // Use the from-scratch XlsWriter (no zip, no calamine write).
+                self.excel_handler.write_xls(path, data, sheet_name)
+            }
+            "xlsx" => {
                 // Write to temp CSV then convert
                 let temp_csv = format!("{}.tmp.csv", path);
 
@@ -139,7 +145,26 @@ impl Converter {
                     }
                 }
             }
+            #[cfg(all(feature = "parquet", feature = "avro"))]
             "parquet" | "avro" => {
+                let options = DataWriteOptions {
+                    sheet_name: sheet_name.map(|s| s.to_string()),
+                    include_headers: true,
+                    ..Default::default()
+                };
+                self.registry.write(path, data, options)
+            }
+            #[cfg(all(feature = "parquet", not(feature = "avro")))]
+            "parquet" => {
+                let options = DataWriteOptions {
+                    sheet_name: sheet_name.map(|s| s.to_string()),
+                    include_headers: true,
+                    ..Default::default()
+                };
+                self.registry.write(path, data, options)
+            }
+            #[cfg(all(feature = "avro", not(feature = "parquet")))]
+            "avro" => {
                 let options = DataWriteOptions {
                     sheet_name: sheet_name.map(|s| s.to_string()),
                     include_headers: true,

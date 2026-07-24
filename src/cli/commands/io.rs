@@ -8,11 +8,12 @@ use xls_rs::{
     converter::Converter,
     excel::ExcelHandler,
     formula::FormulaEvaluator,
-    google_sheets::GoogleSheetsHandler,
     handler_registry::HandlerRegistry,
     helpers::filter_by_range,
     CellRange,
 };
+#[cfg(feature = "gsheets")]
+use xls_rs::google_sheets::GoogleSheetsHandler;
 use anyhow::{Context, Result};
 
 /// I/O command handler
@@ -147,6 +148,7 @@ impl IoCommandHandler {
     /// Handle the serve command
     ///
     /// Starts the MCP server for model context protocol.
+    #[cfg(feature = "mcp")]
     pub fn handle_serve(&self) -> Result<()> {
         // MCP server requires async runtime
         // For now, provide instructions
@@ -257,6 +259,7 @@ impl IoCommandHandler {
     }
 
     /// Handle the GSheetsList command
+    #[cfg(feature = "gsheets")]
     pub fn handle_gsheets_list(&self, spreadsheet: String) -> Result<()> {
         let config_path = crate::cli::runtime::get()
             .config_path
@@ -283,6 +286,7 @@ impl IoCommandHandler {
     }
 
     /// Handle the GSheetsAuth command
+    #[cfg(feature = "gsheets")]
     pub fn handle_gsheets_auth(&self) -> Result<()> {
         let config_path = crate::cli::runtime::get()
             .config_path
@@ -337,6 +341,7 @@ impl IoCommandHandler {
     }
 
     /// Handle the GSheetsSetDefault command
+    #[cfg(feature = "gsheets")]
     pub fn handle_gsheets_set_default(&self, spreadsheet: String) -> Result<()> {
         let config_path = crate::cli::runtime::get()
             .config_path

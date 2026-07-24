@@ -5,6 +5,7 @@ use std::io::BufWriter;
 
 use super::reader::ExcelHandler;
 use super::types::WriteOptions;
+use super::xls_writer::{RowData as XlsRowData, XlsWriter};
 use super::xlsx_writer::{CellData, RowData, XlsxWriter};
 use crate::traits::{DataWriteOptions, DataWriter};
 
@@ -433,4 +434,82 @@ impl DataWriter for ExcelHandler {
         let path_lower = path.to_lowercase();
         path_lower.ends_with(".xlsx")
     }
+}
+
+impl ExcelHandler {
+    /// Write data to an XLS (legacy BIFF8) file using the from-scratch
+    /// `XlsWriter`. No `zip`, `calamine`, or other external dependencies are
+    /// used for the write path.
+    pub fn write_xls(&self, path: &str, data: &[Vec<String>], sheet_name: Option<&str>) -> Result<()> {
+        let mut writer = XlsWriter::new();
+        let name = sheet_name.unwrap_or("Sheet1");
+        writer.add_sheet(name)?;
+        writer.add_data(data);
+        for (col_idx, w) in auto_widths(data).into_iter().enumerate() {
+            writer.set_column_width(col_idx, w);
+        }
+        writer.save(path)?;
+        Ok(())
+    }
+
+    /// Write a 2D grid to an XLS file at the given offset (0-based).
+    pub fn write_xls_range(
+        &self,
+        path: &str,
+        data: &[Vec<String>],
+        start_row: u32,
+        start_col: u16,
+        sheet_name: Option<&str>,
+    ) -> Result<()> {
+        let mut writer = XlsWriter::new();
+        let name = sheet_name.unwrap_or("Sheet1");
+        writer.add_sheet(name)?;
+        for _ in 0..start_row {
+            writer.add_row(XlsRowData::new());
+        }
+        for row in data {
+            let mut r = XlsRowData::new();
+            for _ in 0..start_col {
+                r.add_empty();
+            }
+            for cell in row {
+                classify_xls_cell(&mut r, cell);
+            }
+            writer.add_row(r);
+        }
+        writer.save(path)?;
+        Ok(())
+    }
+}
+
+fn classify_xls_cell(row: &mut XlsRowData, cell: &str) {
+    if cell.is_empty() {
+        row.add_empty();
+    } else if let Some(stripped) = cell.strip_prefix('=') {
+        row.add_formula(stripped);
+    } else if let Ok(n) = cell.parse::<f64>() {
+        if n.is_finite() {
+            row.add_number(n);
+            return;
+        }
+        row.add_string(cell);
+    } else if matches!(cell.to_ascii_uppercase().as_str(), "TRUE" | "FALSE") {
+        row.add_bool(cell.eq_ignore_ascii_case("TRUE"));
+    } else {
+        row.add_string(cell);
+    }
+}
+
+fn auto_widths(data: &[Vec<String>]) -> Vec<f64> {
+    let ncols = data.first().map(|r| r.len()).unwrap_or(0);
+    (0..ncols)
+        .map(|col_idx| {
+            let max_width = data
+                .iter()
+                .map(|row| row.get(col_idx).map(|s| s.len()).unwrap_or(0))
+                .max()
+                .unwrap_or(10);
+            (max_width + 2) as f64
+        })
+        .collect()
 }

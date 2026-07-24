@@ -36,14 +36,18 @@ impl TransformCommandHandler {
         let col_idx = self.find_column_index(&data, &column)?;
         validation::validate_column_index(&data, col_idx)?;
 
-        // Sort data
+        // Sort data (preserve header row at top)
         let ops = DataOperations::new();
         let order = if ascending {
             SortOrder::Ascending
         } else {
             SortOrder::Descending
         };
-        ops.sort_by_column(&mut data, col_idx, order)?;
+        if data.len() > 1 {
+            let mut body = data.split_off(1);
+            ops.sort_by_column(&mut body, col_idx, order)?;
+            data.append(&mut body);
+        }
 
         // Write output
         converter.write_any_data(&output, &data, None)?;

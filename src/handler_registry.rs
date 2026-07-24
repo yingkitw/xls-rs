@@ -1,9 +1,13 @@
 //! Handler registry for unified file format handling (DRY, KISS, SOC)
 
-use crate::columnar::{AvroHandler, ParquetHandler};
 use crate::csv_handler::CsvHandler;
 use crate::excel::ExcelHandler;
 use crate::format_detector::DefaultFormatDetector;
+#[cfg(feature = "parquet")]
+use crate::columnar::ParquetHandler;
+#[cfg(feature = "avro")]
+use crate::columnar::AvroHandler;
+#[cfg(feature = "gsheets")]
 use crate::google_sheets::GoogleSheetsHandler;
 use crate::traits::FormatDetector;
 use crate::traits::{DataReader, DataWriteOptions, DataWriter, FileHandler};
@@ -28,8 +32,11 @@ impl HandlerRegistry {
         match format.as_str() {
             "csv" => Ok(Box::new(CsvHandler::new())),
             "xlsx" | "xls" | "ods" => Ok(Box::new(ExcelHandler::new())),
+            #[cfg(feature = "parquet")]
             "parquet" => Ok(Box::new(ParquetHandler::new())),
+            #[cfg(feature = "avro")]
             "avro" => Ok(Box::new(AvroHandler::new())),
+            #[cfg(feature = "gsheets")]
             "gsheet" => Ok(Box::new(GoogleSheetsHandler::new())),
             _ => anyhow::bail!("Unsupported format: {format}"),
         }
@@ -42,8 +49,11 @@ impl HandlerRegistry {
         match format.as_str() {
             "csv" => Ok(Box::new(CsvHandler::new())),
             "xlsx" | "xls" | "ods" => Ok(Box::new(ExcelHandler::new())),
+            #[cfg(feature = "parquet")]
             "parquet" => Ok(Box::new(ParquetHandler::new())),
+            #[cfg(feature = "avro")]
             "avro" => Ok(Box::new(AvroHandler::new())),
+            #[cfg(feature = "gsheets")]
             "gsheet" => Ok(Box::new(GoogleSheetsHandler::new())),
             _ => anyhow::bail!("Unsupported format: {format}"),
         }
@@ -55,8 +65,11 @@ impl HandlerRegistry {
 
         match format.as_str() {
             "csv" => Ok(Box::new(CsvHandler::new())),
+            #[cfg(feature = "parquet")]
             "parquet" => Ok(Box::new(ParquetHandler::new())),
+            #[cfg(feature = "avro")]
             "avro" => Ok(Box::new(AvroHandler::new())),
+            #[cfg(feature = "gsheets")]
             "gsheet" => Ok(Box::new(GoogleSheetsHandler::new())),
             _ => anyhow::bail!("Unsupported format: {format}"),
         }

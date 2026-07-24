@@ -11,6 +11,7 @@ pub mod schema;
 pub mod to_sql;
 pub mod utils;
 pub mod validation;
+#[cfg(feature = "watch")]
 pub mod watch;
 pub mod examples;
 
@@ -29,5 +30,6 @@ pub use utils::{
 #[cfg(feature = "completions")]
 pub use utils::handle_completions;
 pub use validation::handle_validate;
+#[cfg(feature = "watch")]
 pub use watch::handle_watch;
 pub use examples::handle_examples_generate;

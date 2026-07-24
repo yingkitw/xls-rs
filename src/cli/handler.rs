@@ -72,6 +72,7 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 sheet,
             } => self.io.handle_formula(input, output, formula, cell, sheet),
 
+            #[cfg(feature = "mcp")]
             Commands::Serve => self.io.handle_serve(),
 
             Commands::Sheets { input } => self.io.handle_sheets(input),
@@ -261,6 +262,30 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 value_vars,
             } => self.pandas.handle_melt(input, output, id_vars, value_vars),
 
+            Commands::PivotLonger {
+                input,
+                output,
+                cols,
+                names_to,
+                values_to,
+            } => self
+                .pandas
+                .handle_pivot_longer(input, output, cols, names_to, values_to),
+
+            Commands::PivotWider {
+                input,
+                output,
+                names_from,
+                values_from,
+                id_cols,
+            } => self.pandas.handle_pivot_wider(
+                input,
+                output,
+                names_from,
+                values_from,
+                id_cols,
+            ),
+
             // Advanced commands
             Commands::Schema { input, output } => self.advanced.handle_schema(input, output),
 
@@ -393,8 +418,11 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 .handle_apply_formula_range(input, output, formula, range, sheet),
 
             // Google Sheets commands
+            #[cfg(feature = "gsheets")]
             Commands::GSheetsList { spreadsheet } => self.io.handle_gsheets_list(spreadsheet),
+            #[cfg(feature = "gsheets")]
             Commands::GSheetsAuth => self.io.handle_gsheets_auth(),
+            #[cfg(feature = "gsheets")]
             Commands::GSheetsSetDefault { spreadsheet } => {
                 self.io.handle_gsheets_set_default(spreadsheet)
             }
