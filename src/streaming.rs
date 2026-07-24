@@ -5,7 +5,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use tokio::sync::broadcast;
 
 /// Streaming data chunk
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,32 +108,6 @@ impl StreamingProcessor {
         }
 
         Ok(total_chunks)
-    }
-}
-
-/// Broadcast-based streaming channel
-pub struct StreamingChannel {
-    sender: broadcast::Sender<DataChunk>,
-    receiver: broadcast::Receiver<DataChunk>,
-}
-
-impl StreamingChannel {
-    pub fn new(buffer: usize) -> Self {
-        let (sender, receiver) = broadcast::channel(buffer);
-        Self { sender, receiver }
-    }
-
-    pub fn send(&self, chunk: DataChunk) -> Result<usize> {
-        self.sender
-            .send(chunk)
-            .map_err(|e| anyhow::anyhow!("Failed to send chunk: {}", e))
-    }
-
-    pub async fn receive(&mut self) -> Result<DataChunk> {
-        self.receiver
-            .recv()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to receive chunk: {}", e))
     }
 }
 

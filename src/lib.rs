@@ -97,7 +97,7 @@ pub use plugins::{FunctionMetadata, PluginFunction, PluginMetadata, PluginRegist
 pub use profiling::{ColumnProfile, DataProfile, DataProfiler};
 pub use quality::{IssueSeverity, QualityIssue, QualityReport, QualityReportGenerator};
 pub use streaming::{
-    CsvStreamingReader, DataChunk, StreamingChannel, StreamingDataReader, StreamingDataWriter,
+    CsvStreamingReader, DataChunk, StreamingDataReader, StreamingDataWriter,
     StreamingProcessor,
 };
 pub use streaming_ops::{get_info, head, infer_schema, tail, ColumnType, Schema};
