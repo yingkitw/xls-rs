@@ -2,12 +2,14 @@
 
 mod cell_typer;
 pub mod chart;
-mod feature_detector;
+pub mod feature_detector;
 mod reader;
 pub mod types;
 mod writer;
 pub mod xls_writer;
+pub mod xls_reader;
 pub mod xlsx_writer;
+pub mod template;
 
 #[allow(unused_imports)]
 pub use cell_typer::{add_cell_to_row, add_cells_to_row, classify_cell};
@@ -25,3 +27,4 @@ pub use xlsx_writer::{
     SparklineGroup, SparklineType, ValidationType, XlsxWriter,
     streaming::StreamingXlsxWriter,
 };
+pub use template::{PlaceholderInfo, TemplateData, TemplateFiller, TemplateReader};

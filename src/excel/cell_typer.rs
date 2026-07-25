@@ -36,13 +36,14 @@ pub fn classify_cell(value: &str) -> CellData {
 /// Add a cell to a row with consistent typing
 ///
 /// This is a convenience method that combines cell type detection with row data addition.
+/// Inlines the classification to avoid a double allocation on the string path.
 pub fn add_cell_to_row(row: &mut RowData, value: &str) {
-    let cell = classify_cell(value);
-    match cell {
-        CellData::Number(n) => row.add_number(n),
-        CellData::String(s) => row.add_string(&s),
-        CellData::Empty => row.add_empty(),
-        CellData::Formula(f) => row.add_formula(&f),
+    if let Ok(num) = value.parse::<f64>() {
+        row.add_number(num);
+    } else if !value.is_empty() {
+        row.add_string(value);
+    } else {
+        row.add_empty();
     }
 }
 

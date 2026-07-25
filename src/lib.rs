@@ -71,9 +71,10 @@ pub use excel::{
     add_cell_to_row, add_cells_to_row, classify_cell, CellComment, CellData, CellStyle,
     ChartConfig, ColGroup, ConditionalFormat, ConditionalRule, DataChartType, DataValidation,
     ExcelHandler, FeatureDetector, FeatureSeverity, Hyperlink, MergeCell, PageMargins,
-    PageOrientation, PrintSetup, RowData, RowGroup, Sparkline, SparklineGroup, SparklineType,
-    StreamingXlsxWriter, UnsupportedFeature, ValidationType, WriteMode, WriteOptions, XlsRowData,
-    XlsSheetData, XlsWriter, XlsxWriter,
+    PageOrientation, PlaceholderInfo, PrintSetup, RowData, RowGroup, Sparkline, SparklineGroup,
+    SparklineType, StreamingXlsxWriter, TemplateData, TemplateFiller, TemplateReader,
+    UnsupportedFeature, ValidationType, WriteMode, WriteOptions, XlsRowData, XlsSheetData, XlsWriter,
+    XlsxWriter,
 };
 pub use format_detector::DefaultFormatDetector;
 pub use formula::{FormulaEvaluator, FormulaResult};

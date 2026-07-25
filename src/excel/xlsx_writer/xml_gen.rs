@@ -4,7 +4,8 @@
 //! Microsoft Excel, Apple Numbers, and LibreOffice Calc.
 
 use anyhow::Result;
-use std::io::{Seek, Write};
+use std::io::{Seek, Write as IoWrite};
+use std::fmt::Write as FmtWrite;
 use zip::ZipWriter;
 use zip::write::FileOptions;
 
@@ -13,8 +14,20 @@ use super::WriteOptions;
 
 /// Escape special XML characters
 pub fn escape_xml(s: &str) -> String {
-    let extra = s.bytes().filter(|&b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\'')).count();
-    let mut out = String::with_capacity(s.len() + extra * 4);
+    let mut out = String::new();
+    escape_xml_into(s, &mut out);
+    out
+}
+
+/// Escape special XML characters directly into a buffer, avoiding an
+/// intermediate allocation. Fast path: strings with no special characters
+/// are copied verbatim.
+fn escape_xml_into(s: &str, out: &mut String) {
+    let needs_escape = s.bytes().any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\''));
+    if !needs_escape {
+        out.push_str(s);
+        return;
+    }
     for c in s.chars() {
         match c {
             '&' => out.push_str("&amp;"),
@@ -25,7 +38,6 @@ pub fn escape_xml(s: &str) -> String {
             _ => out.push(c),
         }
     }
-    out
 }
 
 /// Convert column number to Excel column letter (1=A, 26=Z, 27=AA, etc.)
@@ -43,8 +55,30 @@ pub fn col_num_to_letter(col: usize) -> String {
     result
 }
 
+/// Convert column number to Excel column letters into a reusable buffer,
+/// avoiding per-cell allocation. Returns a borrow of `buf`.
+fn col_num_to_letter_into(col: usize, buf: &mut String) {
+    buf.clear();
+    if col == 0 {
+        buf.push('A');
+        return;
+    }
+    let mut col = col;
+    let mut tmp = [0u8; 3];
+    let mut len = 0;
+    while col > 0 {
+        col -= 1;
+        tmp[len] = b'A' + (col % 26) as u8;
+        len += 1;
+        col /= 26;
+    }
+    for i in (0..len).rev() {
+        buf.push(tmp[i] as char);
+    }
+}
+
 /// Add [Content_Types].xml
-pub fn add_content_types<W: Write + Seek>(
+pub fn add_content_types<W: IoWrite + Seek>(
     zip: &mut ZipWriter<W>,
     sheet_count: usize,
 ) -> Result<()> {
@@ -53,7 +87,7 @@ pub fn add_content_types<W: Write + Seek>(
 }
 
 /// Add [Content_Types].xml with optional chart/drawing/comment content types
-pub fn add_content_types_ext<W: Write + Seek>(
+pub fn add_content_types_ext<W: IoWrite + Seek>(
     zip: &mut ZipWriter<W>,
     sheet_count: usize,
     chart_flags: &[bool],
@@ -89,7 +123,7 @@ pub fn add_content_types_ext<W: Write + Seek>(
 }
 
 /// Add _rels/.rels
-pub fn add_rels<W: Write + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
+pub fn add_rels<W: IoWrite + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
     let xml = concat!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
         r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
@@ -104,7 +138,7 @@ pub fn add_rels<W: Write + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
 }
 
 /// Add xl/workbook.xml
-pub fn add_workbook<W: Write + Seek>(
+pub fn add_workbook<W: IoWrite + Seek>(
     zip: &mut ZipWriter<W>,
     sheets: &[SheetData],
 ) -> Result<()> {
@@ -153,7 +187,7 @@ pub fn add_workbook<W: Write + Seek>(
 }
 
 /// Add xl/_rels/workbook.xml.rels
-pub fn add_workbook_rels<W: Write + Seek>(
+pub fn add_workbook_rels<W: IoWrite + Seek>(
     zip: &mut ZipWriter<W>,
     sheet_count: usize,
 ) -> Result<()> {
@@ -184,7 +218,7 @@ pub fn add_workbook_rels<W: Write + Seek>(
 }
 
 /// Add xl/styles.xml
-pub fn add_styles<W: Write + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
+pub fn add_styles<W: IoWrite + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
     let xml = concat!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
         r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#,
@@ -225,7 +259,7 @@ pub fn add_styles<W: Write + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
 }
 
 /// Add xl/theme/theme1.xml
-pub fn add_theme<W: Write + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
+pub fn add_theme<W: IoWrite + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
     // Minimal but complete Office theme that Excel/Numbers accept
     let xml = concat!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
@@ -267,7 +301,7 @@ pub fn add_theme<W: Write + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
 }
 
 /// Add worksheet XML
-pub fn add_worksheet<W: Write + Seek>(
+pub fn add_worksheet<W: IoWrite + Seek>(
     zip: &mut ZipWriter<W>,
     idx: usize,
     sheet: &SheetData,
@@ -375,6 +409,7 @@ pub fn add_worksheet<W: Write + Seek>(
 
     // Sheet data
     xml.push_str(r#"<sheetData>"#);
+    let mut col_buf = String::with_capacity(3);
     for (row_idx, row) in sheet.rows.iter().enumerate() {
         let outline_attr = if row_outline[row_idx] > 0 {
             format!(r#" outlineLevel="{}""#, row_outline[row_idx])
@@ -386,33 +421,27 @@ pub fn add_worksheet<W: Write + Seek>(
         } else {
             String::new()
         };
-        xml.push_str(&format!(r#"<row r="{}{}{}">"#, row_idx + 1, outline_attr, collapsed_attr));
+        let _ = write!(xml, r#"<row r="{}{}{}">"#, row_idx + 1, outline_attr, collapsed_attr);
         for (col_idx, cell) in row.cells.iter().enumerate() {
-            let col_ref = col_num_to_letter(col_idx + 1);
-            let cell_ref = format!("{}{}", col_ref, row_idx + 1);
             match cell {
+                CellData::Empty => continue,
                 CellData::String(s) => {
-                    xml.push_str(&format!(
-                        r#"<c r="{}" t="inlineStr"><is><t>{}</t></is></c>"#,
-                        cell_ref,
-                        escape_xml(s)
-                    ));
+                    col_num_to_letter_into(col_idx + 1, &mut col_buf);
+                    let _ = write!(xml, r#"<c r="{}{}" t="inlineStr"><is><t>"#, col_buf, row_idx + 1);
+                    escape_xml_into(s, &mut xml);
+                    xml.push_str(r#"</t></is></c>"#);
                 }
                 CellData::Number(n) => {
-                    xml.push_str(&format!(
-                        r#"<c r="{}" t="n"><v>{}</v></c>"#,
-                        cell_ref, n
-                    ));
+                    col_num_to_letter_into(col_idx + 1, &mut col_buf);
+                    let _ = write!(xml, r#"<c r="{}{}" t="n"><v>{}</v></c>"#, col_buf, row_idx + 1, n);
                 }
                 CellData::Formula(f) => {
                     let formula = f.strip_prefix('=').unwrap_or(f);
-                    xml.push_str(&format!(
-                        r#"<c r="{}"><f>{}</f></c>"#,
-                        cell_ref,
-                        escape_xml(formula)
-                    ));
+                    col_num_to_letter_into(col_idx + 1, &mut col_buf);
+                    let _ = write!(xml, r#"<c r="{}{}"><f>"#, col_buf, row_idx + 1);
+                    escape_xml_into(formula, &mut xml);
+                    xml.push_str(r#"</f></c>"#);
                 }
-                CellData::Empty => {}
             }
         }
         xml.push_str(r#"</row>"#);
@@ -650,7 +679,7 @@ fn generate_page_setup_xml(ps: &super::types::PrintSetup) -> String {
     format!(r#"<pageSetup{} />"#, attrs)
 }
 
-fn add_worksheet_rels<W: Write + Seek>(
+fn add_worksheet_rels<W: IoWrite + Seek>(
     zip: &mut ZipWriter<W>,
     idx: usize,
     has_chart: bool,
@@ -699,7 +728,7 @@ fn add_worksheet_rels<W: Write + Seek>(
     Ok(())
 }
 
-fn add_comments_xml<W: Write + Seek>(
+fn add_comments_xml<W: IoWrite + Seek>(
     zip: &mut ZipWriter<W>,
     idx: usize,
     comments: &[super::types::CellComment],

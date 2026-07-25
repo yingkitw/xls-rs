@@ -24,7 +24,7 @@
 ## XLS/XLSX manipulation (core)
 
 - [x] **Native XLS (BIFF8) write from scratch** — implemented in `src/excel/xls_writer/` using only `std` (no `zip`, no `calamine` for the write path). Produces valid OLE2 / CFB containers with BIFF8 records. Supports multiple sheets, strings (ASCII + UTF-16, including astral codepoints), numbers, booleans, basic formulas (refs, ranges, arithmetic, comparisons, ~25 common functions), column widths, and auto-fit. Round-trips through `calamine`. Wired into `Converter::convert` for `*.xls` outputs and `ExcelHandler::write_xls` for the library API. CLI: `xls-rs convert --input foo.csv --output foo.xls`. Example: `examples/write_xls.rs`. 32 tests pass (20 unit + 12 integration).
-- [ ] **Native XLS (BIFF8) read from scratch** — currently we still use `calamine` to *read* XLS, even though we can write it from scratch. Implementing the CFB/BIFF8 parser would let us drop `calamine` as a dependency entirely.
+- [x] **Native XLS (BIFF8) read from scratch** — implemented in `src/excel/xls_reader/` using only `std`. Parses CFB/BIFF8 format and returns structured cell data with full API compatibility. Supports strings, numbers, booleans, formulas, empty cells, and RK compressed numbers. Integrated into `ExcelHandler` for automatic `.xls` file handling. Verified end-to-end with native writer (write → read → convert). 11 unit tests pass.
   - [x] Range reads: CLI `read --range` and HTTP `api` read use `CellRange` + `filter_by_range` (same helper as columnar paths)
   - [x] Range reads identical across all backends where semantics differ today (`read_sheet_data` returns `Vec<Vec<String>>` directly for XLSX/XLS/ODS without CSV serialization round-trip; `read_range` also returns structured data)
   - [x] Sheet selection behavior consistent (default sheet, missing sheet errors)
@@ -129,7 +129,7 @@
 
 ### Excel fidelity (openpyxl / excelize / SheetJS gaps)
 
-- [ ] **Template-based generation**: Read an existing `.xlsx` as a template, fill data into named ranges / placeholder cells, write back. Common enterprise use case (invoices, reports) that openpyxl and excelize handle natively.
+- [x] **Template-based generation**: Read an existing `.xlsx` as a template, fill data into named ranges / placeholder cells, write back. Implemented in `src/excel/template/` with `TemplateReader` (detects `{{placeholder}}` cells via calamine) and `TemplateFiller` (replaces placeholders and writes via `XlsxWriter`). API: `TemplateFiller::fill_from_file(template, output, &values, sheet)`. 7 unit tests pass.
 - [ ] **Read existing styles / images / charts**: Currently we write styles/charts but cannot read them back from existing files. Needed for template workflows and round-trip fidelity.
 - [ ] **`.xlsm` (macro-enabled) read/write**: Preserve VBA macros on copy/edit. openpyxl supports this in "keep_vba" mode; SheetJS preserves `vbaProject.bin`.
 - [ ] **Password-protected Excel**: Support reading `.xlsx` encrypted with a password (msoffcrypto-style). Excelize and openpyxl both support this.
@@ -149,6 +149,9 @@
 
 **Recently optimized**:
 - [x] **`escape_xml` rewrite**: Eliminated per-character `Vec` allocations (from `flat_map` + `collect` to pre-allocated `String` with capacity). Reduces allocations by ~O(n) per string cell in XLSX write.
+- [x] **`escape_xml_into` zero-copy fast path**: Added buffer-direct escaping with early-exit for strings with no special chars; called from the XLSX cell loop, eliminating the intermediate `String` allocation per cell entirely.
+- [x] **XLSX cell-writing loop**: Replaced per-cell `format!` + `col_num_to_letter` (2 `String` allocations/cell) with reusable `col_num_to_letter_into` buffer + `write!` into the output XML. ~O(cells) fewer allocations.
+- [x] **`add_cell_to_row` double-allocation fix**: Inlined cell classification so string cells allocate once instead of twice (was: `classify_cell` → `to_string` → `add_string` → `to_string`).
 - [x] **`describe()` sort-once**: Replaced 7 sorts per column (one per percentile) with a single sort via `ColumnStats` struct. Sort complexity reduced from O(7n log n) to O(n log n) per column.
 - [x] **`sort_unstable` profiling**: Switched `calculate_numeric_stats` and `calculate_length_stats` from `sort_by` to `sort_unstable_by` for faster constant factor.
 - [x] **Streaming `tail()` ring buffer**: Replaced front-removal from `Vec` with `VecDeque`, reducing last-N row retention from O(rows × N) shifting to O(rows).
