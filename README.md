@@ -31,7 +31,7 @@ xls-rs is a command-line tool and embeddable Rust crate for spreadsheet and tabu
 - **Production-oriented CSV safety:** formula-injection sanitization on write paths and explicit overwrite guards.
 - **Large-file support:** buffered and chunked CSV readers, writers, and streaming commands.
 - **AI integration:** 18 MCP tools, including capability discovery, conversion, filtering, validation, profiling, and Excel authoring.
-- **No Microsoft Excel dependency:** reads use Calamine and writes use native Rust format handlers.
+- **No Microsoft Excel dependency:** reads and writes use native Rust format handlers.
 
 ### Who is it for?
 
@@ -77,7 +77,7 @@ w.add_row(row);
 w.save("people.xls")?;
 ```
 
-Currently supported: multiple sheets (31-char names, validated), strings (ASCII + UTF-16, including astral codepoints), numbers (`f64`), booleans, basic formulas (cell references, ranges, `+ - * / ^`, comparisons, function calls for SUM/AVERAGE/MIN/MAX/COUNT/IF/ABS/ROUND/IFERROR/VLOOKUP/etc.), column widths, and auto-fit. The output is verified to round-trip through `calamine` (used elsewhere in the crate) and any standard BIFF8 reader.
+Currently supported: multiple sheets (31-char names, validated), strings (ASCII + UTF-16, including astral codepoints), numbers (`f64`), booleans, basic formulas (cell references, ranges, `+ - * / ^`, comparisons, function calls for SUM/AVERAGE/MIN/MAX/COUNT/IF/ABS/ROUND/IFERROR/VLOOKUP/etc.), column widths, and auto-fit. The output is verified to round-trip through our native `XlsReader` and any standard BIFF8 reader.
 
 ## Installation
 
@@ -266,7 +266,7 @@ xls-rs includes buffered CSV I/O, chunked streaming, a bounded-memory `tail`, ca
 cargo bench --bench performance
 ```
 
-For large CSV files, use `xls-rs stream` or the `CsvStreamingReader` API. XLSX reads currently materialize worksheets through Calamine.
+For large CSV files, use `xls-rs stream` or the `CsvStreamingReader` API. XLSX reads currently materialize worksheets through our native reader.
 
 ## Current limitations
 
@@ -287,11 +287,11 @@ Yes. Run `xls-rs convert --input data.csv --output data.xlsx` or call `Converter
 
 ### Can xls-rs read XLSX files without Microsoft Excel?
 
-Yes. xls-rs reads Excel files natively through Calamine and does not require Office, LibreOffice, or a JVM.
+Yes. xls-rs reads Excel files natively and does not require Office, LibreOffice, or a JVM.
 
 ### Is xls-rs an alternative to openpyxl, Calamine, xsv, or Polars?
 
-It overlaps with each tool but has a different scope. Compared with Calamine, xls-rs adds native XLSX writing, conversion, analytics, CLI, and MCP surfaces. Compared with openpyxl, it is Rust-native and supports Parquet and Avro, but has less template and macro fidelity. Compared with Polars or xsv, it focuses more on spreadsheet formats and Excel authoring than on a full lazy query engine.
+It overlaps with each tool but has a different scope. Compared with Calamine or other read-only libraries, xls-rs adds native XLSX writing, conversion, analytics, CLI, and MCP surfaces. Compared with openpyxl, it is Rust-native and supports Parquet and Avro, but has less template and macro fidelity. Compared with Polars or xsv, it focuses more on spreadsheet formats and Excel authoring than on a full lazy query engine.
 
 ### Does xls-rs support pandas-style DataFrame operations?
 

@@ -1,13 +1,10 @@
 //! Integration tests for the from-scratch XLS (BIFF8) writer.
 //!
-//! These tests use `calamine` (already a workspace dependency) to read back
-//! files produced by `XlsWriter`, exercising the BIFF8 / OLE2 byte stream
-//! we generate in `src/excel/xls_writer/` without ever touching the `zip`
-//! crate or any other external file-format library.
+//! These tests use the native `XlsReader` to read back files produced by
+//! `XlsWriter`, exercising the BIFF8 / OLE2 byte stream we generate in
+//! `src/excel/xls_writer/` without any external spreadsheet library.
 
-use calamine::{open_workbook, open_workbook_auto, Data, Reader, Xls};
-use std::fs::File;
-use std::io::{BufReader, Write};
+use xls_rs::excel::xls_reader::XlsReader;
 use xls_rs::{XlsRowData, XlsWriter};
 
 fn make_writer() -> XlsWriter {
@@ -41,11 +38,11 @@ fn round_trip_strings() {
     w.add_row(r);
     w.save(path.to_str().unwrap()).unwrap();
 
-    let mut wb = open_workbook_auto(path.to_str().unwrap()).expect("calamine must open our xls");
+    let wb = XlsReader::from_path(path.to_str().unwrap()).expect("native reader must open our xls");
     let names = wb.sheet_names();
     assert_eq!(names, vec!["Greetings".to_string()]);
-    let range = wb.worksheet_range("Greetings").expect("sheet present");
-    let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(cell_to_string).collect()).collect();
+    let sheet = wb.get_sheet_by_name("Greetings").expect("sheet present");
+    let rows: Vec<Vec<String>> = sheet.to_string_vec();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0], vec!["hello", "world", "héllo, wörld"]);
 }
@@ -69,9 +66,9 @@ fn round_trip_numbers_and_bools() {
     w.add_row(r2);
     w.save(path.to_str().unwrap()).unwrap();
 
-    let mut wb = open_workbook_auto(path.to_str().unwrap()).expect("calamine must open our xls");
-    let range = wb.worksheet_range("Data").expect("sheet present");
-    let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(cell_to_string).collect()).collect();
+    let wb = XlsReader::from_path(path.to_str().unwrap()).expect("native reader must open our xls");
+    let sheet = wb.get_sheet_by_name("Data").expect("sheet present");
+    let rows: Vec<Vec<String>> = sheet.to_string_vec();
     assert_eq!(rows[0][0], "1");
     assert_eq!(rows[0][1], "2.5");
     assert_eq!(rows[0][2], "-3.5");
@@ -99,7 +96,7 @@ fn round_trip_multiple_sheets() {
     w.add_row(r3);
     w.save(path.to_str().unwrap()).unwrap();
 
-    let wb = open_workbook_auto(path.to_str().unwrap()).expect("calamine must open our xls");
+    let wb = XlsReader::from_path(path.to_str().unwrap()).expect("native reader must open our xls");
     let names = wb.sheet_names();
     assert_eq!(names.len(), 3);
     assert_eq!(names[0], "First");
@@ -131,9 +128,9 @@ fn round_trip_grid() {
     w.add_row(r3);
     w.save(path.to_str().unwrap()).unwrap();
 
-    let mut wb = open_workbook_auto(path.to_str().unwrap()).expect("calamine must open our xls");
-    let range = wb.worksheet_range("Grid").expect("sheet present");
-    let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(cell_to_string).collect()).collect();
+    let wb = XlsReader::from_path(path.to_str().unwrap()).expect("native reader must open our xls");
+    let sheet = wb.get_sheet_by_name("Grid").expect("sheet present");
+    let rows: Vec<Vec<String>> = sheet.to_string_vec();
     assert_eq!(rows[0], vec!["A", "B", "C"]);
     assert_eq!(rows[1], vec!["1", "2", "3"]);
     assert_eq!(rows[2][0], "x");
@@ -156,9 +153,9 @@ fn round_trip_formula_cached_value() {
     w.add_row(r2);
     w.save(path.to_str().unwrap()).unwrap();
 
-    let mut wb = open_workbook_auto(path.to_str().unwrap()).expect("calamine must open our xls");
-    let range = wb.worksheet_range("Calc").expect("sheet present");
-    let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(cell_to_string).collect()).collect();
+    let wb = XlsReader::from_path(path.to_str().unwrap()).expect("native reader must open our xls");
+    let sheet = wb.get_sheet_by_name("Calc").expect("sheet present");
+    let rows: Vec<Vec<String>> = sheet.to_string_vec();
     assert!(rows.len() >= 2);
 }
 
@@ -190,9 +187,9 @@ fn add_data_classifies_cells() {
     ]);
     let bytes = w.to_bytes().unwrap();
     assert_eq!(&bytes[0..8], &[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]);
-    let mut wb = open_xls_from_bytes(&bytes).expect("read back");
-    let range = wb.worksheet_range("D").expect("sheet present");
-    let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(cell_to_string).collect()).collect();
+    let wb = XlsReader::from_bytes(&bytes).expect("read back");
+    let sheet = wb.get_sheet_by_name("D").expect("sheet present");
+    let rows: Vec<Vec<String>> = sheet.to_string_vec();
     assert_eq!(rows[0], vec!["Name", "Age", "Active"]);
     assert_eq!(rows[1][0], "Alice");
     assert_eq!(rows[1][1], "30");
@@ -205,7 +202,7 @@ fn empty_sheet_still_readable() {
     let mut w = XlsWriter::new();
     w.add_sheet("Empty").unwrap();
     let bytes = w.to_bytes().unwrap();
-    let wb = open_xls_from_bytes(&bytes).expect("read back");
+    let wb = XlsReader::from_bytes(&bytes).expect("read back");
     let names = wb.sheet_names();
     assert_eq!(names, vec!["Empty".to_string()]);
 }
@@ -224,9 +221,9 @@ fn column_widths_round_trip() {
     w.add_row(r);
     w.save(path.to_str().unwrap()).unwrap();
 
-    let mut wb = open_workbook_auto(path.to_str().unwrap()).expect("calamine opens our xls");
-    let range = wb.worksheet_range("W").expect("sheet present");
-    let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(cell_to_string).collect()).collect();
+    let wb = XlsReader::from_path(path.to_str().unwrap()).expect("native reader opens our xls");
+    let sheet = wb.get_sheet_by_name("W").expect("sheet present");
+    let rows: Vec<Vec<String>> = sheet.to_string_vec();
     assert_eq!(rows[0], vec!["wide", "narrow"]);
 }
 
@@ -240,9 +237,9 @@ fn utf16_strings_with_astral_codepoints() {
     r.add_string("🦀 rust");
     w.add_row(r);
     let bytes = w.to_bytes().unwrap();
-    let mut wb = open_xls_from_bytes(&bytes).expect("read back");
-    let range = wb.worksheet_range("U").expect("sheet present");
-    let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(cell_to_string).collect()).collect();
+    let wb = XlsReader::from_bytes(&bytes).expect("read back");
+    let sheet = wb.get_sheet_by_name("U").expect("sheet present");
+    let rows: Vec<Vec<String>> = sheet.to_string_vec();
     assert_eq!(rows[0][0], "ascii");
     assert_eq!(rows[0][1], "café");
     assert_eq!(rows[0][2], "🦀 rust");
@@ -264,7 +261,7 @@ fn formula_with_sum_function_round_trip() {
     w.add_row(r2);
     w.save(path.to_str().unwrap()).unwrap();
 
-    let wb = open_workbook_auto(path.to_str().unwrap()).expect("calamine opens our xls");
+    let wb = XlsReader::from_path(path.to_str().unwrap()).expect("native reader opens our xls");
     let names = wb.sheet_names();
     assert_eq!(names, vec!["S".to_string()]);
 }
@@ -283,9 +280,9 @@ fn converter_writes_xls_via_csv() {
         .convert(csv_path.to_str().unwrap(), xls_path.to_str().unwrap(), None)
         .expect("CSV → XLS conversion succeeds");
 
-    let mut wb = open_workbook_auto(xls_path.to_str().unwrap()).expect("calamine reads converted xls");
-    let range = wb.worksheet_range("Sheet1").expect("Sheet1 present");
-    let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(cell_to_string).collect()).collect();
+    let wb = XlsReader::from_path(xls_path.to_str().unwrap()).expect("native reader reads converted xls");
+    let sheet = wb.get_sheet_by_name("Sheet1").expect("Sheet1 present");
+    let rows: Vec<Vec<String>> = sheet.to_string_vec();
     assert_eq!(rows[0], vec!["Name", "Age"]);
     assert_eq!(rows[1][0], "Alice");
     assert_eq!(rows[1][1], "30");
@@ -307,34 +304,13 @@ fn excel_handler_write_xls_round_trip() {
         .write_xls(path.to_str().unwrap(), &data, Some("Data"))
         .expect("write_xls succeeds");
 
-    let mut wb = open_workbook_auto(path.to_str().unwrap()).expect("calamine opens our xls");
+    let wb = XlsReader::from_path(path.to_str().unwrap()).expect("native reader opens our xls");
     let names = wb.sheet_names();
     assert_eq!(names, vec!["Data".to_string()]);
-    let range = wb.worksheet_range("Data").expect("Data sheet present");
-    let rows: Vec<Vec<String>> = range.rows().map(|r| r.iter().map(cell_to_string).collect()).collect();
+    let sheet = wb.get_sheet_by_name("Data").expect("Data sheet present");
+    let rows: Vec<Vec<String>> = sheet.to_string_vec();
     assert_eq!(rows[0], vec!["col1", "col2"]);
     assert_eq!(rows[1], vec!["1", "2"]);
     assert_eq!(rows[2], vec!["3", "4"]);
 }
 
-fn cell_to_string(c: &Data) -> String {
-    match c {
-        Data::String(s) => s.clone(),
-        Data::Float(f) => f.to_string(),
-        Data::Int(i) => i.to_string(),
-        Data::Bool(b) => b.to_string(),
-        Data::DateTime(d) => d.to_string(),
-        Data::DateTimeIso(s) | Data::DurationIso(s) => s.clone(),
-        Data::Error(e) => format!("{e:?}"),
-        Data::Empty => String::new(),
-    }
-}
-
-fn open_xls_from_bytes(bytes: &[u8]) -> Result<Xls<BufReader<File>>, calamine::Error> {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    tmp.write_all(bytes).unwrap();
-    tmp.flush().unwrap();
-    let _f = File::open(tmp.path()).unwrap();
-    let _reader = BufReader::new(_f);
-    open_workbook::<Xls<_>, _>(tmp.path()).map_err(calamine::Error::from)
-}

@@ -23,7 +23,7 @@
 
 ## XLS/XLSX manipulation (core)
 
-- [x] **Native XLS (BIFF8) write from scratch** — implemented in `src/excel/xls_writer/` using only `std` (no `zip`, no `calamine` for the write path). Produces valid OLE2 / CFB containers with BIFF8 records. Supports multiple sheets, strings (ASCII + UTF-16, including astral codepoints), numbers, booleans, basic formulas (refs, ranges, arithmetic, comparisons, ~25 common functions), column widths, and auto-fit. Round-trips through `calamine`. Wired into `Converter::convert` for `*.xls` outputs and `ExcelHandler::write_xls` for the library API. CLI: `xls-rs convert --input foo.csv --output foo.xls`. Example: `examples/write_xls.rs`. 32 tests pass (20 unit + 12 integration).
+- [x] **Native XLS (BIFF8) write from scratch** — implemented in `src/excel/xls_writer/` using only `std` (no `zip`, no external dependencies for the write path). Produces valid OLE2 / CFB containers with BIFF8 records. Supports multiple sheets, strings (ASCII + UTF-16, including astral codepoints), numbers, booleans, basic formulas (refs, ranges, arithmetic, comparisons, ~25 common functions), column widths, and auto-fit. Round-trips through native `XlsReader`. Wired into `Converter::convert` for `*.xls` outputs and `ExcelHandler::write_xls` for the library API. CLI: `xls-rs convert --input foo.csv --output foo.xls`. Example: `examples/write_xls.rs`. 32 tests pass (20 unit + 12 integration).
 - [x] **Native XLS (BIFF8) read from scratch** — implemented in `src/excel/xls_reader/` using only `std`. Parses CFB/BIFF8 format and returns structured cell data with full API compatibility. Supports strings, numbers, booleans, formulas, empty cells, and RK compressed numbers. Integrated into `ExcelHandler` for automatic `.xls` file handling. Verified end-to-end with native writer (write → read → convert). 11 unit tests pass.
   - [x] Range reads: CLI `read --range` and HTTP `api` read use `CellRange` + `filter_by_range` (same helper as columnar paths)
   - [x] Range reads identical across all backends where semantics differ today (`read_sheet_data` returns `Vec<Vec<String>>` directly for XLSX/XLS/ODS without CSV serialization round-trip; `read_range` also returns structured data)
@@ -129,7 +129,7 @@
 
 ### Excel fidelity (openpyxl / excelize / SheetJS gaps)
 
-- [x] **Template-based generation**: Read an existing `.xlsx` as a template, fill data into named ranges / placeholder cells, write back. Implemented in `src/excel/template/` with `TemplateReader` (detects `{{placeholder}}` cells via calamine) and `TemplateFiller` (replaces placeholders and writes via `XlsxWriter`). API: `TemplateFiller::fill_from_file(template, output, &values, sheet)`. 7 unit tests pass.
+- [x] **Template-based generation**: Read an existing `.xlsx` as a template, fill data into named ranges / placeholder cells, write back. Implemented in `src/excel/template/` with `TemplateReader` (detects `{{placeholder}}` cells via native XLSX reader) and `TemplateFiller` (replaces placeholders and writes via `XlsxWriter`). API: `TemplateFiller::fill_from_file(template, output, &values, sheet)`. 7 unit tests pass.
 - [ ] **Read existing styles / images / charts**: Currently we write styles/charts but cannot read them back from existing files. Needed for template workflows and round-trip fidelity.
 - [ ] **`.xlsm` (macro-enabled) read/write**: Preserve VBA macros on copy/edit. openpyxl supports this in "keep_vba" mode; SheetJS preserves `vbaProject.bin`.
 - [ ] **Password-protected Excel**: Support reading `.xlsx` encrypted with a password (msoffcrypto-style). Excelize and openpyxl both support this.
@@ -160,7 +160,7 @@
 
 Still open:
 - [ ] **CSV index (xsv-style)**: Build a lightweight index (row offsets per block) so `head`/`tail`/random access on huge CSVs is O(1) instead of O(n). xsv does this via `xsv index`.
-- [ ] **True streaming XLSX read**: Row-by-row SAX-style parsing without loading entire workbook into memory. Current implementation uses `calamine` which materializes the whole sheet. `xlsx2csv` streams via `quick-xml`.
+- [ ] **True streaming XLSX read**: Row-by-row SAX-style parsing without loading entire workbook into memory. Current implementation materializes the whole sheet. `xlsx2csv` streams via `quick-xml`.
 - [ ] **Lazy / query-plan evaluation**: Polars-style lazy DataFrames — build an execution graph, optimize (predicate pushdown, projection pushdown), then execute. Would dramatically speed up chained operations.
 - [ ] **SIMD-accelerated numeric ops**: Use `arrow` compute kernels or `simd-json`-style SIMD for parse + aggregate on numeric columns. Polars/duckdb leverage this.
 - [ ] **Memory-mapped CSV reads**: `memmap2` for zero-copy access to large CSVs on disk. xsv / polars use this.

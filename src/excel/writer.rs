@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use calamine::{open_workbook, Reader, Xlsx};
 use std::fs::File;
 use std::io::BufWriter;
 
@@ -7,6 +6,7 @@ use super::reader::ExcelHandler;
 use super::types::WriteOptions;
 use super::xls_writer::{RowData as XlsRowData, XlsWriter};
 use super::xlsx_writer::{CellData, RowData, XlsxWriter};
+use super::xlsx_reader::XlsxReader as NativeXlsxReader;
 use crate::traits::{DataWriteOptions, DataWriter};
 
 /// Write mode for range operations
@@ -249,18 +249,15 @@ impl ExcelHandler {
         let mut existing_data: Vec<Vec<String>> = Vec::new();
 
         if std::path::Path::new(path).exists() {
-            let mut workbook: Xlsx<_> = open_workbook(path)
-                .with_context(|| format!("Failed to open Excel file: {path}"))?;
+            if let Ok(workbook) = NativeXlsxReader::from_path(path) {
+                let sheet_names = workbook.sheet_names();
+                let sheet_name = sheet_names
+                    .first()
+                    .map(|s| s.as_str())
+                    .unwrap_or("Sheet1");
 
-            let sheet_names = workbook.sheet_names();
-            let sheet_name = sheet_names
-                .first()
-                .map(|s| s.as_str())
-                .unwrap_or("Sheet1");
-
-            if let Ok(range) = workbook.worksheet_range(sheet_name) {
-                for row in range.rows() {
-                    existing_data.push(row.iter().map(|c| c.to_string()).collect());
+                if let Some(sheet) = workbook.get_sheet_by_name(sheet_name) {
+                    existing_data = sheet.to_string_vec();
                 }
             }
         }
@@ -388,30 +385,24 @@ impl DataWriter for ExcelHandler {
     }
 
     fn append(&self, path: &str, data: &[Vec<String>]) -> Result<()> {
-        use calamine::{open_workbook, Reader, Xlsx};
-
         // Check if file exists
         if !std::path::Path::new(path).exists() {
             // File doesn't exist, just write the data
             return self.write(path, data, DataWriteOptions::default());
         }
 
-        // Read existing data from the file
+        // Read existing data from the file using native XLSX reader
         let mut existing_data: Vec<Vec<String>> = Vec::new();
 
-        // Try to open as Excel file first
-        if let Ok(mut workbook) = open_workbook::<Xlsx<_>, _>(path) {
+        if let Ok(workbook) = NativeXlsxReader::from_path(path) {
             let sheet_names = workbook.sheet_names();
             let sheet_name = sheet_names
                 .first()
                 .map(|s| s.as_str())
                 .unwrap_or("Sheet1");
 
-            if let Ok(range) = workbook.worksheet_range(sheet_name) {
-                for row in range.rows() {
-                    let row_data: Vec<String> = row.iter().map(|cell| cell.to_string()).collect();
-                    existing_data.push(row_data);
-                }
+            if let Some(sheet) = workbook.get_sheet_by_name(sheet_name) {
+                existing_data = sheet.to_string_vec();
             }
         }
 
@@ -438,7 +429,7 @@ impl DataWriter for ExcelHandler {
 
 impl ExcelHandler {
     /// Write data to an XLS (legacy BIFF8) file using the from-scratch
-    /// `XlsWriter`. No `zip`, `calamine`, or other external dependencies are
+    /// `XlsWriter`. No `zip` or other external dependencies are
     /// used for the write path.
     pub fn write_xls(&self, path: &str, data: &[Vec<String>], sheet_name: Option<&str>) -> Result<()> {
         let mut writer = XlsWriter::new();

@@ -543,7 +543,7 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_via_calamine_signature() {
+    fn round_trip_via_cfb_signature() {
         // Just check the file is at least one sector and not corrupt by
         // verifying the FAT chain can be re-read.
         let mut streams = vec![CfbStream {

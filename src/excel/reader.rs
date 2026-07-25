@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
-use calamine::{Ods, Reader, Xlsx};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use crate::csv_handler::CellRange;
 use crate::traits::DataReader;
 use crate::excel::xls_reader::XlsReader as NativeXlsReader;
+use crate::excel::xlsx_reader::XlsxReader as NativeXlsxReader;
+use crate::excel::ods_reader::OdsReader as NativeOdsReader;
 
 /// Excel metadata cache entry
 #[derive(Debug, Clone)]
@@ -58,7 +59,7 @@ impl ExcelMetadataCache {
     }
 }
 
-/// Pick the right calamine workbook type based on file extension.
+/// Pick the right reader type based on file extension.
 fn is_xls(path: &str) -> bool {
     path.to_lowercase().ends_with(".xls")
 }
@@ -76,7 +77,7 @@ impl ExcelHandler {
     }
 
     /// Resolve sheet name: use the first sheet if `requested` is `None`, otherwise require an exact
-    /// match so users get a clear error instead of a low-level calamine failure.
+    /// match so users get a clear error instead of a low-level failure.
     fn resolve_sheet_selection(requested: Option<&str>, available: &[String]) -> Result<String> {
         match requested {
             Some(name) => {
@@ -101,7 +102,7 @@ impl ExcelHandler {
     }
 
     /// Get or load Excel metadata with caching. Dispatches to native XLS reader for .xls
-    /// and calamine Xlsx reader for .xlsx files.
+    /// and native XLSX reader for .xlsx files.
     fn get_metadata(&self, path: &str) -> Result<ExcelMetadata> {
         if let Some(metadata) = self.metadata_cache.get(path) {
             return Ok(metadata);
@@ -113,9 +114,9 @@ impl ExcelHandler {
                 .with_context(|| format!("Failed to open XLS file: {path}"))?;
             reader.sheet_names()
         } else {
-            let workbook: Xlsx<_> = calamine::open_workbook(path)
+            let workbook = NativeXlsxReader::from_path(path)
                 .with_context(|| format!("Failed to open Excel file: {path}"))?;
-            workbook.sheet_names().to_vec()
+            workbook.sheet_names()
         };
 
         let metadata = ExcelMetadata { sheet_names, modified_time };
@@ -144,15 +145,14 @@ impl ExcelHandler {
             }
             Ok(output)
         } else {
-            let mut workbook: Xlsx<_> = calamine::open_workbook(path)
+            let workbook = NativeXlsxReader::from_path(path)
                 .with_context(|| format!("Failed to open Excel file: {path}"))?;
-            let range = workbook
-                .worksheet_range(&sheet_name)
+            let sheet = workbook.get_sheet_by_name(&sheet_name)
                 .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
-            let mut output = String::with_capacity(range.height() * range.width() * 10);
-            for row in range.rows() {
-                let row_str: Vec<String> = row.iter().map(|cell| cell.to_string()).collect();
-                output.push_str(&row_str.join(","));
+            let rows = sheet.to_string_vec();
+            let mut output = String::with_capacity(rows.len() * 10);
+            for row in rows {
+                output.push_str(&row.join(","));
                 output.push('\n');
             }
             Ok(output)
@@ -199,20 +199,11 @@ impl ExcelHandler {
                 .with_context(|| format!("Failed to find sheet: {sheet_name}"))?;
             Ok(sheet.to_string_vec())
         } else {
-            let mut workbook: Xlsx<_> = calamine::open_workbook(path)
+            let workbook = NativeXlsxReader::from_path(path)
                 .with_context(|| format!("Failed to open Excel file: {path}"))?;
-            let range = workbook
-                .worksheet_range(&sheet_name)
+            let sheet = workbook.get_sheet_by_name(&sheet_name)
                 .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
-            let mut rows: Vec<Vec<String>> = Vec::with_capacity(range.height());
-            for row in range.rows() {
-                let mut row_data = Vec::with_capacity(range.width());
-                for cell in row.iter() {
-                    row_data.push(cell.to_string());
-                }
-                rows.push(row_data);
-            }
-            Ok(rows)
+            Ok(sheet.to_string_vec())
         }
     }
 
@@ -246,29 +237,20 @@ impl ExcelHandler {
             }
             result
         } else {
-            let mut workbook: Xlsx<_> = calamine::open_workbook(path)
+            let workbook = NativeXlsxReader::from_path(path)
                 .with_context(|| format!("Failed to open Excel file: {path}"))?;
-            let ws = workbook
-                .worksheet_range(&sheet_name)
+            let sheet = workbook.get_sheet_by_name(&sheet_name)
                 .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
             
             let estimated_rows = range.end_row.saturating_sub(range.start_row) + 1;
             let estimated_cols = range.end_col.saturating_sub(range.start_col) + 1;
             let mut result = Vec::with_capacity(estimated_rows.min(1024));
 
-            for (row_idx, row) in ws.rows().enumerate() {
-                if row_idx < range.start_row {
-                    continue;
-                }
-                if row_idx > range.end_row {
-                    break;
-                }
-
+            for row_idx in range.start_row..=range.end_row {
                 let mut row_data = Vec::with_capacity(estimated_cols);
-                for (col_idx, cell) in row.iter().enumerate() {
-                    if col_idx >= range.start_col && col_idx <= range.end_col {
-                        row_data.push(cell.to_string());
-                    }
+                for col_idx in range.start_col..=range.end_col {
+                    let cell_value = sheet.get_cell(row_idx, col_idx);
+                    row_data.push(cell_value.to_string());
                 }
                 result.push(row_data);
             }
@@ -295,42 +277,24 @@ impl ExcelHandler {
         &self,
         path: &str,
     ) -> Result<std::collections::HashMap<String, Vec<Vec<String>>>> {
-        let mut workbook: Xlsx<_> =
-            calamine::open_workbook(path).with_context(|| format!("Failed to open Excel file: {path}"))?;
-
-        let sheet_names = workbook.sheet_names().to_vec();
-        let mut result = std::collections::HashMap::new();
-
-        for sheet_name in sheet_names {
-            let range = workbook
-                .worksheet_range(&sheet_name)
-                .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
-
-            let mut rows: Vec<Vec<String>> = Vec::new();
-            for row in range.rows() {
-                rows.push(row.iter().map(|cell| cell.to_string()).collect());
-            }
-
-            result.insert(sheet_name, rows);
-        }
-
-        Ok(result)
+        let workbook = NativeXlsxReader::from_path(path)
+            .with_context(|| format!("Failed to open Excel file: {path}"))?;
+        Ok(workbook.read_all_to_string_vec())
     }
 
     /// Read ODS as CSV-like string
     pub fn read_ods(&self, path: &str, sheet_name: Option<&str>) -> Result<String> {
-        let mut workbook: Ods<_> =
-            calamine::open_workbook(path).with_context(|| format!("Failed to open ODS file: {path}"))?;
+        let workbook = NativeOdsReader::from_path(path)
+            .with_context(|| format!("Failed to open ODS file: {path}"))?;
 
-        let sheet_names: Vec<String> = workbook.sheet_names().to_vec();
+        let sheet_names = workbook.sheet_names();
         let sheet_name = Self::resolve_sheet_selection(sheet_name, &sheet_names)?;
 
-        let range = workbook
-            .worksheet_range(&sheet_name)
+        let sheet = workbook.get_sheet_by_name(&sheet_name)
             .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
 
         let mut output = String::new();
-        for row in range.rows() {
+        for row in &sheet.cells {
             let row_str: Vec<String> = row.iter().map(|cell| cell.to_string()).collect();
             output.push_str(&row_str.join(","));
             output.push('\n');
@@ -341,29 +305,23 @@ impl ExcelHandler {
 
     /// Read ODS into `Vec<Vec<String>>`
     pub fn read_ods_data(&self, path: &str, sheet_name: Option<&str>) -> Result<Vec<Vec<String>>> {
-        let mut workbook: Ods<_> =
-            calamine::open_workbook(path).with_context(|| format!("Failed to open ODS file: {path}"))?;
+        let workbook = NativeOdsReader::from_path(path)
+            .with_context(|| format!("Failed to open ODS file: {path}"))?;
 
-        let sheet_names: Vec<String> = workbook.sheet_names().to_vec();
+        let sheet_names = workbook.sheet_names();
         let sheet_name = Self::resolve_sheet_selection(sheet_name, &sheet_names)?;
 
-        let range = workbook
-            .worksheet_range(&sheet_name)
+        let sheet = workbook.get_sheet_by_name(&sheet_name)
             .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
 
-        let mut rows: Vec<Vec<String>> = Vec::new();
-        for row in range.rows() {
-            rows.push(row.iter().map(|cell| cell.to_string()).collect());
-        }
-
-        Ok(rows)
+        Ok(sheet.to_string_vec())
     }
 
     /// List sheets in ODS file
     pub fn list_ods_sheets(&self, path: &str) -> Result<Vec<String>> {
-        let workbook: Ods<_> =
-            calamine::open_workbook(path).with_context(|| format!("Failed to open ODS file: {path}"))?;
-        Ok(workbook.sheet_names().to_vec())
+        let workbook = NativeOdsReader::from_path(path)
+            .with_context(|| format!("Failed to open ODS file: {path}"))?;
+        Ok(workbook.sheet_names())
     }
 
     /// Auto-detect format (XLSX/XLS/ODS) and read into `Vec<Vec<String>>`

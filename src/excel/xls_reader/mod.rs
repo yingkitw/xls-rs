@@ -22,12 +22,12 @@ pub enum CellValue {
 }
 
 impl CellValue {
-    /// Convert to string representation (matches calamine behavior)
+    /// Convert to string representation
     pub fn to_string(&self) -> String {
         match self {
             CellValue::String(s) => s.clone(),
             CellValue::Number(n) => {
-                // Format numbers similarly to calamine
+                // Format numbers as integers when they have no fractional part
                 if n.fract() == 0.0 && n.abs() < 1e15 {
                     format!("{}", *n as i64)
                 } else {

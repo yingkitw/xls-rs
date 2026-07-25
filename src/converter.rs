@@ -114,7 +114,7 @@ impl Converter {
 
         match format.as_str() {
             "xls" => {
-                // Use the from-scratch XlsWriter (no zip, no calamine write).
+                // Use the from-scratch XlsWriter (no zip, no external dependencies).
                 self.excel_handler.write_xls(path, data, sheet_name)
             }
             "xlsx" => {

@@ -2,7 +2,7 @@
 //!
 //! Mirrors the `XlsxWriter` API surface so callers can swap between formats
 //! with minimal changes. All file bytes are produced from scratch using only
-//! `std` (no `zip`, no `calamine`, no external crate dependencies).
+//! `std` (no `zip`, no external crate dependencies).
 //!
 //! # Supported features
 //!
@@ -21,8 +21,8 @@
 //!
 //! # Round-trip
 //!
-//! Files produced by this writer can be read back by `calamine`, LibreOffice,
-//! Excel, and other tools that understand the BIFF8 format.
+//! Files produced by this writer can be read back by our native `XlsReader`,
+//! LibreOffice, Excel, and other tools that understand the BIFF8 format.
 
 use anyhow::Result;
 

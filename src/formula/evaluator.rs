@@ -4,8 +4,9 @@ use super::types::{CellRange, FormulaResult};
 use crate::csv_handler::sanitize_csv_row;
 use crate::excel::ExcelHandler;
 use anyhow::{Context, Result};
-use calamine::{open_workbook, Reader, Xlsx};
 use csv::{ReaderBuilder, WriterBuilder};
+
+use crate::excel::xlsx_reader::XlsxReader as NativeXlsxReader;
 
 pub struct FormulaEvaluator {
     excel_handler: ExcelHandler,
@@ -26,7 +27,7 @@ impl FormulaEvaluator {
         cell: &str,
         sheet_name: Option<&str>,
     ) -> Result<()> {
-        let mut workbook: Xlsx<_> = open_workbook(input)
+        let workbook = NativeXlsxReader::from_path(input)
             .with_context(|| format!("Failed to open Excel file: {}", input))?;
 
         let sheet_names = workbook.sheet_names();
@@ -34,8 +35,7 @@ impl FormulaEvaluator {
             .or_else(|| sheet_names.first().map(|s| s.as_str()))
             .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook"))?;
 
-        let range = workbook
-            .worksheet_range(sheet_name)
+        let sheet = workbook.get_sheet_by_name(sheet_name)
             .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
 
         use crate::excel::xlsx_writer::XlsxWriter;
@@ -46,7 +46,7 @@ impl FormulaEvaluator {
 
         let (target_row, target_col) = self.parse_cell_reference(cell)?;
 
-        for (row_idx, row) in range.rows().enumerate() {
+        for (row_idx, row) in sheet.cells.iter().enumerate() {
             let mut row_data = RowData::new();
             for (col_idx, cell) in row.iter().enumerate() {
                 if row_idx as u32 == target_row && col_idx as u16 == target_col {
@@ -80,7 +80,7 @@ impl FormulaEvaluator {
         target_range: &crate::csv_handler::CellRange,
         sheet_name: Option<&str>,
     ) -> Result<usize> {
-        let mut workbook: Xlsx<_> = open_workbook(input)
+        let workbook = NativeXlsxReader::from_path(input)
             .with_context(|| format!("Failed to open Excel file: {}", input))?;
 
         let sheet_names = workbook.sheet_names();
@@ -88,8 +88,7 @@ impl FormulaEvaluator {
             .or_else(|| sheet_names.first().map(|s| s.as_str()))
             .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook"))?;
 
-        let range = workbook
-            .worksheet_range(sheet_name)
+        let sheet = workbook.get_sheet_by_name(sheet_name)
             .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
 
         use crate::excel::xlsx_writer::XlsxWriter;
@@ -100,7 +99,7 @@ impl FormulaEvaluator {
 
         let mut cells_affected = 0usize;
 
-        for (row_idx, row) in range.rows().enumerate() {
+        for (row_idx, row) in sheet.cells.iter().enumerate() {
             let mut row_data = RowData::new();
             for (col_idx, cell) in row.iter().enumerate() {
                 if row_idx >= target_range.start_row

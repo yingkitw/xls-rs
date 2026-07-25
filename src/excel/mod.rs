@@ -9,6 +9,8 @@ mod writer;
 pub mod xls_writer;
 pub mod xls_reader;
 pub mod xlsx_writer;
+pub mod xlsx_reader;
+pub mod ods_reader;
 pub mod template;
 
 #[allow(unused_imports)]

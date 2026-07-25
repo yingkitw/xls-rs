@@ -470,7 +470,7 @@ fn write_sst_string(body: &mut Vec<u8>, s: &str) {
 /// BOF record within the workbook stream. `state = 0` (visible), `kind = 0`
 /// (worksheet).
 ///
-/// Note: calamine parses hsState and dt as single bytes (despite the BIFF8
+/// Note: some readers parse hsState and dt as single bytes (despite the BIFF8
 /// spec saying they are 16-bit), so we emit them as 1 byte each to stay
 /// compatible with the most common readers.
 pub fn bound_sheet(sheet_index: u32, stream_pos: u32, name: &str) -> Vec<u8> {

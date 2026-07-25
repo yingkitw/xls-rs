@@ -3,9 +3,10 @@
 //! Reads existing XLSX files and identifies placeholder cells for template-based generation.
 
 use anyhow::{Context, Result};
-use calamine::{Reader, Xlsx};
 use regex::Regex;
 use std::collections::HashMap;
+
+use crate::excel::xlsx_reader::XlsxReader as NativeXlsxReader;
 
 /// Information about a placeholder cell in a template
 #[derive(Debug, Clone)]
@@ -72,10 +73,10 @@ impl TemplateReader {
 
     /// Read an XLSX file and extract template data from a specific sheet
     pub fn read_template(&self, path: &str, sheet_name: Option<&str>) -> Result<TemplateData> {
-        let mut workbook: Xlsx<_> = calamine::open_workbook(path)
+        let workbook = NativeXlsxReader::from_path(path)
             .with_context(|| format!("Failed to open template file: {}", path))?;
 
-        let sheet_names = workbook.sheet_names().to_vec();
+        let sheet_names = workbook.sheet_names();
         let sheet_name = if let Some(name) = sheet_name {
             if !sheet_names.contains(&name.to_string()) {
                 anyhow::bail!(
@@ -92,14 +93,13 @@ impl TemplateReader {
                 .ok_or_else(|| anyhow::anyhow!("No sheets found in template"))?
         };
 
-        let range = workbook
-            .worksheet_range(&sheet_name)
+        let sheet = workbook.get_sheet_by_name(&sheet_name)
             .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
 
         let mut template_data = TemplateData::new(sheet_name.clone());
 
         // Read all cell data
-        for (row_idx, row) in range.rows().enumerate() {
+        for (row_idx, row) in sheet.cells.iter().enumerate() {
             for (col_idx, cell) in row.iter().enumerate() {
                 let cell_value = cell.to_string();
                 if !cell_value.is_empty() {
@@ -113,19 +113,17 @@ impl TemplateReader {
             }
         }
 
-        // Extract named ranges (if calamine provides access)
-        // Note: calamine doesn't directly expose named ranges, so this is a placeholder
-        // for future enhancement with direct XML parsing
+        // Named ranges: not yet supported by native reader
 
         Ok(template_data)
     }
 
     /// Read all sheets from a template file
     pub fn read_all_sheets(&self, path: &str) -> Result<HashMap<String, TemplateData>> {
-        let workbook: Xlsx<_> = calamine::open_workbook(path)
+        let workbook = NativeXlsxReader::from_path(path)
             .with_context(|| format!("Failed to open template file: {}", path))?;
 
-        let sheet_names = workbook.sheet_names().to_vec();
+        let sheet_names = workbook.sheet_names();
         let mut result = HashMap::new();
 
         for sheet_name in sheet_names {
