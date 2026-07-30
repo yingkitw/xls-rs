@@ -122,6 +122,31 @@ mod tests {
     }
 
     #[test]
+    fn test_streaming_xlsx_large() {
+        let (_dir, path) = temp_xlsx("test_streaming_large.xlsx");
+        let mut writer = StreamingXlsxWriter::create(&path, "BigData").unwrap();
+
+        // Write header
+        writer.write_row(&["ID".to_string(), "Value".to_string(), "Label".to_string()]).unwrap();
+
+        // Write 10000 rows
+        for i in 0..10_000 {
+            writer.write_row(&[
+                format!("{}", i),
+                format!("{:.2}", i as f64 * 1.5),
+                format!("Row_{}", i),
+            ]).unwrap();
+        }
+
+        assert_eq!(writer.rows_written(), 10_001);
+        writer.finish().unwrap();
+
+        assert!(std::path::Path::new(&path).exists());
+        let metadata = fs::metadata(&path).unwrap();
+        assert!(metadata.len() > 10_000); // Should be substantial
+    }
+
+    #[test]
     fn test_streaming_xlsx_write_row_data() {
         let (_dir, path) = temp_xlsx("test_streaming_row_data.xlsx");
         let mut writer = StreamingXlsxWriter::create(&path, "Sheet1").unwrap();
