@@ -787,13 +787,6 @@ impl XlsxReader {
                     }
                 }
 
-                // Skip to end of <c> element
-                // Find the closing </c> tag
-                scanner.find_open_tag("c"); // This will find the next <c> or nothing
-                // We need to skip past the closing tag of current <c>
-                // Actually, the find_open_tag for "c" above may have found the next cell's opening tag
-                // Let's just continue - the loop will handle it
-
                 cells.insert((row_idx, col_idx), value);
                 max_row = max_row.max(row_idx);
                 max_col = max_col.max(col_idx);

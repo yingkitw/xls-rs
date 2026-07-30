@@ -147,16 +147,14 @@ impl BiffRecord {
         }
 
         let name = if is_high_byte {
-            // UTF-16LE
-            let mut chars = Vec::with_capacity(cch);
-            for i in 0..cch {
-                let byte_offset = name_offset + 2 + i * 2;
-                let unit = u16::from_le_bytes([data[byte_offset], data[byte_offset + 1]]);
-                if let Some(c) = char::from_u32(unit as u32) {
-                    chars.push(c);
-                }
-            }
-            chars.into_iter().collect::<String>()
+            // UTF-16LE (may contain surrogate pairs for astral codepoints)
+            let units: Vec<u16> = (0..cch)
+                .map(|i| {
+                    let byte_offset = name_offset + 2 + i * 2;
+                    u16::from_le_bytes([data[byte_offset], data[byte_offset + 1]])
+                })
+                .collect();
+            String::from_utf16_lossy(&units)
         } else {
             // Compressed (ASCII)
             data[name_offset + 2..name_offset + 2 + cch]
@@ -241,16 +239,14 @@ impl BiffRecord {
             if current_offset + cch * 2 > data.len() {
                 anyhow::bail!("SST UTF-16 string data too short");
             }
-            let mut chars = Vec::with_capacity(cch);
-            for i in 0..cch {
-                let byte_offset = current_offset + i * 2;
-                let unit = u16::from_le_bytes([data[byte_offset], data[byte_offset + 1]]);
-                if let Some(c) = char::from_u32(unit as u32) {
-                    chars.push(c);
-                }
-            }
+            let units: Vec<u16> = (0..cch)
+                .map(|i| {
+                    let byte_offset = current_offset + i * 2;
+                    u16::from_le_bytes([data[byte_offset], data[byte_offset + 1]])
+                })
+                .collect();
             current_offset += cch * 2;
-            chars.into_iter().collect::<String>()
+            String::from_utf16_lossy(&units)
         } else {
             if current_offset + cch > data.len() {
                 anyhow::bail!("SST compressed string data too short");
