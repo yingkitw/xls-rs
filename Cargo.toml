@@ -39,7 +39,6 @@ path = "src/main.rs"
 
 [dependencies]
 rmcp = { version = "0.14", features = ["server", "transport-io", "macros"], optional = true }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "net"], optional = true }
 chrono = { version = "0.4", features = ["serde"] }
 zip = "2.2"
 csv = "1.3"
@@ -68,7 +67,7 @@ completions = ["dep:clap_complete"]
 mcp = ["dep:rmcp"]
 parquet = ["dep:parquet", "dep:arrow-array", "dep:arrow-schema"]
 avro = ["dep:apache-avro"]
-gsheets = ["dep:ureq", "tokio"]
+gsheets = ["dep:ureq"]
 
 # Smaller `target/` and fewer incremental rename failures when the disk is almost full.
 [profile.dev]

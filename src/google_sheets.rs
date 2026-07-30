@@ -4,13 +4,10 @@ use crate::config::Config;
 use crate::csv_handler::CellRange;
 use crate::traits::{DataReader, DataWriteOptions, DataWriter, FileHandler};
 use anyhow::{anyhow, Context, Result};
-use std::sync::Arc;
-use tokio::runtime::Runtime;
 
 /// Handler for Google Sheets operations
 pub struct GoogleSheetsHandler {
     config: Config,
-    rt: Arc<Runtime>,
 }
 
 impl GoogleSheetsHandler {
@@ -18,7 +15,6 @@ impl GoogleSheetsHandler {
     pub fn new() -> Self {
         Self {
             config: Config::default(),
-            rt: Arc::new(Runtime::new().expect("Failed to create tokio runtime")),
         }
     }
 
@@ -26,7 +22,6 @@ impl GoogleSheetsHandler {
     pub fn with_config(config: Config) -> Self {
         Self {
             config,
-            rt: Arc::new(Runtime::new().expect("Failed to create tokio runtime")),
         }
     }
 
@@ -443,7 +438,6 @@ impl Clone for GoogleSheetsHandler {
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
-            rt: Arc::clone(&self.rt),
         }
     }
 }
