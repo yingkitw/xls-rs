@@ -393,10 +393,27 @@ impl OdsReader {
     }
 
     fn read_zip_entry<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>, name: &str) -> Result<Vec<u8>> {
-        let mut buf = Vec::new();
-        let mut entry = archive.by_name(name)
+        let mut entry = archive
+            .by_name(name)
             .with_context(|| format!("Failed to find '{}' in ODS archive", name))?;
+        let size = entry.size();
+        if size > crate::limits::MAX_ZIP_ENTRY_BYTES {
+            anyhow::bail!(
+                "ZIP entry '{}' is too large ({} bytes; max {})",
+                name,
+                size,
+                crate::limits::MAX_ZIP_ENTRY_BYTES
+            );
+        }
+        let mut buf = Vec::with_capacity(size as usize);
         entry.read_to_end(&mut buf)?;
+        if buf.len() as u64 > crate::limits::MAX_ZIP_ENTRY_BYTES {
+            anyhow::bail!(
+                "ZIP entry '{}' expanded beyond max size ({} bytes)",
+                name,
+                crate::limits::MAX_ZIP_ENTRY_BYTES
+            );
+        }
         Ok(buf)
     }
 
@@ -444,13 +461,20 @@ impl OdsReader {
                     let row_tag_start = scanner.pos;
                     let row_name = scanner.read_tag_name(row_tag_start);
                     let (row_attrs, _) = scanner.parse_attributes(row_tag_start + row_name.len());
-                    let row_repeat: usize = row_attrs.get("number-rows-repeated")
+                    let row_repeat: usize = row_attrs
+                        .get("number-rows-repeated")
                         .and_then(|s| s.parse().ok())
-                        .unwrap_or(1);
+                        .unwrap_or(1)
+                        .min(crate::limits::MAX_ODS_ROW_REPEAT);
 
                     if scanner.is_self_closing(row_tag_start) {
                         scanner.skip_open_tag();
-                        for _ in 0..row_repeat {
+                        let n = crate::limits::capped_repeat(
+                            row_repeat,
+                            rows.len(),
+                            crate::limits::MAX_SHEET_ROWS,
+                        );
+                        for _ in 0..n {
                             rows.push(Vec::new());
                         }
                         continue;
@@ -468,15 +492,22 @@ impl OdsReader {
                         let cell_tag_start = scanner.pos;
                         let cell_name = scanner.read_tag_name(cell_tag_start);
                         let (cell_attrs, _) = scanner.parse_attributes(cell_tag_start + cell_name.len());
-                        let cell_repeat: usize = cell_attrs.get("number-columns-repeated")
+                        let cell_repeat: usize = cell_attrs
+                            .get("number-columns-repeated")
                             .and_then(|s| s.parse().ok())
-                            .unwrap_or(1);
+                            .unwrap_or(1)
+                            .min(crate::limits::MAX_ODS_CELL_REPEAT);
 
                         let value_type = cell_attrs.get("value-type").cloned().unwrap_or_default();
 
                         if scanner.is_self_closing(cell_tag_start) {
                             scanner.skip_open_tag();
-                            for _ in 0..cell_repeat {
+                            let n = crate::limits::capped_repeat(
+                                cell_repeat,
+                                row_cells.len(),
+                                crate::limits::MAX_SHEET_COLS,
+                            );
+                            for _ in 0..n {
                                 row_cells.push(XlsxCellValue::Empty);
                             }
                             continue;
@@ -552,7 +583,12 @@ impl OdsReader {
                             }
                         }
 
-                        for _ in 0..cell_repeat {
+                        let n = crate::limits::capped_repeat(
+                            cell_repeat,
+                            row_cells.len(),
+                            crate::limits::MAX_SHEET_COLS,
+                        );
+                        for _ in 0..n {
                             row_cells.push(cell_value.clone());
                         }
 
@@ -565,7 +601,12 @@ impl OdsReader {
                     // Move scanner past the row content
                     // We'll rely on the next find_open_tag("table-row") or find_open_tag("table")
 
-                    for _ in 0..row_repeat {
+                    let n = crate::limits::capped_repeat(
+                        row_repeat,
+                        rows.len(),
+                        crate::limits::MAX_SHEET_ROWS,
+                    );
+                    for _ in 0..n {
                         rows.push(row_cells.clone());
                     }
 

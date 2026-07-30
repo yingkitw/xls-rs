@@ -59,11 +59,12 @@ impl WorkflowExecutor {
         for (step_idx, step) in config.steps.iter().enumerate() {
             println!("Step {}: {}", step_idx + 1, step.operation);
 
-            // Get input data
+            // Get input data — take ownership of prior step output when possible
+            // to avoid retaining two full grid copies across the step boundary.
             let input_data = if let Some(ref input) = step.input {
                 self.registry.read(input)?
-            } else if let Some(ref data) = current_data {
-                data.clone()
+            } else if let Some(data) = current_data.take() {
+                data
             } else {
                 anyhow::bail!("No input data available for step {}", step_idx + 1);
             };

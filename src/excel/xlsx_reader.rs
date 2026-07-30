@@ -519,11 +519,28 @@ impl XlsxReader {
     }
 
     fn read_zip_entry<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>, name: &str) -> Result<Vec<u8>> {
-        let mut buf = Vec::new();
-        let mut entry = archive.by_name(name)
-        .with_context(|| format!("Failed to find '{}' in XLSX archive", name))?;
-    entry.read_to_end(&mut buf)?;
-    Ok(buf)
+        let mut entry = archive
+            .by_name(name)
+            .with_context(|| format!("Failed to find '{}' in XLSX archive", name))?;
+        let size = entry.size();
+        if size > crate::limits::MAX_ZIP_ENTRY_BYTES {
+            anyhow::bail!(
+                "ZIP entry '{}' is too large ({} bytes; max {})",
+                name,
+                size,
+                crate::limits::MAX_ZIP_ENTRY_BYTES
+            );
+        }
+        let mut buf = Vec::with_capacity(size as usize);
+        entry.read_to_end(&mut buf)?;
+        if buf.len() as u64 > crate::limits::MAX_ZIP_ENTRY_BYTES {
+            anyhow::bail!(
+                "ZIP entry '{}' expanded beyond max size ({} bytes)",
+                name,
+                crate::limits::MAX_ZIP_ENTRY_BYTES
+            );
+        }
+        Ok(buf)
     }
 
     fn read_shared_strings<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>) -> Result<Vec<String>> {
@@ -785,15 +802,23 @@ impl XlsxReader {
             // Skip to end of row - find next <row> or end of <sheetData>
         }
 
-        // Convert sparse map to dense grid
+        // Convert sparse map to dense grid (clamped to avoid OOM from far-corner refs)
         if max_row == 0 && max_col == 0 && cells.is_empty() {
             return Vec::new();
         }
 
-        let mut result = vec![vec![XlsxCellValue::Empty; (max_col + 1) as usize]; (max_row + 1) as usize];
+        let (n_rows, n_cols) =
+            crate::limits::clamp_dense_dims(max_row as usize, max_col as usize);
+        if n_rows == 0 || n_cols == 0 {
+            return Vec::new();
+        }
+
+        let mut result = vec![vec![XlsxCellValue::Empty; n_cols]; n_rows];
         for ((row, col), value) in cells {
-            if (row as usize) < result.len() && (col as usize) < result[0].len() {
-                result[row as usize][col as usize] = value;
+            let r = row as usize;
+            let c = col as usize;
+            if r < n_rows && c < n_cols {
+                result[r][c] = value;
             }
         }
         result

@@ -147,6 +147,13 @@
 
 ### Performance & scale (xsv / polars / duckdb gaps)
 
+**Memory safety mitigations (2026-07)**:
+- [x] **Dense-grid OOM guards**: XLSX/XLS readers clamp densified sheet dimensions (`src/limits.rs` `MAX_DENSE_CELLS`) so a far-corner cell ref cannot allocate a full Excel matrix.
+- [x] **ODS repeat caps**: `number-columns-repeated` / `number-rows-repeated` capped against sheet bounds.
+- [x] **CFB hang/OOM**: single owned buffer (no sector double-copy) + visited-set / hop limits on FAT chains.
+- [x] **ZIP/CSV size guards**: reject oversized zip entries and full-slurp CSV reads above 512 MiB.
+- [x] **Join/melt output caps**, formula depth + range cell budget, string-distance length caps, profiler default sampling + frequency-key cap.
+
 **Recently optimized**:
 - [x] **`escape_xml` rewrite**: Eliminated per-character `Vec` allocations (from `flat_map` + `collect` to pre-allocated `String` with capacity). Reduces allocations by ~O(n) per string cell in XLSX write.
 - [x] **`escape_xml_into` zero-copy fast path**: Added buffer-direct escaping with early-exit for strings with no special chars; called from the XLSX cell loop, eliminating the intermediate `String` allocation per cell entirely.

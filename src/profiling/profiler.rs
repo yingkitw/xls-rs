@@ -17,7 +17,8 @@ impl DataProfiler {
     pub fn new() -> Self {
         Self {
             max_distinct_values: 100,
-            sample_size: None,
+            // Default sample avoids cloning/profiling entire huge grids.
+            sample_size: Some(crate::limits::DEFAULT_PROFILE_SAMPLE_ROWS),
         }
     }
 
@@ -69,6 +70,7 @@ impl DataProfiler {
                 }
                 sampled
             } else {
+                // Borrow path: avoid full clone when already within sample budget.
                 data.to_vec()
             }
         } else {
@@ -214,11 +216,16 @@ impl DataProfiler {
         let mut duplicates = 0;
 
         for row in rows {
-            let row_str = row.join("|");
-            if seen.contains(&row_str) {
+            // Hash the row without building a giant joined string for wide rows.
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            use std::hash::{Hash, Hasher};
+            for cell in row {
+                cell.hash(&mut hasher);
+                0u8.hash(&mut hasher); // separator
+            }
+            let key = hasher.finish();
+            if !seen.insert(key) {
                 duplicates += 1;
-            } else {
-                seen.insert(row_str);
             }
         }
 

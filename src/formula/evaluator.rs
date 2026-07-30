@@ -5,8 +5,13 @@ use crate::csv_handler::sanitize_csv_row;
 use crate::excel::ExcelHandler;
 use anyhow::{Context, Result};
 use csv::{ReaderBuilder, WriterBuilder};
+use std::cell::Cell;
 
 use crate::excel::xlsx_reader::XlsxReader as NativeXlsxReader;
+
+thread_local! {
+    static FORMULA_DEPTH: Cell<usize> = const { Cell::new(0) };
+}
 
 pub struct FormulaEvaluator {
     excel_handler: ExcelHandler,
@@ -254,40 +259,56 @@ impl FormulaEvaluator {
     pub(crate) fn evaluate_formula(&self, formula: &str, data: &[Vec<String>]) -> Result<f64> {
         let formula = formula.trim().to_uppercase();
 
+        FORMULA_DEPTH.with(|d| {
+            let prev = d.get();
+            if prev >= crate::limits::MAX_FORMULA_DEPTH {
+                return Err(anyhow::anyhow!(
+                    "Formula evaluation exceeded max depth ({})",
+                    crate::limits::MAX_FORMULA_DEPTH
+                ));
+            }
+            d.set(prev + 1);
+            let result = self.evaluate_formula_inner(&formula, data);
+            d.set(prev);
+            result
+        })
+    }
+
+    fn evaluate_formula_inner(&self, formula: &str, data: &[Vec<String>]) -> Result<f64> {
         if formula.starts_with("SUM(") {
-            self.evaluate_sum(&formula, data)
+            self.evaluate_sum(formula, data)
         } else if formula.starts_with("AVERAGE(") {
-            self.evaluate_average(&formula, data)
+            self.evaluate_average(formula, data)
         } else if formula.starts_with("MIN(") {
-            self.evaluate_min(&formula, data)
+            self.evaluate_min(formula, data)
         } else if formula.starts_with("MAX(") {
-            self.evaluate_max(&formula, data)
+            self.evaluate_max(formula, data)
         } else if formula.starts_with("COUNT(") {
-            self.evaluate_count(&formula, data)
+            self.evaluate_count(formula, data)
         } else if formula.starts_with("ROUND(") {
-            self.evaluate_round(&formula, data)
+            self.evaluate_round(formula, data)
         } else if formula.starts_with("ABS(") {
-            self.evaluate_abs(&formula, data)
+            self.evaluate_abs(formula, data)
         } else if formula.starts_with("LEN(") {
-            self.evaluate_len(&formula, data)
+            self.evaluate_len(formula, data)
         } else if formula.starts_with("VLOOKUP(") {
-            self.evaluate_vlookup(&formula, data)
+            self.evaluate_vlookup(formula, data)
         } else if formula.starts_with("SUMIF(") {
-            self.evaluate_sumif(&formula, data)
+            self.evaluate_sumif(formula, data)
         } else if formula.starts_with("COUNTIF(") {
-            self.evaluate_countif(&formula, data)
+            self.evaluate_countif(formula, data)
         } else if formula.starts_with("MATCH(") {
-            self.evaluate_match(&formula, data)
+            self.evaluate_match(formula, data)
         } else if formula.contains('+')
             || formula.contains('-')
             || formula.contains('*')
             || formula.contains('/')
         {
-            self.evaluate_arithmetic(&formula, data)
+            self.evaluate_arithmetic(formula, data)
         } else if let Ok(num) = formula.parse::<f64>() {
             Ok(num)
         } else {
-            self.get_cell_value(&formula, data)
+            self.get_cell_value(formula, data)
         }
     }
 

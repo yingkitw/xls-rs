@@ -113,6 +113,12 @@ impl super::profiler::DataProfiler {
 
         for value in data {
             if !string::is_empty_or_whitespace(value) {
+                // Cap unique keys so high-cardinality columns cannot explode RAM.
+                if frequency_map.len() >= crate::limits::MAX_PROFILE_FREQUENCY_KEYS
+                    && !frequency_map.contains_key(value)
+                {
+                    continue;
+                }
                 *frequency_map.entry(value.clone()).or_insert(0) += 1;
             }
         }

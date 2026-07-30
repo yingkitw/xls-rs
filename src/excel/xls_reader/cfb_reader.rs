@@ -1,6 +1,10 @@
 //! CFB (Compound File Binary) reader.
 //!
 //! Parses OLE2 Compound File Binary format containers used by XLS files.
+//! Keeps a single owned byte buffer (no per-sector copies) and bounds FAT
+//! chain walks so cyclic sector graphs cannot hang or grow forever.
+
+use std::collections::HashSet;
 
 const CFB_MAGIC: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 const SECTOR_SIZE: usize = 512;
@@ -10,8 +14,6 @@ const DIFAT_IN_HEADER: usize = 109;
 
 const FREESECT: u32 = 0xFFFFFFFF;
 const ENDOFCHAIN: u32 = 0xFFFFFFFE;
-const FATSECT: u32 = 0xFFFFFFFD;
-const DIFSECT: u32 = 0xFFFFFFFC;
 const NOSTREAM: u32 = 0xFFFFFFFF;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,8 +62,10 @@ impl DirectoryEntry {
 }
 
 /// CFB container reader
+#[allow(dead_code)] // difat / first_* retained for CFB structure completeness
 pub struct CfbReader {
-    sectors: Vec<Vec<u8>>,
+    /// Full file bytes (header + sectors). Sector data is sliced on demand.
+    data: Vec<u8>,
     fat: Vec<u32>,
     difat: Vec<u32>,
     directory: Vec<DirectoryEntry>,
@@ -71,10 +75,19 @@ pub struct CfbReader {
 }
 
 impl CfbReader {
-    /// Parse CFB container from bytes
-    pub fn parse(data: &[u8]) -> anyhow::Result<Self> {
+    /// Parse CFB container from owned bytes (single buffer; no sector duplication).
+    pub fn parse(data: Vec<u8>) -> anyhow::Result<Self> {
+        Self::parse_bytes(data)
+    }
+
+    /// Parse CFB container from a borrowed slice (copies once into an owned buffer).
+    pub fn parse_slice(data: &[u8]) -> anyhow::Result<Self> {
+        Self::parse_bytes(data.to_vec())
+    }
+
+    fn parse_bytes(data: Vec<u8>) -> anyhow::Result<Self> {
         // Check magic
-        if data.len() < 8 || &data[0..8] != &CFB_MAGIC {
+        if data.len() < 8 || data[0..8] != CFB_MAGIC {
             anyhow::bail!("Invalid CFB magic bytes");
         }
 
@@ -114,9 +127,13 @@ impl CfbReader {
         // Parse DIFAT sectors if present
         let num_difat_sectors = u32::from_le_bytes([data[68], data[69], data[70], data[71]]);
         let mut difat_sector = u32::from_le_bytes([data[72], data[73], data[74], data[75]]);
+        let mut visited_difat = HashSet::new();
 
         for _ in 0..num_difat_sectors {
-            if difat_sector == ENDOFCHAIN || difat_sector >= (data.len() / SECTOR_SIZE) as u32 {
+            if difat_sector == ENDOFCHAIN || !visited_difat.insert(difat_sector) {
+                break;
+            }
+            if difat_sector >= (data.len() / SECTOR_SIZE) as u32 {
                 break;
             }
 
@@ -163,13 +180,22 @@ impl CfbReader {
             }
         }
 
-        // Read directory sectors
+        // Read directory sectors (cycle-safe)
         let mut directory_data = Vec::new();
         let mut dir_sector = first_dir_sector;
+        let mut visited_dir = HashSet::new();
+        let mut dir_hops = 0usize;
 
         loop {
             if dir_sector == ENDOFCHAIN || dir_sector >= fat.len() as u32 {
                 break;
+            }
+            if !visited_dir.insert(dir_sector) {
+                anyhow::bail!("Cyclic FAT chain detected while reading CFB directory");
+            }
+            dir_hops += 1;
+            if dir_hops > crate::limits::MAX_CFB_SECTOR_HOPS {
+                anyhow::bail!("CFB directory chain exceeded sector hop limit");
             }
 
             let dir_offset = HEADER_SIZE + dir_sector as usize * SECTOR_SIZE;
@@ -178,10 +204,6 @@ impl CfbReader {
             }
 
             directory_data.extend_from_slice(&data[dir_offset..dir_offset + SECTOR_SIZE]);
-
-            if dir_sector >= fat.len() as u32 {
-                break;
-            }
             dir_sector = fat[dir_sector as usize];
         }
 
@@ -199,13 +221,17 @@ impl CfbReader {
             directory.push(entry);
         }
 
-        // Read mini-FAT
+        // Read mini-FAT (cycle-safe)
         let mut mini_fat = Vec::new();
         let mut minifat_sector = first_minifat_sector;
+        let mut visited_minifat = HashSet::new();
 
         for _ in 0..num_minifat_sectors {
             if minifat_sector == ENDOFCHAIN || minifat_sector >= fat.len() as u32 {
                 break;
+            }
+            if !visited_minifat.insert(minifat_sector) {
+                anyhow::bail!("Cyclic FAT chain detected while reading mini-FAT");
             }
 
             let minifat_offset = HEADER_SIZE + minifat_sector as usize * SECTOR_SIZE;
@@ -222,25 +248,11 @@ impl CfbReader {
                 mini_fat.push(entry);
             }
 
-            if minifat_sector >= fat.len() as u32 {
-                break;
-            }
             minifat_sector = fat[minifat_sector as usize];
         }
 
-        // Read all sectors
-        let num_sectors = (data.len() - HEADER_SIZE + SECTOR_SIZE - 1) / SECTOR_SIZE;
-        let mut sectors = Vec::with_capacity(num_sectors);
-
-        for i in 0..num_sectors {
-            let offset = HEADER_SIZE + i * SECTOR_SIZE;
-            let end = (offset + SECTOR_SIZE).min(data.len());
-            let sector = data[offset..end].to_vec();
-            sectors.push(sector);
-        }
-
         Ok(CfbReader {
-            sectors,
+            data,
             fat,
             difat,
             directory,
@@ -248,6 +260,15 @@ impl CfbReader {
             first_minifat_sector,
             mini_fat,
         })
+    }
+
+    fn sector_bytes(&self, sector: u32) -> Option<&[u8]> {
+        let offset = HEADER_SIZE + sector as usize * SECTOR_SIZE;
+        if offset >= self.data.len() {
+            return None;
+        }
+        let end = (offset + SECTOR_SIZE).min(self.data.len());
+        Some(&self.data[offset..end])
     }
 
     /// Parse a single directory entry
@@ -298,21 +319,28 @@ impl CfbReader {
     }
 
     /// Read a stream chain using FAT
-    fn read_stream_chain(&self, start_sector: u32, size: u64) -> Vec<u8> {
-        let mut result = Vec::with_capacity(size as usize);
+    fn read_stream_chain(&self, start_sector: u32, size: u64) -> anyhow::Result<Vec<u8>> {
+        let mut result = Vec::with_capacity((size as usize).min(crate::limits::MAX_ZIP_ENTRY_BYTES as usize));
         let mut sector = start_sector;
         let mut remaining = size as usize;
+        let mut visited = HashSet::new();
+        let mut hops = 0usize;
 
         loop {
             if sector == ENDOFCHAIN || sector >= self.fat.len() as u32 {
                 break;
             }
-
-            if sector as usize >= self.sectors.len() {
-                break;
+            if !visited.insert(sector) {
+                anyhow::bail!("Cyclic FAT chain detected while reading CFB stream");
+            }
+            hops += 1;
+            if hops > crate::limits::MAX_CFB_SECTOR_HOPS {
+                anyhow::bail!("CFB stream chain exceeded sector hop limit");
             }
 
-            let sector_data = &self.sectors[sector as usize];
+            let Some(sector_data) = self.sector_bytes(sector) else {
+                break;
+            };
             let bytes_to_copy = sector_data.len().min(remaining);
             result.extend_from_slice(&sector_data[..bytes_to_copy]);
 
@@ -324,21 +352,32 @@ impl CfbReader {
             sector = self.fat[sector as usize];
         }
 
-        result
+        Ok(result)
     }
 
     /// Read mini-stream chain using mini-FAT
-    fn read_mini_stream_chain(&self, start_sector: u32, size: u64) -> Option<Vec<u8>> {
-        let root_entry = self.directory.get(0).filter(|e| e.object_type == ObjectType::Root)?;
-        let mini_stream_data = self.read_stream_chain(root_entry.start_sector, root_entry.size);
+    fn read_mini_stream_chain(&self, start_sector: u32, size: u64) -> anyhow::Result<Option<Vec<u8>>> {
+        let Some(root_entry) = self.directory.get(0).filter(|e| e.object_type == ObjectType::Root) else {
+            return Ok(None);
+        };
+        let mini_stream_data = self.read_stream_chain(root_entry.start_sector, root_entry.size)?;
 
         let mut result = Vec::with_capacity(size as usize);
         let mut sector = start_sector;
         let mut remaining = size as usize;
+        let mut visited = HashSet::new();
+        let mut hops = 0usize;
 
         loop {
             if sector == ENDOFCHAIN || sector >= self.mini_fat.len() as u32 {
                 break;
+            }
+            if !visited.insert(sector) {
+                anyhow::bail!("Cyclic mini-FAT chain detected while reading CFB stream");
+            }
+            hops += 1;
+            if hops > crate::limits::MAX_CFB_SECTOR_HOPS {
+                anyhow::bail!("CFB mini-stream chain exceeded sector hop limit");
             }
 
             let offset = sector as usize * MINI_SECTOR_SIZE;
@@ -357,7 +396,7 @@ impl CfbReader {
             sector = self.mini_fat[sector as usize];
         }
 
-        Some(result)
+        Ok(Some(result))
     }
 
     /// Get stream data by name
@@ -373,9 +412,9 @@ impl CfbReader {
         }
 
         if entry.size < MINI_CUTOFF as u64 {
-            self.read_mini_stream_chain(entry.start_sector, entry.size)
+            self.read_mini_stream_chain(entry.start_sector, entry.size).ok()?
         } else {
-            Some(self.read_stream_chain(entry.start_sector, entry.size))
+            self.read_stream_chain(entry.start_sector, entry.size).ok()
         }
     }
 
@@ -407,8 +446,8 @@ mod tests {
         data[0..8].copy_from_slice(&CFB_MAGIC);
         // Set sector shift to 9 for 512-byte sectors (2^9 = 512)
         data[30..32].copy_from_slice(&9u16.to_le_bytes());
-        
-        let reader = CfbReader::parse(&data);
+
+        let reader = CfbReader::parse(data);
         if let Err(e) = &reader {
             println!("CFB parse error: {:?}", e);
         }
@@ -418,8 +457,8 @@ mod tests {
     #[test]
     fn test_invalid_cfb_magic() {
         let data = vec![0u8; 512];
-        
-        let reader = CfbReader::parse(&data);
+
+        let reader = CfbReader::parse(data);
         assert!(reader.is_err());
     }
 
@@ -447,7 +486,7 @@ mod tests {
         let bytes = writer.to_bytes().unwrap();
 
         // Read it back with CFB parser
-        let cfb = CfbReader::parse(&bytes).unwrap();
+        let cfb = CfbReader::parse(bytes).unwrap();
 
         // Check streams exist
         let streams = cfb.list_streams();
@@ -470,11 +509,11 @@ mod tests {
         writer.add_row(row);
 
         let bytes = writer.to_bytes().unwrap();
-        let cfb = CfbReader::parse(&bytes).unwrap();
+        let cfb = CfbReader::parse(bytes).unwrap();
 
         let entries = cfb.list_entries();
         assert!(entries.iter().any(|e| e.contains("Root")));
-        
+
         let streams = cfb.list_streams();
         assert!(streams.iter().any(|s| s.eq_ignore_ascii_case("Workbook")));
     }

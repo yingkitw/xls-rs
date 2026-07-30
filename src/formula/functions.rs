@@ -12,16 +12,28 @@ impl FormulaEvaluator {
         range: &crate::formula::types::CellRange,
         data: &[Vec<String>],
     ) -> Vec<f64> {
-        let num_rows = (range.end_row - range.start_row + 1) as usize;
-        let num_cols = (range.end_col - range.start_col + 1) as usize;
-        let mut values = Vec::with_capacity(num_rows * num_cols);
+        // Bound capacity by actual data shape + hard cap — never allocate for
+        // A1:XFD1048576-style ranges that exceed the workbook.
+        let max_row = (data.len() as u32).saturating_sub(1);
+        let end_row = range.end_row.min(max_row);
+        if range.start_row > end_row {
+            return Vec::new();
+        }
+        let num_rows = (end_row - range.start_row + 1) as usize;
+        let num_cols = (range.end_col.saturating_sub(range.start_col) + 1) as usize;
+        let est = num_rows
+            .saturating_mul(num_cols)
+            .min(crate::limits::MAX_FORMULA_RANGE_CELLS);
+        let mut values = Vec::with_capacity(est);
+        let mut visited = 0usize;
 
-        for row in range.start_row..=range.end_row {
-            if row as usize >= data.len() {
-                break;
-            }
+        for row in range.start_row..=end_row {
             let row_data = &data[row as usize];
             for col in range.start_col..=range.end_col {
+                visited += 1;
+                if visited > crate::limits::MAX_FORMULA_RANGE_CELLS {
+                    return values;
+                }
                 if (col as usize) < row_data.len() {
                     if let Ok(num) = row_data[col as usize].parse::<f64>() {
                         values.push(num);

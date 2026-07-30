@@ -5,7 +5,6 @@
 #![allow(dead_code)] // Library exports many public APIs not used internally
 
 pub mod anomaly;
-pub mod api;
 pub mod capabilities;
 pub mod columnar;
 pub mod common;
@@ -23,25 +22,20 @@ pub mod geospatial;
 pub mod google_sheets;
 pub mod handler_registry;
 pub mod helpers;
-pub mod lineage;
+pub mod limits;
 #[cfg(feature = "mcp")]
 mod mcp_enrichment;
 #[cfg(feature = "mcp")]
 pub mod mcp;
-#[cfg(test)]
-pub mod mocks;
 pub mod operations;
 pub mod plugins;
 pub mod profiling;
-pub mod profiling_handler;
 pub mod quality;
 pub mod regex_cache;
 pub mod streaming;
 pub mod streaming_ops;
 pub mod string_distance;
 pub mod string_utils;
-pub mod text_analysis;
-pub mod text_analysis_handler;
 pub mod timeseries;
 pub mod traits;
 pub mod types;
@@ -50,7 +44,6 @@ pub mod workflow;
 pub mod capability_catalog;
 
 pub use anomaly::{Anomaly, AnomalyDetector, AnomalyMethod, AnomalyResult};
-pub use api::{ApiConfig, ApiRequest, ApiResponse, ApiServer};
 #[cfg(feature = "avro")]
 pub use columnar::AvroHandler;
 #[cfg(feature = "parquet")]
@@ -88,7 +81,6 @@ pub use helpers::{
     with_cell_context, with_file_context, with_full_context,
     validate_row_index, validate_column_index,
 };
-pub use lineage::{LineageNode, LineageTracker};
 #[cfg(feature = "mcp")]
 pub use mcp::XlsRsMcpServer;
 pub use operations::{
@@ -107,7 +99,6 @@ pub use string_utils::{
     join_cell_reference, join_with_capacity, string_with_capacity, StringBuilder,
     estimate_csv_row_capacity, estimate_json_array_capacity,
 };
-pub use text_analysis::{KeywordResult, LanguageResult, SentimentResult, TextAnalyzer, TextStats};
 pub use timeseries::{
     ResampleInterval, RollingWindow, TimeSeriesAgg, TimeSeriesPoint, TimeSeriesProcessor,
     TrendDirection,

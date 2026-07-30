@@ -128,9 +128,17 @@ pub fn get_cell_value_str(cell_ref: &str, data: &[Vec<String>]) -> Result<String
 /// Get values from a range
 pub fn get_range_values(range: &CellRange, data: &[Vec<String>]) -> Vec<f64> {
     let mut values = Vec::new();
+    let mut visited = 0usize;
 
     for row in range.start_row..=range.end_row {
+        if row as usize >= data.len() {
+            break;
+        }
         for col in range.start_col..=range.end_col {
+            visited += 1;
+            if visited > crate::limits::MAX_FORMULA_RANGE_CELLS {
+                return values;
+            }
             if let Some(row_data) = data.get(row as usize) {
                 if let Some(cell) = row_data.get(col as usize) {
                     if let Ok(num) = cell.parse::<f64>() {

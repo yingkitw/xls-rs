@@ -98,7 +98,12 @@ impl XlsReader {
 
     /// Read XLS file from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        // Parse CFB container
+        Self::from_owned_bytes(bytes.to_vec())
+    }
+
+    /// Read XLS file from owned bytes (avoids an extra full-file copy when possible)
+    pub fn from_owned_bytes(bytes: Vec<u8>) -> Result<Self> {
+        // Parse CFB container (takes ownership — no sector double-buffer)
         let cfb = CfbReader::parse(bytes)
             .context("Failed to parse CFB container")?;
 
@@ -115,7 +120,7 @@ impl XlsReader {
     pub fn from_path(path: &str) -> Result<Self> {
         let bytes = std::fs::read(path)
             .with_context(|| format!("Failed to read file: {}", path))?;
-        Self::from_bytes(&bytes)
+        Self::from_owned_bytes(bytes)
     }
 
     /// Parse workbook BIFF8 records
@@ -215,15 +220,23 @@ impl XlsReader {
             }
         }
 
-        // Convert sparse cell map to dense Vec<Vec>
-        if max_row == 0 && max_col == 0 {
+        // Convert sparse cell map to dense Vec<Vec> (clamped to avoid OOM)
+        if max_row == 0 && max_col == 0 && cells.is_empty() {
             return Some(Vec::new());
         }
 
-        let mut result = vec![vec![CellValue::Empty; (max_col + 1) as usize]; (max_row + 1) as usize];
+        let (n_rows, n_cols) =
+            crate::limits::clamp_dense_dims(max_row as usize, max_col as usize);
+        if n_rows == 0 || n_cols == 0 {
+            return Some(Vec::new());
+        }
+
+        let mut result = vec![vec![CellValue::Empty; n_cols]; n_rows];
         for ((row, col), value) in cells {
-            if row <= max_row && col <= max_col {
-                result[row as usize][col as usize] = value;
+            let r = row as usize;
+            let c = col as usize;
+            if r < n_rows && c < n_cols {
+                result[r][c] = value;
             }
         }
 

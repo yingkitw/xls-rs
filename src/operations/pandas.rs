@@ -294,6 +294,12 @@ impl DataOperations {
 
             if let Some(right_indices) = right_index.get(&key) {
                 for &right_idx in right_indices {
+                    if result.len() >= crate::limits::MAX_JOIN_OUTPUT_ROWS {
+                        anyhow::bail!(
+                            "Join output exceeded {} rows (many-to-many explosion); filter keys or raise limit intentionally",
+                            crate::limits::MAX_JOIN_OUTPUT_ROWS
+                        );
+                    }
                     matched_right.insert(right_idx);
                     let mut new_row = left_row.clone();
                     for (idx, val) in right[right_idx].iter().enumerate() {
@@ -304,6 +310,12 @@ impl DataOperations {
                     result.push(new_row);
                 }
             } else if matches!(how, JoinType::Left | JoinType::Outer) {
+                if result.len() >= crate::limits::MAX_JOIN_OUTPUT_ROWS {
+                    anyhow::bail!(
+                        "Join output exceeded {} rows",
+                        crate::limits::MAX_JOIN_OUTPUT_ROWS
+                    );
+                }
                 let mut new_row = left_row.clone();
                 for (idx, val) in empty_right.iter().enumerate() {
                     if idx != right_col {
@@ -320,6 +332,12 @@ impl DataOperations {
 
             for (idx, right_row) in right.iter().enumerate() {
                 if !matched_right.contains(&idx) {
+                    if result.len() >= crate::limits::MAX_JOIN_OUTPUT_ROWS {
+                        anyhow::bail!(
+                            "Join output exceeded {} rows",
+                            crate::limits::MAX_JOIN_OUTPUT_ROWS
+                        );
+                    }
                     let mut new_row = empty_left.clone();
                     if let Some(key) = right_row.get(right_col) {
                         if left_col < new_row.len() {
@@ -462,6 +480,12 @@ impl DataOperations {
 
         for row in data.iter().skip(1) {
             for &v in &value_indices {
+                if result.len() > crate::limits::MAX_JOIN_OUTPUT_ROWS {
+                    anyhow::bail!(
+                        "melt output exceeded {} rows",
+                        crate::limits::MAX_JOIN_OUTPUT_ROWS
+                    );
+                }
                 let mut new_row: Vec<String> = id_vars
                     .iter()
                     .map(|&i| row.get(i).cloned().unwrap_or_default())

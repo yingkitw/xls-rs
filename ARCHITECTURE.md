@@ -55,6 +55,7 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 - `src/config.rs`: TOML config discovery and typed `Config` struct (includes `google_sheets.access_token`, `default_format`, etc.).
 - `src/common/`: Shared utilities — format detection, validation helpers, string utilities, collection helpers.
 - `src/helpers.rs`: Grid slicing (`filter_by_range`), cell-reference parsing, safe numeric parsing.
+- `src/limits.rs`: Hard caps for dense-grid materialization, ODS repeats, ZIP/CSV slurps, join/melt output, formula depth/range size, string-distance length, and profiler sampling — mitigates spreadsheet zip/memory bombs.
 - `src/types.rs`: Core types (`CellValue`, `DataSet`, `DataRow`, `DataType`).
 - `src/traits.rs`: Shared traits (`DataReader`, `DataWriter`, `FileHandler`, `DataOperator`, etc.).
 - `src/lineage.rs`: Transformation lineage tracking.
