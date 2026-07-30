@@ -6,6 +6,27 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
 use std::io::Read;
+use std::sync::OnceLock;
+
+fn sheet_name_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#"<sheet[^>]+name="([^"]+)""#).expect("sheet name regex"))
+}
+
+fn sheet_num_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"sheet(\d+)\.xml$").expect("sheet file regex"))
+}
+
+fn ref_attr_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#"ref="([^"]+)""#).expect("ref attr regex"))
+}
+
+fn sqref_attr_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r#"sqref="([^"]+)""#).expect("sqref attr regex"))
+}
 
 /// Unsupported Excel feature with structured error information
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -226,15 +247,15 @@ impl FeatureDetector {
             e.read_to_string(&mut workbook_xml)
                 .map_err(|e| anyhow!(e))?;
         }
-        let re_name = Regex::new(r#"<sheet[^>]+name="([^"]+)""#).expect("sheet name regex");
+        let re_name = sheet_name_regex();
         let sheet_names: Vec<String> = re_name
             .captures_iter(&workbook_xml)
             .map(|c| c[1].to_string())
             .collect();
 
-        let re_sheet_num = Regex::new(r"sheet(\d+)\.xml$").expect("sheet file regex");
-        let ref_cell = Regex::new(r#"ref="([^"]+)""#).expect("ref attr regex");
-        let ref_sq = Regex::new(r#"sqref="([^"]+)""#).expect("sqref attr regex");
+        let re_sheet_num = sheet_num_regex();
+        let ref_cell = ref_attr_regex();
+        let ref_sq = sqref_attr_regex();
         let mut chart_count: usize = 0;
 
         for i in 0..archive.len() {

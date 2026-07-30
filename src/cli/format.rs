@@ -57,6 +57,7 @@ impl OutputFormat {
     }
 
     /// Get the file extension for this format
+    #[allow(dead_code)]
     pub fn extension(&self) -> &'static str {
         match self {
             OutputFormat::Csv => "csv",
@@ -68,6 +69,7 @@ impl OutputFormat {
     }
 
     /// Get the MIME type for this format
+    #[allow(dead_code)]
     pub fn mime_type(&self) -> &'static str {
         match self {
             OutputFormat::Csv => "text/csv",

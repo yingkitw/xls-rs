@@ -16,8 +16,7 @@
 //!   MOD, SQRT, LEN, LEFT, RIGHT, MID, CONCATENATE, VLOOKUP, HLOOKUP,
 //!   AND, OR, NOT, TRUE, FALSE
 
-#![allow(dead_code)]
-
+#[allow(dead_code)] // Variants retained for formula token completeness
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Number(f64),

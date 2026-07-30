@@ -707,8 +707,9 @@ impl ColumnStats {
         let variance = values.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / count as f64;
         let std_dev = variance.sqrt();
 
-        let min = *values.iter().min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).unwrap();
-        let max = *values.iter().max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).unwrap();
+        // values is guaranteed non-empty (empty case returns early above)
+        let min = *values.iter().min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).unwrap_or(&f64::NAN);
+        let max = *values.iter().max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).unwrap_or(&f64::NAN);
 
         // Sort once for all percentiles
         let mut sorted = values.to_vec();

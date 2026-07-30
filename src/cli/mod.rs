@@ -835,6 +835,7 @@ pub enum Commands {
 /// Execute a CLI command
 ///
 /// This is the main entry point for command execution.
+#[allow(dead_code)]
 pub fn run(command: Commands) -> anyhow::Result<()> {
     let handler = DefaultCommandHandler::new();
     handler.handle(command)

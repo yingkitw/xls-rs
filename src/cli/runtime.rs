@@ -8,6 +8,7 @@ use xls_rs::config::Config;
 pub struct CliRuntime {
     pub config_path: Option<PathBuf>,
     pub quiet: bool,
+    #[allow(dead_code)]
     pub verbose: bool,
     pub overwrite: bool,
 }
@@ -28,6 +29,7 @@ pub fn log(msg: impl AsRef<str>) {
     }
 }
 
+#[allow(dead_code)]
 pub fn debug(msg: impl AsRef<str>) {
     if get().verbose && !get().quiet {
         eprintln!("{}", msg.as_ref());

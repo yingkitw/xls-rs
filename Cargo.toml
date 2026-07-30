@@ -58,15 +58,11 @@ rayon = "1.10"
 ureq = { version = "2.12", optional = true }
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
-axum = { version = "0.7", optional = true }
-tower = { version = "0.4", optional = true }
-tower-http = { version = "0.5", features = ["cors", "limit"], optional = true }
 notify = { version = "6", optional = true }
 ctrlc = { version = "3", optional = true }
 
 [features]
 default = ["watch", "completions", "mcp", "parquet", "avro", "gsheets"]
-api = ["axum", "tower", "tower-http", "tokio"]
 watch = ["dep:notify", "dep:ctrlc"]
 completions = ["dep:clap_complete"]
 mcp = ["dep:rmcp"]

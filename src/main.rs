@@ -2,8 +2,6 @@
 //!
 //! Supports CSV, Excel (xlsx/xls), ODS, Parquet, and Avro formats with formula evaluation.
 
-#![allow(dead_code)] // Modules expose APIs for library use
-
 use anyhow::Result;
 use clap::Parser;
 mod cli;

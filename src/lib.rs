@@ -2,7 +2,9 @@
 //!
 //! Supports CSV, Excel (xlsx/xls), ODS, Parquet, and Avro formats with formula evaluation.
 
-#![allow(dead_code)] // Library exports many public APIs not used internally
+// Library crate: public items are the API surface, not "dead code" even if
+// not called internally. Suppressing here is standard for library crates.
+#![allow(dead_code)]
 
 pub mod anomaly;
 pub mod capabilities;

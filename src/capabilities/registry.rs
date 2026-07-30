@@ -22,19 +22,19 @@ impl CapabilityRegistry {
     /// Register a capability
     pub fn register(&self, capability: Arc<dyn Capability>) {
         let metadata = capability.metadata();
-        let mut caps = self.capabilities.write().unwrap();
+        let mut caps = self.capabilities.write().unwrap_or_else(|e| e.into_inner());
         caps.insert(metadata.name.clone(), capability);
     }
 
     /// Get a capability by name
     pub fn get(&self, name: &str) -> Option<Arc<dyn Capability>> {
-        let caps = self.capabilities.read().unwrap();
+        let caps = self.capabilities.read().unwrap_or_else(|e| e.into_inner());
         caps.get(name).cloned()
     }
 
     /// List all capabilities
     pub fn list(&self) -> Vec<CapabilityMetadata> {
-        let caps = self.capabilities.read().unwrap();
+        let caps = self.capabilities.read().unwrap_or_else(|e| e.into_inner());
         let mut list: Vec<_> = caps.values().map(|c| c.metadata()).collect();
         list.sort_by(|a, b| a.name.cmp(&b.name));
         list

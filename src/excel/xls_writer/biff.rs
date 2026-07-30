@@ -11,11 +11,10 @@
 //!
 //! All multi-byte integers are little-endian.
 
-#![allow(dead_code)]
-
 use std::io::Write;
 
 /// BIFF8 record identifier.
+#[allow(dead_code)] // Variants retained for BIFF8 structure completeness
 #[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 pub enum RecordId {

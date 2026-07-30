@@ -698,11 +698,15 @@ impl XlsxReader {
                 }
                 scanner.skip_open_tag();
 
-                // Read cell value: <v> for values, <is><t> for inline strings
+                // Read cell value: <v> for values, <is><t> for inline strings.
+                // Save position before each find_open_tag so that if the child
+                // tag is absent (empty cell), the scanner is restored and the
+                // outer loop's find_open_tag("c") can find the next cell.
                 let mut value = XlsxCellValue::Empty;
                 match cell_type.as_str() {
                     "s" => {
                         // Shared string
+                        let save = scanner.pos;
                         if scanner.find_open_tag("v").is_some() {
                             let v_start = scanner.pos;
                             if !scanner.is_self_closing(v_start) {
@@ -716,10 +720,13 @@ impl XlsxReader {
                             } else {
                                 scanner.skip_open_tag();
                             }
+                        } else {
+                            scanner.pos = save;
                         }
                     }
                     "inlineStr" => {
                         // Inline string: <is><t>text</t></is>
+                        let save = scanner.pos;
                         if scanner.find_open_tag("t").is_some() {
                             let t_start = scanner.pos;
                             if !scanner.is_self_closing(t_start) {
@@ -729,10 +736,13 @@ impl XlsxReader {
                             } else {
                                 scanner.skip_open_tag();
                             }
+                        } else {
+                            scanner.pos = save;
                         }
                     }
                     "b" => {
                         // Boolean
+                        let save = scanner.pos;
                         if scanner.find_open_tag("v").is_some() {
                             let v_start = scanner.pos;
                             if !scanner.is_self_closing(v_start) {
@@ -742,10 +752,13 @@ impl XlsxReader {
                             } else {
                                 scanner.skip_open_tag();
                             }
+                        } else {
+                            scanner.pos = save;
                         }
                     }
                     "e" => {
                         // Error
+                        let save = scanner.pos;
                         if scanner.find_open_tag("v").is_some() {
                             let v_start = scanner.pos;
                             if !scanner.is_self_closing(v_start) {
@@ -755,10 +768,13 @@ impl XlsxReader {
                             } else {
                                 scanner.skip_open_tag();
                             }
+                        } else {
+                            scanner.pos = save;
                         }
                     }
                     "str" => {
                         // Formula string result
+                        let save = scanner.pos;
                         if scanner.find_open_tag("v").is_some() {
                             let v_start = scanner.pos;
                             if !scanner.is_self_closing(v_start) {
@@ -768,10 +784,13 @@ impl XlsxReader {
                             } else {
                                 scanner.skip_open_tag();
                             }
+                        } else {
+                            scanner.pos = save;
                         }
                     }
                     _ => {
                         // Number (default)
+                        let save = scanner.pos;
                         if scanner.find_open_tag("v").is_some() {
                             let v_start = scanner.pos;
                             if !scanner.is_self_closing(v_start) {
@@ -783,6 +802,8 @@ impl XlsxReader {
                             } else {
                                 scanner.skip_open_tag();
                             }
+                        } else {
+                            scanner.pos = save;
                         }
                     }
                 }

@@ -105,14 +105,14 @@ fn diff_by_key(
     }
 
     for key in left_keys.intersection(&right_keys) {
-        let left_row = left_map.get(*key).unwrap();
-        let right_row = right_map.get(*key).unwrap();
-        if !rows_equal(left_row, right_row) {
-            result.changed.push(ChangedRow {
-                key: (*key).clone(),
-                left: left_row.clone(),
-                right: right_row.clone(),
-            });
+        if let (Some(left_row), Some(right_row)) = (left_map.get(*key), right_map.get(*key)) {
+            if !rows_equal(left_row, right_row) {
+                result.changed.push(ChangedRow {
+                    key: (*key).clone(),
+                    left: left_row.clone(),
+                    right: right_row.clone(),
+                });
+            }
         }
     }
 }

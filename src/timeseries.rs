@@ -87,6 +87,7 @@ impl TimeSeriesProcessor {
     /// Parse date string to NaiveDateTime
     pub fn parse_date(&self, date_str: &str) -> Result<NaiveDateTime> {
         if let Ok(date) = NaiveDate::parse_from_str(date_str, &self.date_format) {
+            // and_hms_opt(0,0,0) always returns Some for any valid NaiveDate
             Ok(date.and_hms_opt(0, 0, 0).unwrap())
         } else if let Ok(datetime) = NaiveDateTime::parse_from_str(date_str, &self.date_format) {
             Ok(datetime)
@@ -103,6 +104,7 @@ impl TimeSeriesProcessor {
 
             for format in common_formats {
                 if let Ok(date) = NaiveDate::parse_from_str(date_str, format) {
+                    // and_hms_opt(0,0,0) always returns Some for any valid NaiveDate
                     return Ok(date.and_hms_opt(0, 0, 0).unwrap());
                 }
                 if let Ok(datetime) = NaiveDateTime::parse_from_str(date_str, format) {
@@ -194,42 +196,39 @@ impl TimeSeriesProcessor {
         interval: &ResampleInterval,
     ) -> NaiveDateTime {
         match interval {
-            ResampleInterval::Daily => timestamp.date().and_hms_opt(0, 0, 0).unwrap(),
+            ResampleInterval::Daily => timestamp.date().and_hms_opt(0, 0, 0).unwrap_or(timestamp),
             ResampleInterval::Weekly => {
                 let week_start = timestamp.date()
                     - Duration::days(timestamp.weekday().num_days_from_sunday() as i64);
-                week_start.and_hms_opt(0, 0, 0).unwrap()
+                week_start.and_hms_opt(0, 0, 0).unwrap_or(timestamp)
             }
             ResampleInterval::Monthly => {
                 NaiveDate::from_ymd_opt(timestamp.year(), timestamp.month(), 1)
-                    .unwrap()
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
+                    .and_then(|d| d.and_hms_opt(0, 0, 0))
+                    .unwrap_or(timestamp)
             }
             ResampleInterval::Quarterly => {
                 let quarter = ((timestamp.month() - 1) / 3) + 1;
                 let month = (quarter - 1) * 3 + 1;
                 NaiveDate::from_ymd_opt(timestamp.year(), month, 1)
-                    .unwrap()
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
+                    .and_then(|d| d.and_hms_opt(0, 0, 0))
+                    .unwrap_or(timestamp)
             }
             ResampleInterval::Yearly => NaiveDate::from_ymd_opt(timestamp.year(), 1, 1)
-                .unwrap()
-                .and_hms_opt(0, 0, 0)
-                .unwrap(),
+                .and_then(|d| d.and_hms_opt(0, 0, 0))
+                .unwrap_or(timestamp),
             ResampleInterval::Hourly => timestamp
                 .date()
                 .and_hms_opt(timestamp.hour(), 0, 0)
-                .unwrap(),
+                .unwrap_or(timestamp),
             ResampleInterval::Minute => timestamp
                 .date()
                 .and_hms_opt(timestamp.hour(), timestamp.minute(), 0)
-                .unwrap(),
+                .unwrap_or(timestamp),
             ResampleInterval::Custom(duration) => {
                 let epoch = NaiveDateTime::new(
-                    NaiveDate::from_ymd_opt(1970, 1, 1).unwrap(),
-                    chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
+                    NaiveDate::from_ymd_opt(1970, 1, 1).unwrap_or(NaiveDate::MIN),
+                    chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap_or(chrono::NaiveTime::MIN),
                 );
                 let duration_since_epoch = timestamp.signed_duration_since(epoch);
                 let rounded_duration = (duration_since_epoch.num_seconds() as i64
