@@ -79,7 +79,7 @@ fn test_bearing_north() {
 
     let bearing = calc.bearing(&from, &to);
     // Due north should be approximately 0 degrees
-    assert!(bearing < 10.0 || bearing > 350.0);
+    assert!(!(10.0..=350.0).contains(&bearing));
 }
 
 #[test]

@@ -130,8 +130,8 @@ impl DataValidator {
             let mut row_valid = true;
 
             for (col_idx, cell_value) in row.iter().enumerate() {
-                if let Some(column_name) = header.get(col_idx) {
-                    if let Some(rules) = self.config.rules.get(column_name) {
+                if let Some(column_name) = header.get(col_idx)
+                    && let Some(rules) = self.config.rules.get(column_name) {
                         for rule in rules {
                             match self.validate_value(cell_value, rule) {
                                 Ok(()) => {} // Valid
@@ -150,16 +150,14 @@ impl DataValidator {
                                         break;
                                     }
 
-                                    if let Some(max) = self.config.max_errors {
-                                        if errors.len() >= max {
+                                    if let Some(max) = self.config.max_errors
+                                        && errors.len() >= max {
                                             break;
                                         }
-                                    }
                                 }
                             }
                         }
                     }
-                }
             }
 
             if row_valid {
@@ -170,11 +168,10 @@ impl DataValidator {
                 break;
             }
 
-            if let Some(max) = self.config.max_errors {
-                if errors.len() >= max {
+            if let Some(max) = self.config.max_errors
+                && errors.len() >= max {
                     break;
                 }
-            }
         }
 
         let total_rows = data.len() - 1; // Exclude header
@@ -219,24 +216,22 @@ impl DataValidator {
             }
             ValidationRule::Range { min, max } => {
                 if let Some(num) = string::to_number(value) {
-                    if let Some(min_val) = min {
-                        if num < *min_val {
+                    if let Some(min_val) = min
+                        && num < *min_val {
                             return Err(anyhow::anyhow!(
                                 "Value {} is below minimum {}",
                                 num,
                                 min_val
                             ));
                         }
-                    }
-                    if let Some(max_val) = max {
-                        if num > *max_val {
+                    if let Some(max_val) = max
+                        && num > *max_val {
                             return Err(anyhow::anyhow!(
                                 "Value {} is above maximum {}",
                                 num,
                                 max_val
                             ));
                         }
-                    }
                 } else {
                     return Err(anyhow::anyhow!("Value is not numeric"));
                 }
@@ -252,24 +247,22 @@ impl DataValidator {
             }
             ValidationRule::Length { min, max } => {
                 let len = value.len();
-                if let Some(min_len) = min {
-                    if len < *min_len {
+                if let Some(min_len) = min
+                    && len < *min_len {
                         return Err(anyhow::anyhow!(
                             "Length {} is below minimum {}",
                             len,
                             min_len
                         ));
                     }
-                }
-                if let Some(max_len) = max {
-                    if len > *max_len {
+                if let Some(max_len) = max
+                    && len > *max_len {
                         return Err(anyhow::anyhow!(
                             "Length {} is above maximum {}",
                             len,
                             max_len
                         ));
                     }
-                }
             }
             ValidationRule::Email => {
                 let email_regex =

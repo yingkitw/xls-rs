@@ -34,11 +34,10 @@ impl FormulaEvaluator {
                 if visited > crate::limits::MAX_FORMULA_RANGE_CELLS {
                     return values;
                 }
-                if (col as usize) < row_data.len() {
-                    if let Ok(num) = row_data[col as usize].parse::<f64>() {
+                if (col as usize) < row_data.len()
+                    && let Ok(num) = row_data[col as usize].parse::<f64>() {
                         values.push(num);
                     }
-                }
             }
         }
 
@@ -117,11 +116,10 @@ impl FormulaEvaluator {
         let inner = self.extract_function_args(formula)?;
         let inner = inner.trim().to_uppercase();
 
-        if let Ok((row, col)) = self.parse_cell_reference(&inner) {
-            if let Some(text) = self.get_cell_text_by_index(row, col, data) {
+        if let Ok((row, col)) = self.parse_cell_reference(&inner)
+            && let Some(text) = self.get_cell_text_by_index(row, col, data) {
                 return Ok(text.len() as f64);
             }
-        }
 
         let text = inner.trim_matches('"');
         Ok(text.len() as f64)
@@ -163,11 +161,10 @@ impl FormulaEvaluator {
                     let result_col = range.start_col + (col_index as u16 - 1);
                     if let Some(value) = self.get_cell_value_by_index(row, result_col, data) {
                         return Ok(value);
-                    } else if let Some(text) = self.get_cell_text_by_index(row, result_col, data) {
-                        if let Ok(num) = text.parse::<f64>() {
+                    } else if let Some(text) = self.get_cell_text_by_index(row, result_col, data)
+                        && let Ok(num) = text.parse::<f64>() {
                             return Ok(num);
                         }
-                    }
                     anyhow::bail!("VLOOKUP: value at result column is not numeric");
                 }
             }
@@ -208,11 +205,10 @@ impl FormulaEvaluator {
                 {
                     let matches = self.matches_criteria(&cell_text, &criteria);
 
-                    if matches {
-                        if let Some(value) = self.get_cell_value_by_index(sum_row, sum_col, data) {
+                    if matches
+                        && let Some(value) = self.get_cell_value_by_index(sum_row, sum_col, data) {
                             sum += value;
                         }
-                    }
                 }
             }
         }
@@ -235,11 +231,10 @@ impl FormulaEvaluator {
 
         for row in range.start_row..=range.end_row {
             for col in range.start_col..=range.end_col {
-                if let Some(cell_text) = self.get_cell_text_by_index(row, col, data) {
-                    if self.matches_criteria(&cell_text, &criteria) {
+                if let Some(cell_text) = self.get_cell_text_by_index(row, col, data)
+                    && self.matches_criteria(&cell_text, &criteria) {
                         count += 1;
                     }
-                }
             }
         }
 

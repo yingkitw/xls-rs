@@ -14,6 +14,12 @@ pub struct Converter {
     format_detector: DefaultFormatDetector,
 }
 
+impl Default for Converter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Converter {
     pub fn new() -> Self {
         Self {
@@ -118,32 +124,25 @@ impl Converter {
                 self.excel_handler.write_xls(path, data, sheet_name)
             }
             "xlsx" => {
-                // Write to temp CSV then convert
-                let temp_csv = format!("{}.tmp.csv", path);
-
-                // Ensure temp file is cleaned up even if an error occurs
-                let cleanup_temp = |temp_path: &str| {
-                    if let Err(e) = std::fs::remove_file(temp_path) {
-                        eprintln!("Warning: Failed to remove temp file {}: {}", temp_path, e);
-                    }
-                };
+                // Use a named temp file that auto-deletes on drop, even on panic.
+                let temp = tempfile::NamedTempFile::new()
+                    .context("Failed to create temp file for XLSX conversion")?;
+                let temp_path = temp.path().to_str()
+                    .ok_or_else(|| anyhow::anyhow!("Temp file path is not valid UTF-8"))?
+                    .to_string();
 
                 // Write to temp CSV (sanitized like other CSV write paths)
                 self.csv_handler
-                    .write_records_safe(&temp_csv, data.to_vec())
-                    .with_context(|| format!("Failed to write temp CSV file: {}", temp_csv))?;
+                    .write_records_safe(&temp_path, data.to_vec())
+                    .with_context(|| format!("Failed to write temp CSV file: {}", temp_path))?;
 
                 // Convert to Excel
-                match self.excel_handler.write_from_csv(&temp_csv, path, sheet_name) {
-                    Ok(_) => {
-                        cleanup_temp(&temp_csv);
-                        Ok(())
-                    }
-                    Err(e) => {
-                        cleanup_temp(&temp_csv);
-                        Err(e).context(format!("Failed to convert CSV to Excel: {}", path))
-                    }
-                }
+                let result = self.excel_handler
+                    .write_from_csv(&temp_path, path, sheet_name)
+                    .context(format!("Failed to convert CSV to Excel: {}", path));
+                // `temp` is dropped here, automatically deleting the temp file
+                drop(temp);
+                result
             }
             #[cfg(all(feature = "parquet", feature = "avro"))]
             "parquet" | "avro" => {

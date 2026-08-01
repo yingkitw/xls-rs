@@ -248,8 +248,8 @@ impl ExcelHandler {
         // Read existing data if file exists
         let mut existing_data: Vec<Vec<String>> = Vec::new();
 
-        if std::path::Path::new(path).exists() {
-            if let Ok(workbook) = NativeXlsxReader::from_path(path) {
+        if std::path::Path::new(path).exists()
+            && let Ok(workbook) = NativeXlsxReader::from_path(path) {
                 let sheet_names = workbook.sheet_names();
                 let sheet_name = sheet_names
                     .first()
@@ -260,7 +260,6 @@ impl ExcelHandler {
                     existing_data = sheet.to_string_vec();
                 }
             }
-        }
 
         // Ensure existing data is large enough
         let required_rows = (start_row as usize + data.len()).max(existing_data.len());

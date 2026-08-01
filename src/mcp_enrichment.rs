@@ -30,14 +30,13 @@ fn parse_from_message(s: &str) -> McpErrorContext {
     if let Some(c) = RE_IN_FILE.captures(s) {
         ctx.file = Some(c[1].to_string());
     }
-    if ctx.file.is_none() {
-        if let Some(c) = Regex::new(r"File not found: ([^\n]+)")
+    if ctx.file.is_none()
+        && let Some(c) = Regex::new(r"File not found: ([^\n]+)")
             .ok()
             .and_then(|r| r.captures(s))
         {
             ctx.file = Some(c[1].trim().to_string());
         }
-    }
     if let Some(c) = RE_SHEET_NOT_FOUND.captures(s) {
         ctx.sheet = Some(c[1].to_string());
     } else if let Some(c) = RE_SHEET_QUOTED.captures(s) {

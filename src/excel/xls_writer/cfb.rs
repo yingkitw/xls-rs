@@ -137,11 +137,11 @@ impl Layout {
             } else if len < MINI_CUTOFF {
                 mini_starts[i] = next_mini;
                 mini_sizes[i] = len as u32;
-                next_mini += ((len + MINI_SECTOR_SIZE - 1) / MINI_SECTOR_SIZE) as u32;
+                next_mini += len.div_ceil(MINI_SECTOR_SIZE) as u32;
             } else {
                 reg_starts[i] = next_sec;
                 reg_sizes[i] = len as u32;
-                next_sec += ((len + SECTOR_SIZE - 1) / SECTOR_SIZE) as u32;
+                next_sec += len.div_ceil(SECTOR_SIZE) as u32;
             }
         }
 
@@ -153,7 +153,7 @@ impl Layout {
         let mini_stream_sectors = if total_minisectors == 0 {
             0u32
         } else {
-            ((total_minisectors + minis_per_reg_sector - 1) / minis_per_reg_sector) as u32
+            total_minisectors.div_ceil(minis_per_reg_sector) as u32
         };
         let mut mini_stream_data = vec![0u8; (mini_stream_sectors as usize) * SECTOR_SIZE];
         for (i, s) in streams.iter().enumerate() {
@@ -161,7 +161,7 @@ impl Layout {
                 continue;
             }
             let start = mini_starts[i] as usize;
-            let n = ((mini_sizes[i] as usize + MINI_SECTOR_SIZE - 1) / MINI_SECTOR_SIZE) as u32;
+            let n = (mini_sizes[i] as usize).div_ceil(MINI_SECTOR_SIZE) as u32;
             for k in 0..n {
                 let off = (k as usize) * MINI_SECTOR_SIZE;
                 let end = (off + MINI_SECTOR_SIZE).min(s.data.len());
@@ -179,7 +179,7 @@ impl Layout {
                 continue;
             }
             let start = mini_starts[i];
-            let n = ((mini_sizes[i] as usize + MINI_SECTOR_SIZE - 1) / MINI_SECTOR_SIZE) as u32;
+            let n = (mini_sizes[i] as usize).div_ceil(MINI_SECTOR_SIZE) as u32;
             for k in 0..n {
                 let sec = (start + k) as usize;
                 if k + 1 < n {
@@ -193,11 +193,11 @@ impl Layout {
         let num_minifat_sectors = if minifat_len == 0 {
             0u32
         } else {
-            ((minifat_len + FAT_PER_SECTOR - 1) / FAT_PER_SECTOR) as u32
+            minifat_len.div_ceil(FAT_PER_SECTOR) as u32
         };
 
         // ---- Step 4: build directory. ----
-        let dir_entry_count = ((streams.len() + ENTRIES_PER_SECTOR - 1) / ENTRIES_PER_SECTOR)
+        let dir_entry_count = streams.len().div_ceil(ENTRIES_PER_SECTOR)
             * ENTRIES_PER_SECTOR;
         let num_dir_sectors = (dir_entry_count / ENTRIES_PER_SECTOR) as u32;
 
@@ -209,7 +209,7 @@ impl Layout {
         let mut num_fat_sectors: u32 = 1;
         loop {
             let total = data_sectors + num_fat_sectors;
-            let need: u32 = ((total as usize + FAT_PER_SECTOR - 1) / FAT_PER_SECTOR) as u32;
+            let need: u32 = (total as usize).div_ceil(FAT_PER_SECTOR) as u32;
             if need == num_fat_sectors {
                 break;
             }
@@ -241,7 +241,7 @@ impl Layout {
             if !matches!(s.kind, ObjectType::Stream) || reg_sizes[i] == 0 {
                 continue;
             }
-            let n = ((reg_sizes[i] as usize + SECTOR_SIZE - 1) / SECTOR_SIZE) as u32;
+            let n = (reg_sizes[i] as usize).div_ceil(SECTOR_SIZE) as u32;
             let start = reg_starts[i];
             for k in 0..n {
                 let sec = (start + k) as usize;
@@ -287,7 +287,7 @@ impl Layout {
             if !matches!(s.kind, ObjectType::Stream) || reg_sizes[i] == 0 {
                 continue;
             }
-            let n = ((reg_sizes[i] as usize + SECTOR_SIZE - 1) / SECTOR_SIZE) as u32;
+            let n = (reg_sizes[i] as usize).div_ceil(SECTOR_SIZE) as u32;
             let start = reg_starts[i];
             for k in 0..n {
                 let sec = (start + k) as usize;
@@ -390,7 +390,7 @@ impl Layout {
         // DIFAT in header.
         for i in 0..DIFAT_IN_HEADER {
             let v = if (i as u32) < self.num_fat_sectors {
-                self.fat_sector_ids[i as usize]
+                self.fat_sector_ids[i]
             } else {
                 FREESECT
             };

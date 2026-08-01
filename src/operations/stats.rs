@@ -167,12 +167,11 @@ impl DataOperations {
         let mut xs = Vec::new();
         let mut ys = Vec::new();
         for row in data.iter().skip(1) {
-            if let (Some(xv), Some(yv)) = (row.get(x_col), row.get(y_col)) {
-                if let (Ok(x), Ok(y)) = (xv.parse::<f64>(), yv.parse::<f64>()) {
+            if let (Some(xv), Some(yv)) = (row.get(x_col), row.get(y_col))
+                && let (Ok(x), Ok(y)) = (xv.parse::<f64>(), yv.parse::<f64>()) {
                     xs.push(x);
                     ys.push(y);
                 }
-            }
         }
 
         if xs.len() < 2 {
@@ -500,11 +499,10 @@ impl DataOperations {
         let mut result = vec![vec!["value".to_string()]];
 
         for row in data.iter().skip(1) {
-            if let Some(val) = row.get(column) {
-                if seen.insert(val.clone()) {
+            if let Some(val) = row.get(column)
+                && seen.insert(val.clone()) {
                     result.push(vec![val.clone()]);
                 }
-            }
         }
 
         result

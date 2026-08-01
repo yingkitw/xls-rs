@@ -533,7 +533,7 @@ pub fn add_worksheet<W: IoWrite + Seek>(
 
     let opts = FileOptions::<()>::default()
         .compression_method(zip::CompressionMethod::Deflated);
-    zip.start_file(&format!("xl/worksheets/sheet{}.xml", idx + 1), opts)?;
+    zip.start_file(format!("xl/worksheets/sheet{}.xml", idx + 1), opts)?;
     zip.write_all(xml.as_bytes())?;
 
     // Worksheet rels (hyperlinks, comments, charts)
@@ -612,7 +612,7 @@ fn generate_data_validation_xml(dv: &super::types::DataValidation) -> String {
         xml.push_str(&format!(r#" operator="{}""#, op));
     }
 
-    xml.push_str(">");
+    xml.push('>');
 
     match &dv.validation_type {
         ValidationType::List { source } => {
@@ -721,7 +721,7 @@ fn add_worksheet_rels<W: IoWrite + Seek>(
     let opts = FileOptions::<()>::default()
         .compression_method(zip::CompressionMethod::Deflated);
     zip.start_file(
-        &format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_idx),
+        format!("xl/worksheets/_rels/sheet{}.xml.rels", sheet_idx),
         opts,
     )?;
     zip.write_all(xml.as_bytes())?;
@@ -764,7 +764,7 @@ fn add_comments_xml<W: IoWrite + Seek>(
 
     let opts = FileOptions::<()>::default()
         .compression_method(zip::CompressionMethod::Deflated);
-    zip.start_file(&format!("xl/comments{}.xml", sheet_idx), opts)?;
+    zip.start_file(format!("xl/comments{}.xml", sheet_idx), opts)?;
     zip.write_all(xml.as_bytes())?;
     Ok(())
 }

@@ -15,6 +15,12 @@ pub struct Coordinate {
 /// Geospatial calculator
 pub struct GeospatialCalculator;
 
+impl Default for GeospatialCalculator {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl GeospatialCalculator {
     pub fn new() -> Self {
         Self
@@ -70,10 +76,10 @@ impl GeospatialCalculator {
             .parse::<f64>()
             .map_err(|e| anyhow::anyhow!("Invalid longitude: {}", e))?;
 
-        if lat < -90.0 || lat > 90.0 {
+        if !(-90.0..=90.0).contains(&lat) {
             anyhow::bail!("Latitude must be between -90 and 90, got: {}", lat);
         }
-        if lon < -180.0 || lon > 180.0 {
+        if !(-180.0..=180.0).contains(&lon) {
             anyhow::bail!("Longitude must be between -180 and 180, got: {}", lon);
         }
 

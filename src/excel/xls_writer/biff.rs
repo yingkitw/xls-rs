@@ -532,7 +532,7 @@ mod tests {
 
     #[test]
     fn number_cell_record() {
-        let bytes = number_cell(0, 0, 0, 3.14);
+        let bytes = number_cell(0, 0, 0, std::f64::consts::PI);
         let recs = parse_records(&bytes);
         assert_eq!(recs.len(), 1);
         assert_eq!(recs[0].0, 0x0203);
@@ -541,7 +541,7 @@ mod tests {
         assert_eq!(u16::from_le_bytes([body[2], body[3]]), 0);
         assert_eq!(u16::from_le_bytes([body[4], body[5]]), 0);
         let v = f64::from_le_bytes(body[6..14].try_into().unwrap());
-        assert!((v - 3.14).abs() < 1e-12);
+        assert!((v - std::f64::consts::PI).abs() < 1e-12);
     }
 
     #[test]

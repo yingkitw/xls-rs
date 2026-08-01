@@ -15,6 +15,12 @@ pub struct RowData {
     pub cells: Vec<CellData>,
 }
 
+impl Default for RowData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RowData {
     pub fn new() -> Self {
         Self {

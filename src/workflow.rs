@@ -31,6 +31,12 @@ pub struct WorkflowExecutor {
     registry: HandlerRegistry,
 }
 
+impl Default for WorkflowExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkflowExecutor {
     pub fn new() -> Self {
         Self {
@@ -103,19 +109,17 @@ impl WorkflowExecutor {
             "read" => Ok(data.to_vec()),
 
             "filter" => {
-                if let Some(args) = args {
-                    if let Some(column_idx) = args.get("column").and_then(|v| v.as_u64()) {
-                        if let Some(where_clause) = args.get("where").and_then(|v| v.as_str()) {
+                if let Some(args) = args
+                    && let Some(column_idx) = args.get("column").and_then(|v| v.as_u64())
+                        && let Some(where_clause) = args.get("where").and_then(|v| v.as_str()) {
                             result = ops.filter_rows(&result, column_idx as usize, where_clause, "")?;
                         }
-                    }
-                }
                 Ok(result)
             }
 
             "sort" => {
-                if let Some(args) = args {
-                    if let Some(column_idx) = args.get("column").and_then(|v| v.as_u64()) {
+                if let Some(args) = args
+                    && let Some(column_idx) = args.get("column").and_then(|v| v.as_u64()) {
                         let ascending = args.get("ascending")
                             .and_then(|v| v.as_bool())
                             .unwrap_or(true);
@@ -124,23 +128,20 @@ impl WorkflowExecutor {
                         let order = if ascending { SortOrder::Ascending } else { SortOrder::Descending };
                         ops.sort_by_column(&mut result, column_idx as usize, order)?;
                     }
-                }
                 Ok(result)
             }
 
             "transform" => {
-                if let Some(args) = args {
-                    if let Some(op_type) = args.get("operation").and_then(|v| v.as_str()) {
+                if let Some(args) = args
+                    && let Some(op_type) = args.get("operation").and_then(|v| v.as_str()) {
                         match op_type {
                             "replace" => {
-                                if let Some(find) = args.get("find").and_then(|v| v.as_str()) {
-                                    if let Some(replace) = args.get("replace").and_then(|v| v.as_str()) {
-                                        if let Some(column_idx) = args.get("column").and_then(|v| v.as_u64()) {
+                                if let Some(find) = args.get("find").and_then(|v| v.as_str())
+                                    && let Some(replace) = args.get("replace").and_then(|v| v.as_str())
+                                        && let Some(column_idx) = args.get("column").and_then(|v| v.as_u64()) {
                                             let _count = ops.replace(&mut result, column_idx as usize, find, replace);
                                             println!("  Replaced '{}' with '{}' in column {}", find, replace, column_idx);
                                         }
-                                    }
-                                }
                             }
                             "dedupe" => {
                                 let count = ops.deduplicate_mut(&mut result);
@@ -160,28 +161,21 @@ impl WorkflowExecutor {
                             _ => anyhow::bail!("Unknown transform operation: {}", op_type),
                         }
                     }
-                }
                 Ok(result)
             }
 
             "mutate" => {
-                if let Some(args) = args {
-                    if let Some(_column) = args.get("column").and_then(|v| v.as_str()) {
-                        if let Some(_formula) = args.get("formula").and_then(|v| v.as_str()) {
-                            // For now, just add a placeholder column
-                            // Full formula evaluation with mutate is complex
-                            for row in &mut result {
-                                row.push("MUTATED".to_string());
-                            }
+                if let Some(args) = args
+                    && let Some(column) = args.get("column").and_then(|v| v.as_str())
+                        && let Some(formula) = args.get("formula").and_then(|v| v.as_str()) {
+                            ops.mutate(&mut result, column, formula)?;
                         }
-                    }
-                }
                 Ok(result)
             }
 
             "select" => {
-                if let Some(args) = args {
-                    if let Some(columns) = args.get("columns").and_then(|v| v.as_array()) {
+                if let Some(args) = args
+                    && let Some(columns) = args.get("columns").and_then(|v| v.as_array()) {
                         let column_names: Vec<&str> = columns
                             .iter()
                             .filter_map(|v| v.as_str())
@@ -189,7 +183,6 @@ impl WorkflowExecutor {
 
                         result = ops.select_columns_by_name(&result, &column_names)?;
                     }
-                }
                 Ok(result)
             }
 

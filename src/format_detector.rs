@@ -6,6 +6,12 @@ use anyhow::Result;
 /// Default format detector implementation
 pub struct DefaultFormatDetector;
 
+impl Default for DefaultFormatDetector {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl DefaultFormatDetector {
     pub fn new() -> Self {
         Self
@@ -27,7 +33,7 @@ impl FormatDetector for DefaultFormatDetector {
 
         // Fall back to file extension detection
         path.split('.')
-            .last()
+            .next_back()
             .map(|s| s.to_lowercase())
             .ok_or_else(|| anyhow::anyhow!("No file extension found in: {}", path))
     }

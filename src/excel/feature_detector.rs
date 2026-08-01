@@ -344,14 +344,13 @@ impl FeatureDetector {
         let path_lower = path.to_lowercase();
 
         // Check for very large files (more likely to have complex features)
-        if let Ok(metadata) = std::fs::metadata(path) {
-            if metadata.len() > 10 * 1024 * 1024 {
+        if let Ok(metadata) = std::fs::metadata(path)
+            && metadata.len() > 10 * 1024 * 1024 {
                 // File > 10MB
                 issues.push(UnsupportedFeature::PivotTable {
                     sheet: "unknown".to_string(),
                 });
             }
-        }
 
         // ODS files have different feature set
         if path_lower.ends_with(".ods") {

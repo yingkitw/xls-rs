@@ -96,11 +96,10 @@ impl<'a> XmlScanner<'a> {
     /// Skip XML declaration <?xml ... ?>
     fn skip_declaration(&mut self) {
         self.skip_whitespace();
-        if self.pos + 5 <= self.data.len() && &self.data[self.pos..self.pos + 5] == b"<?xml" {
-            if let Some(end) = self.find_from(b"?>", self.pos) {
+        if self.pos + 5 <= self.data.len() && &self.data[self.pos..self.pos + 5] == b"<?xml"
+            && let Some(end) = self.find_from(b"?>", self.pos) {
                 self.pos = end + 2;
             }
-        }
         // Skip comments <!-- -->
         loop {
             self.skip_whitespace();
@@ -167,15 +166,14 @@ impl<'a> XmlScanner<'a> {
                 if let Some(colon_pos) = self.find_colon_in_tag(tag_start) {
                     let local_start = colon_pos + 1;
                     let local_end = local_start + name_bytes.len();
-                    if local_end <= self.data.len() && &self.data[local_start..local_end] == name_bytes {
-                        if local_end < self.data.len() {
+                    if local_end <= self.data.len() && &self.data[local_start..local_end] == name_bytes
+                        && local_end < self.data.len() {
                             let c = self.data[local_end];
                             if c == b' ' || c == b'>' || c == b'/' || c == b'\t' || c == b'\n' || c == b'\r' {
                                 self.pos = tag_start;
                                 return Some(tag_start);
                             }
                         }
-                    }
                 }
             }
             self.pos += 1;
@@ -347,25 +345,23 @@ impl<'a> XmlScanner<'a> {
                     let tag_start = self.pos + 1;
                     if tag_start + name_bytes.len() <= self.data.len() {
                         let after = tag_start + name_bytes.len();
-                        if &self.data[tag_start..after] == name_bytes {
-                            if after < self.data.len() {
+                        if &self.data[tag_start..after] == name_bytes
+                            && after < self.data.len() {
                                 let c = self.data[after];
                                 if c == b' ' || c == b'>' || c == b'/' || c == b':' || c == b'\t' || c == b'\n' {
                                     depth += 1;
                                 }
                             }
-                        }
                         if let Some(colon) = self.find_colon_in_tag(tag_start) {
                             let local_start = colon + 1;
                             let local_end = local_start + name_bytes.len();
-                            if local_end <= self.data.len() && &self.data[local_start..local_end] == name_bytes {
-                                if local_end < self.data.len() {
+                            if local_end <= self.data.len() && &self.data[local_start..local_end] == name_bytes
+                                && local_end < self.data.len() {
                                     let c = self.data[local_end];
                                     if c == b' ' || c == b'>' || c == b'/' || c == b':' || c == b'\t' || c == b'\n' {
                                         depth += 1;
                                     }
                                 }
-                            }
                         }
                     }
                     self.pos += 1;

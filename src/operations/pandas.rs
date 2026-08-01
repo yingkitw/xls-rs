@@ -217,7 +217,7 @@ impl DataOperations {
     /// Rename columns (first row is header)
     pub fn rename_columns(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         renames: &[(&str, &str)],
     ) -> Result<()> {
         if data.is_empty() {
@@ -234,7 +234,7 @@ impl DataOperations {
     }
 
     /// Fill missing/empty values
-    pub fn fillna(&self, data: &mut Vec<Vec<String>>, value: &str) {
+    pub fn fillna(&self, data: &mut [Vec<String>], value: &str) {
         for row in data.iter_mut() {
             for cell in row.iter_mut() {
                 if cell.is_empty() {
@@ -339,11 +339,10 @@ impl DataOperations {
                         );
                     }
                     let mut new_row = empty_left.clone();
-                    if let Some(key) = right_row.get(right_col) {
-                        if left_col < new_row.len() {
+                    if let Some(key) = right_row.get(right_col)
+                        && left_col < new_row.len() {
                             new_row[left_col] = key.clone();
                         }
-                    }
                     for (i, val) in right_row.iter().enumerate() {
                         if i != right_col {
                             new_row.push(val.clone());

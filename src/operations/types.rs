@@ -12,6 +12,12 @@ pub struct StderrProgress {
     last_percent: usize,
 }
 
+impl Default for StderrProgress {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StderrProgress {
     pub fn new() -> Self {
         Self { last_percent: 0 }

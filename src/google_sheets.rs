@@ -36,8 +36,8 @@ impl GoogleSheetsHandler {
         }
 
         // If it's a full Google Sheets URL, extract the ID
-        if path.starts_with("https://docs.google.com/spreadsheets/") {
-            if let Some(start) = path.find("/d/") {
+        if path.starts_with("https://docs.google.com/spreadsheets/")
+            && let Some(start) = path.find("/d/") {
                 let start = start + 3;
                 if let Some(end) = path[start..].find('/') {
                     return Ok(path[start..start + end].to_string());
@@ -45,7 +45,6 @@ impl GoogleSheetsHandler {
                     return Ok(path[start..].to_string());
                 }
             }
-        }
 
         // Check if it's just the ID
         if path.len() >= 44

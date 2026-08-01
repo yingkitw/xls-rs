@@ -17,7 +17,7 @@ pub struct AvroHandler;
 
 impl AvroHandler {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// Read Avro file into `Vec<Vec<String>>`

@@ -538,7 +538,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
     }
 
@@ -557,7 +557,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
     }
 
@@ -587,7 +587,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
     }
 
@@ -619,7 +619,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
     }
 
@@ -638,7 +638,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
 
         assert_eq!(writer.sheets[0].rows[0].cells.len(), 3);
@@ -662,7 +662,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
         assert_eq!(writer.sheets[0].merge_cells.len(), 1);
     }
@@ -691,7 +691,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
     }
 
@@ -709,7 +709,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
     }
 
@@ -743,7 +743,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
     }
 
@@ -761,7 +761,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
     }
 
@@ -788,7 +788,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
         assert_eq!(writer.sheets[0].row_groups.len(), 1);
     }
@@ -813,7 +813,7 @@ mod tests {
         assert!(writer.save(&mut buffer).is_ok());
 
         let output = buffer.into_inner();
-        assert!(output.len() > 0);
+        assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
         assert_eq!(writer.sheets[0].col_groups.len(), 1);
     }

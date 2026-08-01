@@ -21,11 +21,10 @@ impl super::profiler::DataProfiler {
         if matches!(
             data_type,
             DataType::String | DataType::Email | DataType::Url | DataType::Phone
-        ) {
-            if unique_percentage > 80.0 {
+        )
+            && unique_percentage > 80.0 {
                 score -= (unique_percentage - 80.0) * 0.2;
             }
-        }
 
         // Check for consistent lengths (good for structured data)
         if let Some(length_stats) = length_stats {
@@ -127,23 +126,21 @@ impl super::profiler::DataProfiler {
                 ));
             }
 
-            if let Some(numeric_stats) = &column.numeric_stats {
-                if numeric_stats.skewness.abs() > 2.0 {
+            if let Some(numeric_stats) = &column.numeric_stats
+                && numeric_stats.skewness.abs() > 2.0 {
                     recommendations.push(format!(
                         "Column '{}' has high skewness ({:.2}). Consider transformation.",
                         column.name, numeric_stats.skewness
                     ));
                 }
-            }
 
-            if let Some(length_stats) = &column.length_stats {
-                if length_stats.std_dev_length / length_stats.avg_length > 0.5 {
+            if let Some(length_stats) = &column.length_stats
+                && length_stats.std_dev_length / length_stats.avg_length > 0.5 {
                     recommendations.push(format!(
                         "Column '{}' has inconsistent length pattern.",
                         column.name
                     ));
                 }
-            }
         }
 
         recommendations
@@ -178,7 +175,7 @@ impl super::profiler::DataProfiler {
             for rec in &profile.recommendations {
                 report.push_str(&format!("- {}\n", rec));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         report.push_str("## Column Details\n\n");

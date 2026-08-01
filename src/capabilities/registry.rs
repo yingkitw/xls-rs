@@ -11,6 +11,12 @@ pub struct CapabilityRegistry {
     capabilities: Arc<RwLock<HashMap<String, Arc<dyn Capability>>>>,
 }
 
+impl Default for CapabilityRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CapabilityRegistry {
     /// Create a new capability registry
     pub fn new() -> Self {

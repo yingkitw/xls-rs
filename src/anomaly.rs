@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn test_empty_data() {
         let detector = AnomalyDetector::new(AnomalyMethod::ZScore { threshold: 2.0 });
-        let result = detector.detect(&vec![vec!["header".to_string()]], 0).unwrap();
+        let result = detector.detect(&[vec!["header".to_string()]], 0).unwrap();
         assert_eq!(result.total_anomalies, 0);
     }
 }

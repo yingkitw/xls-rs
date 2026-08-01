@@ -18,11 +18,10 @@ const DEFAULT_COLORS: &[&str] = &[
 
 /// Get color for a series index, using custom colors if provided
 fn series_color(config: &ChartConfig, idx: usize) -> String {
-    if let Some(ref colors) = config.colors {
-        if let Some(c) = colors.get(idx) {
+    if let Some(ref colors) = config.colors
+        && let Some(c) = colors.get(idx) {
             return c.clone();
         }
-    }
     DEFAULT_COLORS[idx % DEFAULT_COLORS.len()].to_string()
 }
 

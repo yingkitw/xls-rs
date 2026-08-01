@@ -109,20 +109,30 @@ impl DataOperations {
     ) -> Result<String> {
         let mut expr = formula.to_string();
 
-        for (idx, col_name) in header.iter().enumerate() {
-            if expr.contains(col_name) {
-                let val = row.get(idx).cloned().unwrap_or_default();
-                expr = expr.replace(col_name, &val);
+        // Replace column names using word boundaries to avoid partial substitutions.
+        // Process longer names first so "total_sales" doesn't get shadowed by "total".
+        let mut indexed_header: Vec<(usize, &String)> =
+            header.iter().enumerate().collect();
+        indexed_header.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+
+        for (idx, col_name) in &indexed_header {
+            if col_name.is_empty() || !expr.contains(col_name.as_str()) {
+                continue;
             }
+            let val = row.get(*idx).cloned().unwrap_or_default();
+            let pattern = format!(r"\b{}\b", regex::escape(col_name));
+            let re = regex::Regex::new(&pattern)?;
+            expr = re.replace_all(&expr, val.as_str()).to_string();
         }
 
+        // Replace single-letter cell references (A, B, ...) using word boundaries.
+        // Only match standalone uppercase letters not part of function names.
         for idx in 0..row.len() {
             let letter = (b'A' + idx as u8) as char;
-            let pattern = format!("{}", letter);
-            if expr.contains(&pattern) {
-                let val = row.get(idx).cloned().unwrap_or_default();
-                expr = expr.replace(&pattern, &val);
-            }
+            let val = row.get(idx).cloned().unwrap_or_default();
+            let pattern = format!(r"\b{}\b", letter);
+            let re = regex::Regex::new(&pattern)?;
+            expr = re.replace_all(&expr, val.as_str()).to_string();
         }
 
         if let Ok(result) = self.eval_arithmetic(&expr) {
@@ -171,7 +181,7 @@ impl DataOperations {
     }
 
     /// Cast column to specified type
-    pub fn astype(&self, data: &mut Vec<Vec<String>>, column: usize, dtype: &str) -> Result<usize> {
+    pub fn astype(&self, data: &mut [Vec<String>], column: usize, dtype: &str) -> Result<usize> {
         if data.is_empty() {
             return Ok(0);
         }
@@ -283,7 +293,7 @@ impl DataOperations {
     }
 
     /// Apply a function to each cell in a column
-    pub fn apply_column<F>(&self, data: &mut Vec<Vec<String>>, column: usize, f: F) -> Result<()>
+    pub fn apply_column<F>(&self, data: &mut [Vec<String>], column: usize, f: F) -> Result<()>
     where
         F: Fn(&str) -> String,
     {
@@ -298,7 +308,7 @@ impl DataOperations {
     /// Clip values to a range
     pub fn clip(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         column: usize,
         min: Option<f64>,
         max: Option<f64>,
@@ -306,26 +316,23 @@ impl DataOperations {
         let mut clipped = 0;
 
         for row in data.iter_mut().skip(1) {
-            if let Some(cell) = row.get_mut(column) {
-                if let Ok(val) = cell.parse::<f64>() {
+            if let Some(cell) = row.get_mut(column)
+                && let Ok(val) = cell.parse::<f64>() {
                     let mut new_val = val;
-                    if let Some(min_val) = min {
-                        if val < min_val {
+                    if let Some(min_val) = min
+                        && val < min_val {
                             new_val = min_val;
                             clipped += 1;
                         }
-                    }
-                    if let Some(max_val) = max {
-                        if val > max_val {
+                    if let Some(max_val) = max
+                        && val > max_val {
                             new_val = max_val;
                             clipped += 1;
                         }
-                    }
                     if new_val != val {
                         *cell = format!("{:.2}", new_val);
                     }
                 }
-            }
         }
 
         Ok(clipped)
@@ -367,12 +374,11 @@ impl DataOperations {
         }
 
         for row in data.iter_mut().skip(1) {
-            if let Some(cell) = row.get_mut(column) {
-                if let Ok(val) = cell.parse::<f64>() {
+            if let Some(cell) = row.get_mut(column)
+                && let Ok(val) = cell.parse::<f64>() {
                     let normalized = (val - min_val) / range;
                     *cell = format!("{:.4}", normalized);
                 }
-            }
         }
 
         Ok(())
@@ -382,7 +388,7 @@ impl DataOperations {
     ///
     /// Non-numeric cells are left unchanged. If the column has fewer than two numeric values
     /// or the standard deviation is zero, cells are unchanged.
-    pub fn zscore(&self, data: &mut Vec<Vec<String>>, column: usize) -> Result<()> {
+    pub fn zscore(&self, data: &mut [Vec<String>], column: usize) -> Result<()> {
         let values: Vec<f64> = data
             .iter()
             .skip(1)
@@ -404,12 +410,11 @@ impl DataOperations {
         }
 
         for row in data.iter_mut().skip(1) {
-            if let Some(cell) = row.get_mut(column) {
-                if let Ok(val) = cell.parse::<f64>() {
+            if let Some(cell) = row.get_mut(column)
+                && let Ok(val) = cell.parse::<f64>() {
                     let z = (val - mean) / std;
                     *cell = format!("{:.6}", z);
                 }
-            }
         }
 
         Ok(())
@@ -419,7 +424,7 @@ impl DataOperations {
     /// Header is row 0; partial windows at the start use available rows (min_periods = 1).
     pub fn rolling_mean_column(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         value_col: usize,
         window: usize,
         new_col_name: &str,
@@ -430,7 +435,7 @@ impl DataOperations {
     /// Append a column with rolling **sum** of `value_col` over the last `window` data rows (inclusive).
     pub fn rolling_sum_column(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         value_col: usize,
         window: usize,
         new_col_name: &str,
@@ -440,7 +445,7 @@ impl DataOperations {
 
     fn rolling_column(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         value_col: usize,
         window: usize,
         new_col_name: &str,
@@ -495,7 +500,7 @@ impl DataOperations {
     /// Parse and reformat date column
     pub fn parse_date(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         column: usize,
         from_format: &str,
         to_format: &str,
@@ -531,11 +536,10 @@ impl DataOperations {
         result.push(data[0].clone());
 
         for row in data.iter().skip(1) {
-            if let Some(cell) = row.get(column) {
-                if re.is_match(cell) {
+            if let Some(cell) = row.get(column)
+                && re.is_match(cell) {
                     result.push(row.clone());
                 }
-            }
         }
 
         Ok(result)
@@ -544,7 +548,7 @@ impl DataOperations {
     /// Replace values using regex pattern
     pub fn regex_replace(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         column: usize,
         pattern: &str,
         replacement: &str,
@@ -568,7 +572,7 @@ impl DataOperations {
     /// Extract date parts (year, month, day, weekday)
     pub fn extract_date_part(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         column: usize,
         part: &str,
         new_col_name: &str,

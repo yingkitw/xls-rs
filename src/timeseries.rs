@@ -231,7 +231,7 @@ impl TimeSeriesProcessor {
                     chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap_or(chrono::NaiveTime::MIN),
                 );
                 let duration_since_epoch = timestamp.signed_duration_since(epoch);
-                let rounded_duration = (duration_since_epoch.num_seconds() as i64
+                let rounded_duration = (duration_since_epoch.num_seconds()
                     / duration.num_seconds())
                     * duration.num_seconds();
                 epoch + Duration::seconds(rounded_duration)

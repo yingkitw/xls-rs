@@ -252,6 +252,12 @@ pub struct BatchRequest {
     pub args: Option<Vec<String>>,
 }
 
+impl Default for XlsRsMcpServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[tool_router]
 impl XlsRsMcpServer {
     pub fn new() -> Self {
@@ -287,7 +293,6 @@ impl XlsRsMcpServer {
             registry,
         }
     }
-
     #[tool(description = "Sort data by a specific column")]
     async fn sort_data(
         &self,
@@ -623,7 +628,6 @@ impl XlsRsMcpServer {
             sheet: request.0.sheet.clone(),
             range: request.0.range.clone(),
             cell: request.0.cell.clone(),
-            ..Default::default()
         };
         match self.registry.execute("apply_formula", args) {
             Ok(result) => Ok(CallToolResult::success(vec![Content::text(result.to_string())])),

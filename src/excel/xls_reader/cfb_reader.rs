@@ -357,7 +357,7 @@ impl CfbReader {
 
     /// Read mini-stream chain using mini-FAT
     fn read_mini_stream_chain(&self, start_sector: u32, size: u64) -> anyhow::Result<Option<Vec<u8>>> {
-        let Some(root_entry) = self.directory.get(0).filter(|e| e.object_type == ObjectType::Root) else {
+        let Some(root_entry) = self.directory.first().filter(|e| e.object_type == ObjectType::Root) else {
             return Ok(None);
         };
         let mini_stream_data = self.read_stream_chain(root_entry.start_sector, root_entry.size)?;

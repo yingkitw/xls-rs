@@ -17,6 +17,12 @@ pub struct FormulaEvaluator {
     excel_handler: ExcelHandler,
 }
 
+impl Default for FormulaEvaluator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FormulaEvaluator {
     pub fn new() -> Self {
         Self {

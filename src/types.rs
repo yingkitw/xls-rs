@@ -11,6 +11,7 @@ use std::fmt;
 /// to distinguish between strings, numbers, booleans, dates, and empty values.
 /// This eliminates the need for repeated string parsing and improves performance.
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub enum CellValue {
     /// String data
     String(String),
@@ -23,6 +24,7 @@ pub enum CellValue {
     /// Date/time data (stored as timestamp)
     DateTime(i64),
     /// Empty/null value
+    #[default]
     Empty,
 }
 
@@ -128,13 +130,6 @@ impl CellValue {
             return CellValue::Empty;
         }
 
-        // Try boolean
-        match trimmed.to_lowercase().as_str() {
-            "true" | "yes" | "1" => return CellValue::Boolean(true),
-            "false" | "no" | "0" => return CellValue::Boolean(false),
-            _ => {}
-        }
-
         // Try integer first (more precise)
         if let Ok(i) = trimmed.parse::<i64>() {
             return CellValue::Integer(i);
@@ -143,6 +138,13 @@ impl CellValue {
         // Try float
         if let Ok(n) = trimmed.parse::<f64>() {
             return CellValue::Number(n);
+        }
+
+        // Try boolean (after numeric so "0"/"1" are integers, not booleans)
+        match trimmed.to_lowercase().as_str() {
+            "true" | "yes" => return CellValue::Boolean(true),
+            "false" | "no" => return CellValue::Boolean(false),
+            _ => {}
         }
 
         // Default to string
@@ -159,8 +161,8 @@ impl CellValue {
                 .map(CellValue::Number)
                 .unwrap_or_else(|_| CellValue::String(s.to_string())),
             Some(DataType::Boolean) => match s.to_lowercase().as_str() {
-                "true" | "yes" | "1" => CellValue::Boolean(true),
-                "false" | "no" | "0" => CellValue::Boolean(false),
+                "true" | "yes" => CellValue::Boolean(true),
+                "false" | "no" => CellValue::Boolean(false),
                 _ => CellValue::String(s.to_string()),
             },
             Some(DataType::String) | None => CellValue::parse(s),
@@ -171,11 +173,6 @@ impl CellValue {
     }
 }
 
-impl Default for CellValue {
-    fn default() -> Self {
-        CellValue::Empty
-    }
-}
 
 impl fmt::Display for CellValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -405,6 +402,10 @@ mod tests {
         assert_eq!(CellValue::parse(""), CellValue::Empty);
         assert_eq!(CellValue::parse("true"), CellValue::Boolean(true));
         assert_eq!(CellValue::parse("false"), CellValue::Boolean(false));
+        assert_eq!(CellValue::parse("yes"), CellValue::Boolean(true));
+        assert_eq!(CellValue::parse("no"), CellValue::Boolean(false));
+        assert_eq!(CellValue::parse("0"), CellValue::Integer(0));
+        assert_eq!(CellValue::parse("1"), CellValue::Integer(1));
         assert_eq!(CellValue::parse("42"), CellValue::Integer(42));
         assert_eq!(CellValue::parse("2.5"), CellValue::Number(2.5));
         assert_eq!(CellValue::parse("hello"), CellValue::String("hello".to_string()));

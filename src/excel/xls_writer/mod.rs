@@ -186,12 +186,11 @@ impl XlsWriter {
         for s in &self.sheets {
             for r in &s.rows {
                 for c in &r.cells {
-                    if let CellData::String(v) = c {
-                        if !index_of.contains_key(v) {
+                    if let CellData::String(v) = c
+                        && !index_of.contains_key(v) {
                             index_of.insert(v.clone(), unique.len() as u32);
                             unique.push(v.clone());
                         }
-                    }
                 }
             }
         }
@@ -458,7 +457,7 @@ mod tests {
         row.add_number(1.0);
         w.add_row(row);
         let bytes = w.to_bytes().unwrap();
-        assert!(bytes.len() > 0);
+        assert!(!bytes.is_empty());
         assert_eq!(&bytes[0..8], &[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]);
     }
 

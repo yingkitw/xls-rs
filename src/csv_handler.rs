@@ -76,6 +76,12 @@ impl CellRange {
 
 pub struct CsvHandler;
 
+impl Default for CsvHandler {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl CsvHandler {
     pub fn new() -> Self {
         Self
@@ -86,8 +92,8 @@ impl CsvHandler {
             File::open(path).with_context(|| format!("Failed to open CSV file: {path}"))?;
 
         let meta = file.metadata().ok();
-        if let Some(len) = meta.as_ref().map(|m| m.len()) {
-            if len > crate::limits::MAX_ZIP_ENTRY_BYTES {
+        if let Some(len) = meta.as_ref().map(|m| m.len())
+            && len > crate::limits::MAX_ZIP_ENTRY_BYTES {
                 anyhow::bail!(
                     "CSV file '{}' is too large to load into memory ({} bytes; max {}). Use streaming APIs instead.",
                     path,
@@ -95,7 +101,6 @@ impl CsvHandler {
                     crate::limits::MAX_ZIP_ENTRY_BYTES
                 );
             }
-        }
 
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;

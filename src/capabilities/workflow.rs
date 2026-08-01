@@ -10,6 +10,12 @@ pub struct WorkflowCapability {
     executor: Arc<WorkflowExecutor>,
 }
 
+impl Default for WorkflowCapability {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkflowCapability {
     pub fn new() -> Self {
         Self {

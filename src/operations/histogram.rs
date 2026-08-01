@@ -78,7 +78,7 @@ pub fn render_histogram(
 
     for (lo, hi, count) in bins {
         let bar_len = if max_count > 0 {
-            (count * width / max_count).max(0)
+            count * width / max_count
         } else {
             0
         };

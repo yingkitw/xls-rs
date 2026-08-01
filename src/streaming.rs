@@ -73,12 +73,11 @@ impl StreamingProcessor {
                 buffer.push_back(processed);
 
                 // Write when buffer is full
-                if buffer.len() >= self.buffer_size {
-                    if let Some(buffered) = buffer.pop_front() {
+                if buffer.len() >= self.buffer_size
+                    && let Some(buffered) = buffer.pop_front() {
                         writer.write_chunk(&buffered)?;
                         total_chunks += 1;
                     }
-                }
             }
         }
 

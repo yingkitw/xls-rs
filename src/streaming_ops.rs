@@ -166,10 +166,8 @@ pub fn infer_schema(path: &str, sample_size: usize, has_headers: bool) -> Result
 
     // Sample rows for type inference
     let mut sample_rows: Vec<Vec<String>> = Vec::with_capacity(sample_size);
-    for row_result in reader.by_ref().take(sample_size) {
-        if let Ok(row) = row_result {
-            sample_rows.push(row);
-        }
+    for row in reader.by_ref().take(sample_size).flatten() {
+        sample_rows.push(row);
     }
 
     infer_types(&headers, &sample_rows)

@@ -31,13 +31,11 @@ impl ExcelMetadataCache {
         let cache = self.cache.read().ok()?;
         if let Some(metadata) = cache.get(path) {
             // Check if file is still valid
-            if let Ok(current_modified) = std::fs::metadata(path).and_then(|m| m.modified()) {
-                if let Some(cached_modified) = metadata.modified_time {
-                    if current_modified == cached_modified {
+            if let Ok(current_modified) = std::fs::metadata(path).and_then(|m| m.modified())
+                && let Some(cached_modified) = metadata.modified_time
+                    && current_modified == cached_modified {
                         return Some(metadata.clone());
                     }
-                }
-            }
         }
         None
     }
@@ -67,6 +65,12 @@ fn is_xls(path: &str) -> bool {
 /// Excel file handler
 pub struct ExcelHandler {
     metadata_cache: ExcelMetadataCache,
+}
+
+impl Default for ExcelHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ExcelHandler {

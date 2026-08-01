@@ -130,11 +130,11 @@ impl XlsReader {
             shared_strings: Vec::new(),
         };
 
-        let mut records = BiffRecord::parse_stream(data);
+        let records = BiffRecord::parse_stream(data);
         let mut sheet_offsets: Vec<(u32, String)> = Vec::new();
 
         // First pass: read workbook globals
-        while let Some(record) = records.next() {
+        for record in records {
             match record.id {
                 RecordId::BoundSheet => {
                     let (offset, name) = BiffRecord::parse_bound_sheet(&record.data)?;
@@ -162,19 +162,19 @@ impl XlsReader {
 
     /// Parse sheet at given offset
     fn parse_sheet_at_offset(&self, data: &[u8], offset: usize) -> Option<Vec<Vec<CellValue>>> {
-        let mut records = BiffRecord::parse_stream(&data[offset..]);
+        let records = BiffRecord::parse_stream(&data[offset..]);
         let mut cells: std::collections::HashMap<(u16, u16), CellValue> = std::collections::HashMap::new();
         let mut max_row: u16 = 0;
         let mut max_col: u16 = 0;
 
-        while let Some(record) = records.next() {
+        for record in records {
             match record.id {
                 RecordId::Eof => break,
                 RecordId::LabelSst => {
                     let (row, col, _xf, sst_index) = BiffRecord::parse_labelsst(&record.data).ok()?;
                     let value = self.shared_strings.get(sst_index as usize)
                         .cloned()
-                        .unwrap_or_else(|| String::new());
+                        .unwrap_or_else(String::new);
                     cells.insert((row, col), CellValue::String(value));
                     max_row = max_row.max(row);
                     max_col = max_col.max(col);
@@ -278,7 +278,7 @@ mod tests {
     fn test_cell_value_string_conversion() {
         assert_eq!(CellValue::String("hello".to_string()).to_string(), "hello");
         assert_eq!(CellValue::Number(42.0).to_string(), "42");
-        assert_eq!(CellValue::Number(3.14).to_string(), "3.14");
+        assert_eq!(CellValue::Number(std::f64::consts::PI).to_string(), "3.141592653589793");
         assert_eq!(CellValue::Bool(true).to_string(), "TRUE");
         assert_eq!(CellValue::Bool(false).to_string(), "FALSE");
         assert_eq!(CellValue::Error("VALUE".to_string()).to_string(), "#VALUE");

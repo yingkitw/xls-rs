@@ -60,16 +60,14 @@ pub fn parse_safe_f64(value: &str, min: Option<f64>, max: Option<f64>) -> Result
     }
 
     // Check bounds
-    if let Some(min_val) = min {
-        if num < min_val {
+    if let Some(min_val) = min
+        && num < min_val {
             anyhow::bail!("Value {} is below minimum {}", num, min_val);
         }
-    }
-    if let Some(max_val) = max {
-        if num > max_val {
+    if let Some(max_val) = max
+        && num > max_val {
             anyhow::bail!("Value {} exceeds maximum {}", num, max_val);
         }
-    }
 
     Ok(num)
 }
@@ -84,16 +82,14 @@ pub fn parse_safe_i64(value: &str, min: Option<i64>, max: Option<i64>) -> Result
         .with_context(|| format!("Invalid integer value: '{}'", value))?;
 
     // Check bounds
-    if let Some(min_val) = min {
-        if num < min_val {
+    if let Some(min_val) = min
+        && num < min_val {
             anyhow::bail!("Value {} is below minimum {}", num, min_val);
         }
-    }
-    if let Some(max_val) = max {
-        if num > max_val {
+    if let Some(max_val) = max
+        && num > max_val {
             anyhow::bail!("Value {} exceeds maximum {}", num, max_val);
         }
-    }
 
     Ok(num)
 }
@@ -114,11 +110,10 @@ pub fn parse_safe_usize(value: &str, max: Option<usize>) -> Result<usize> {
         .with_context(|| format!("Invalid index value: '{}'", value))?;
 
     // Check bounds
-    if let Some(max_val) = max {
-        if num > max_val {
+    if let Some(max_val) = max
+        && num > max_val {
             anyhow::bail!("Index {} exceeds maximum {}", num, max_val);
         }
-    }
 
     Ok(num)
 }

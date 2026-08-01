@@ -287,10 +287,8 @@ impl super::profiler::DataProfiler {
                     Some(date)
                 } else if let Ok(date) = NaiveDate::parse_from_str(v, "%d/%m/%Y") {
                     Some(date)
-                } else if let Ok(date) = NaiveDate::parse_from_str(v, "%m/%d/%Y") {
-                    Some(date)
                 } else {
-                    None
+                    NaiveDate::parse_from_str(v, "%m/%d/%Y").ok()
                 }
             })
             .collect();
@@ -405,7 +403,7 @@ impl super::profiler::DataProfiler {
                 && text.chars().any(|c| c.is_alphabetic())
             {
                 all_lowercase += 1;
-            } else if text.chars().next().map_or(false, |c| c.is_uppercase())
+            } else if text.chars().next().is_some_and(|c| c.is_uppercase())
                 && text
                     .chars()
                     .skip(1)

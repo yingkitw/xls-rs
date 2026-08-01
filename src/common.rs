@@ -258,7 +258,7 @@ pub mod error {
 pub mod string {
     /// Trim and normalize whitespace
     pub fn normalize_whitespace(s: &str) -> String {
-        s.trim().split_whitespace().collect::<Vec<_>>().join(" ")
+        s.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
     /// Check if string represents a number

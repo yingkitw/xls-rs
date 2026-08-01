@@ -20,7 +20,7 @@ pub struct ParquetHandler;
 
 impl ParquetHandler {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// Read Parquet file into `Vec<Vec<String>>`

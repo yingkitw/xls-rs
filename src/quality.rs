@@ -53,6 +53,12 @@ pub struct QualityReportGenerator {
     profiler: DataProfiler,
 }
 
+impl Default for QualityReportGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QualityReportGenerator {
     pub fn new() -> Self {
         Self {
@@ -94,8 +100,8 @@ impl QualityReportGenerator {
                 crate::profiling::DataType::Integer | crate::profiling::DataType::Float
             ) {
                 let detector = AnomalyDetector::new(AnomalyMethod::ZScore { threshold: 3.0 });
-                if let Ok(anomaly_result) = detector.detect(data, col_idx) {
-                    if anomaly_result.anomaly_percentage > 5.0 {
+                if let Ok(anomaly_result) = detector.detect(data, col_idx)
+                    && anomaly_result.anomaly_percentage > 5.0 {
                         issues.push(QualityIssue {
                             severity: IssueSeverity::Medium,
                             category: "Accuracy".to_string(),
@@ -108,7 +114,6 @@ impl QualityReportGenerator {
                         });
                         accuracy_score -= anomaly_result.anomaly_percentage;
                     }
-                }
             }
         }
 

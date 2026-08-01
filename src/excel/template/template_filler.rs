@@ -78,7 +78,7 @@ impl TemplateFiller {
     ) -> Result<XlsxWriter> {
         let mut writer = XlsxWriter::new();
 
-        for (_sheet_name, template_data) in all_sheets_data {
+        for template_data in all_sheets_data.values() {
             let sheet_writer = Self::fill_template(template_data, values)?;
             // Merge sheets from sheet_writer into writer
             for sheet in sheet_writer.sheets {

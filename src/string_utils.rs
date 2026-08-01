@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn test_string_builder() {
         let parts = vec!["a".to_string(), "b".to_string(), "c".to_string()];
-        let result = String::from_iter_with_capacity(parts.into_iter(), 10);
+        let result = String::from_iter_with_capacity(parts, 10);
         assert_eq!(result, "abc");
     }
 }

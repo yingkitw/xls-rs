@@ -11,6 +11,12 @@ use rayon::prelude::*;
 /// Data operations for spreadsheet manipulation
 pub struct DataOperations;
 
+impl Default for DataOperations {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl DataOperations {
     pub fn new() -> Self {
         Self
@@ -204,19 +210,18 @@ impl DataOperations {
     /// Replace values in a column
     pub fn replace(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         column: usize,
         find: &str,
         replace_with: &str,
     ) -> usize {
         let mut count = 0;
         for row in data.iter_mut() {
-            if let Some(cell) = row.get_mut(column) {
-                if cell.contains(find) {
+            if let Some(cell) = row.get_mut(column)
+                && cell.contains(find) {
                     *cell = cell.replace(find, replace_with);
                     count += 1;
                 }
-            }
         }
         count
     }
@@ -224,7 +229,7 @@ impl DataOperations {
     /// Find and replace across all columns
     pub fn find_replace(
         &self,
-        data: &mut Vec<Vec<String>>,
+        data: &mut [Vec<String>],
         find: &str,
         replace_with: &str,
         _column: Option<usize>,
@@ -332,7 +337,7 @@ impl DataOperations {
     }
 
     /// Insert a column at a specific index
-    pub fn insert_column(&self, data: &mut Vec<Vec<String>>, index: usize, values: Vec<String>) {
+    pub fn insert_column(&self, data: &mut [Vec<String>], index: usize, values: Vec<String>) {
         for (row_idx, row) in data.iter_mut().enumerate() {
             let value = values.get(row_idx).cloned().unwrap_or_default();
             if index <= row.len() {
@@ -344,7 +349,7 @@ impl DataOperations {
     }
 
     /// Delete a column at a specific index
-    pub fn delete_column(&self, data: &mut Vec<Vec<String>>, index: usize) {
+    pub fn delete_column(&self, data: &mut [Vec<String>], index: usize) {
         for row in data.iter_mut() {
             if index < row.len() {
                 row.remove(index);
@@ -357,11 +362,10 @@ impl TransformOperator for DataOperations {
     fn transform(&self, data: &mut Vec<Vec<String>>, operation: TransformOperation) -> Result<()> {
         match operation {
             TransformOperation::RenameColumn { from, to } => {
-                if let Some(row) = data.first_mut() {
-                    if from < row.len() {
+                if let Some(row) = data.first_mut()
+                    && from < row.len() {
                         row[from] = to;
                     }
-                }
             }
             TransformOperation::DropColumn(col_idx) => {
                 for row in data.iter_mut() {
