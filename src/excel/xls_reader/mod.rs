@@ -73,7 +73,7 @@ impl SheetData {
         self.cells.iter().map(|r| r.len()).max().unwrap_or(0)
     }
 
-    /// Convert to Vec<Vec<String>> for compatibility with existing API
+    /// Convert to `Vec<Vec<String>>` for compatibility with existing API
     pub fn to_string_vec(&self) -> Vec<Vec<String>> {
         self.cells.iter()
             .map(|row| row.iter().map(|cell| cell.to_string()).collect())
