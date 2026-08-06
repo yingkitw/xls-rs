@@ -2,11 +2,35 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use crate::limits::{METADATA_CACHE_SIZE, DEFAULT_ESTIMATED_ROWS};
+
 use crate::csv_handler::CellRange;
 use crate::traits::DataReader;
 use crate::excel::xls_reader::XlsReader as NativeXlsReader;
 use crate::excel::xlsx_reader::XlsxReader as NativeXlsxReader;
 use crate::excel::ods_reader::OdsReader as NativeOdsReader;
+
+/// Helper function to execute operations on sheet data regardless of format
+fn with_sheet_data<R, F>(path: &str, sheet_name: &str, f: F) -> Result<R>
+where
+    F: FnOnce(&[Vec<String>]) -> Result<R>,
+{
+    if is_xls(path) {
+        let reader = NativeXlsReader::from_path(path)
+            .with_context(|| format!("Failed to open XLS file: {path}"))?;
+        let sheet = reader
+            .get_sheet_by_name(sheet_name)
+            .with_context(|| format!("Failed to find sheet: {sheet_name}"))?;
+        f(&sheet.to_string_vec())
+    } else {
+        let workbook = NativeXlsxReader::from_path(path)
+            .with_context(|| format!("Failed to open Excel file: {path}"))?;
+        let sheet = workbook
+            .get_sheet_by_name(sheet_name)
+            .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
+        f(&sheet.to_string_vec())
+    }
+}
 
 /// Excel metadata cache entry
 #[derive(Debug, Clone)]
@@ -43,7 +67,7 @@ impl ExcelMetadataCache {
     fn insert(&self, path: String, metadata: ExcelMetadata) {
         if let Ok(mut cache) = self.cache.write() {
             // Simple cache eviction: remove oldest entries if cache gets too large
-            if cache.len() > 100 {
+            if cache.len() > METADATA_CACHE_SIZE {
                 cache.clear();
             }
             cache.insert(path, metadata);
@@ -136,31 +160,14 @@ impl ExcelHandler {
         let metadata = self.get_metadata(path)?;
         let sheet_name = Self::resolve_sheet_selection(sheet_name, &metadata.sheet_names)?;
 
-        if is_xls(path) {
-            let reader = NativeXlsReader::from_path(path)
-                .with_context(|| format!("Failed to open XLS file: {path}"))?;
-            let sheet = reader.get_sheet_by_name(&sheet_name)
-                .with_context(|| format!("Failed to find sheet: {sheet_name}"))?;
-            let rows = sheet.to_string_vec();
+        with_sheet_data(path, &sheet_name, |rows| {
             let mut output = String::with_capacity(rows.len() * 10);
             for row in rows {
                 output.push_str(&row.join(","));
                 output.push('\n');
             }
             Ok(output)
-        } else {
-            let workbook = NativeXlsxReader::from_path(path)
-                .with_context(|| format!("Failed to open Excel file: {path}"))?;
-            let sheet = workbook.get_sheet_by_name(&sheet_name)
-                .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
-            let rows = sheet.to_string_vec();
-            let mut output = String::with_capacity(rows.len() * 10);
-            for row in rows {
-                output.push_str(&row.join(","));
-                output.push('\n');
-            }
-            Ok(output)
-        }
+        })
     }
 
     pub fn parse_cell_reference(&self, cell: &str) -> Result<(u32, u16)> {
@@ -196,19 +203,7 @@ impl ExcelHandler {
         let metadata = self.get_metadata(path)?;
         let sheet_name = Self::resolve_sheet_selection(sheet_name, &metadata.sheet_names)?;
 
-        if is_xls(path) {
-            let reader = NativeXlsReader::from_path(path)
-                .with_context(|| format!("Failed to open XLS file: {path}"))?;
-            let sheet = reader.get_sheet_by_name(&sheet_name)
-                .with_context(|| format!("Failed to find sheet: {sheet_name}"))?;
-            Ok(sheet.to_string_vec())
-        } else {
-            let workbook = NativeXlsxReader::from_path(path)
-                .with_context(|| format!("Failed to open Excel file: {path}"))?;
-            let sheet = workbook.get_sheet_by_name(&sheet_name)
-                .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
-            Ok(sheet.to_string_vec())
-        }
+        with_sheet_data(path, &sheet_name, |rows| Ok(rows.to_vec()))
     }
 
     /// Read a specific range from Excel file
@@ -226,10 +221,10 @@ impl ExcelHandler {
                 .with_context(|| format!("Failed to open XLS file: {path}"))?;
             let sheet = reader.get_sheet_by_name(&sheet_name)
                 .with_context(|| format!("Failed to find sheet: {sheet_name}"))?;
-            
+
             let estimated_rows = range.end_row.saturating_sub(range.start_row) + 1;
             let estimated_cols = range.end_col.saturating_sub(range.start_col) + 1;
-            let mut result = Vec::with_capacity(estimated_rows.min(1024));
+            let mut result = Vec::with_capacity(estimated_rows.min(DEFAULT_ESTIMATED_ROWS));
 
             for row_idx in range.start_row..=range.end_row {
                 let mut row_data = Vec::with_capacity(estimated_cols);
@@ -245,10 +240,10 @@ impl ExcelHandler {
                 .with_context(|| format!("Failed to open Excel file: {path}"))?;
             let sheet = workbook.get_sheet_by_name(&sheet_name)
                 .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
-            
+
             let estimated_rows = range.end_row.saturating_sub(range.start_row) + 1;
             let estimated_cols = range.end_col.saturating_sub(range.start_col) + 1;
-            let mut result = Vec::with_capacity(estimated_rows.min(1024));
+            let mut result = Vec::with_capacity(estimated_rows.min(DEFAULT_ESTIMATED_ROWS));
 
             for row_idx in range.start_row..=range.end_row {
                 let mut row_data = Vec::with_capacity(estimated_cols);

@@ -9,6 +9,7 @@ use std::fmt::Write as FmtWrite;
 use zip::ZipWriter;
 use zip::write::FileOptions;
 
+use super::style_registry::StyleRegistry;
 use super::types::{CellData, SheetData};
 use super::WriteOptions;
 
@@ -218,44 +219,167 @@ pub fn add_workbook_rels<W: IoWrite + Seek>(
 }
 
 /// Add xl/styles.xml
+///
+/// When the registry only contains the default cellXf (no user
+/// styles registered), this emits the same minimal styles.xml that
+/// earlier versions of the writer emitted. When the registry holds
+/// additional fonts/fills/borders/numFmts/cellXfs, those tables are
+/// emitted instead. Either way, output is well-formed OOXML that
+/// Excel, Numbers, and LibreOffice accept.
 pub fn add_styles<W: IoWrite + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
-    let xml = concat!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
-        r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#,
-        r#"<numFmts count="0"/>"#,
-        // Font 0: normal, Font 1: bold
-        r#"<fonts count="2">"#,
-        r#"<font><name val="Calibri"/><family val="2"/><color theme="1"/><sz val="11"/><scheme val="minor"/></font>"#,
-        r#"<font><b/><name val="Calibri"/><family val="2"/><color theme="1"/><sz val="11"/><scheme val="minor"/></font>"#,
-        r#"</fonts>"#,
-        // Fill 0: none, Fill 1: gray125 (required), Fill 2: header blue
-        r#"<fills count="3">"#,
-        r#"<fill><patternFill/></fill>"#,
-        r#"<fill><patternFill patternType="gray125"/></fill>"#,
-        r#"<fill><patternFill patternType="solid"><fgColor rgb="FF4472C4"/><bgColor indexed="64"/></patternFill></fill>"#,
-        r#"</fills>"#,
-        // Border 0: none, Border 1: thin all sides
-        r#"<borders count="2">"#,
-        r#"<border><left/><right/><top/><bottom/><diagonal/></border>"#,
-        r#"<border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>"#,
-        r#"</borders>"#,
-        r#"<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>"#,
-        // xf 0: normal, xf 1: bold+fill+border (header), xf 2: centered
-        r#"<cellXfs count="3">"#,
-        r#"<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>"#,
-        r#"<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center"/></xf>"#,
-        r#"<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment horizontal="center"/></xf>"#,
-        r#"</cellXfs>"#,
-        r#"<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>"#,
-        r#"<tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleLight16"/>"#,
-        r#"</styleSheet>"#,
-    );
+    let registry = StyleRegistry::new();
+    add_styles_with_registry(zip, &registry)
+}
 
+/// Same as `add_styles`, but emits whatever the given registry holds.
+/// This is the path used by `XlsxWriter::save`.
+pub fn add_styles_with_registry<W: IoWrite + Seek>(
+    zip: &mut ZipWriter<W>,
+    registry: &StyleRegistry,
+) -> Result<()> {
+    let xml = styles_xml(registry);
     let opts = FileOptions::<()>::default()
         .compression_method(zip::CompressionMethod::Deflated);
     zip.start_file("xl/styles.xml", opts)?;
     zip.write_all(xml.as_bytes())?;
     Ok(())
+}
+
+fn fonts_xml(reg: &StyleRegistry) -> String {
+    let mut xml = String::with_capacity(reg.fonts.len() * 80);
+    let _ = write!(xml, "<fonts count=\"{}\">", reg.fonts.len());
+    for f in &reg.fonts {
+        xml.push_str("<font>");
+        let _ = write!(xml, "<sz val=\"{}\"/>", f.size_half as f64 / 100.0);
+        let _ = write!(xml, "<name val=\"{}\"/>", escape_xml(&f.name));
+        if f.bold { xml.push_str("<b/>"); }
+        if f.italic { xml.push_str("<i/>"); }
+        if f.underline { xml.push_str("<u val=\"single\"/>"); }
+        if let Some(c) = &f.color_argb {
+            let _ = write!(xml, "<color rgb=\"{}\"/>", c);
+        } else {
+            xml.push_str("<color theme=\"1\"/>");
+        }
+        xml.push_str("</font>");
+    }
+    xml.push_str("</fonts>");
+    xml
+}
+
+fn fills_xml(reg: &StyleRegistry) -> String {
+    let mut xml = String::with_capacity(reg.fills.len() * 80);
+    let _ = write!(xml, "<fills count=\"{}\">", reg.fills.len());
+    for f in &reg.fills {
+        if let Some(c) = &f.color_argb {
+            let _ = write!(
+                xml,
+                "<fill><patternFill patternType=\"solid\"><fgColor rgb=\"{}\"/><bgColor rgb=\"{}\"/></patternFill></fill>",
+                c, c
+            );
+        } else {
+            xml.push_str("<fill><patternFill/></fill>");
+        }
+    }
+    xml.push_str("</fills>");
+    xml
+}
+
+fn borders_xml(reg: &StyleRegistry) -> String {
+    let mut xml = String::with_capacity(reg.borders.len() * 100);
+    let _ = write!(xml, "<borders count=\"{}\">", reg.borders.len());
+    for b in &reg.borders {
+        xml.push_str("<border>");
+        xml.push_str(&border_side_xml("left", &b.left));
+        xml.push_str(&border_side_xml("right", &b.right));
+        xml.push_str(&border_side_xml("top", &b.top));
+        xml.push_str(&border_side_xml("bottom", &b.bottom));
+        xml.push_str("<diagonal/>");
+        xml.push_str("</border>");
+    }
+    xml.push_str("</borders>");
+    xml
+}
+
+fn cell_xfs_xml(reg: &StyleRegistry) -> String {
+    let mut xml = String::with_capacity(reg.cell_xfs.len() * 120);
+    let _ = write!(xml, "<cellXfs count=\"{}\">", reg.cell_xfs.len());
+    for xf in &reg.cell_xfs {
+        let _ = write!(
+            xml,
+            "<xf numFmtId=\"{}\" fontId=\"{}\" fillId=\"{}\" borderId=\"{}\" xfId=\"0\"",
+            xf.num_fmt_id, xf.font_id, xf.fill_id, xf.border_id
+        );
+        if xf.apply_number_format { xml.push_str(" applyNumberFormat=\"1\""); }
+        if xf.apply_font { xml.push_str(" applyFont=\"1\""); }
+        if xf.apply_fill { xml.push_str(" applyFill=\"1\""); }
+        if xf.apply_border { xml.push_str(" applyBorder=\"1\""); }
+        if xf.apply_alignment { xml.push_str(" applyAlignment=\"1\""); }
+        let has_align = xf.alignment.horizontal.is_some()
+            || xf.alignment.vertical.is_some()
+            || xf.alignment.wrap_text;
+        if has_align {
+            xml.push('>');
+            xml.push_str("<alignment");
+            if let Some(h) = &xf.alignment.horizontal {
+                let _ = write!(xml, " horizontal=\"{}\"", escape_xml(h));
+            }
+            if let Some(v) = &xf.alignment.vertical {
+                let _ = write!(xml, " vertical=\"{}\"", escape_xml(v));
+            }
+            if xf.alignment.wrap_text {
+                xml.push_str(" wrapText=\"1\"");
+            }
+            xml.push_str("/></xf>");
+        } else {
+            xml.push_str("/>");
+        }
+    }
+    xml.push_str("</cellXfs>");
+    xml
+}
+
+/// Build the styles.xml XML string for a registry.
+fn styles_xml(reg: &StyleRegistry) -> String {
+    let mut xml = String::with_capacity(2048);
+    xml.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
+    xml.push_str("<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+
+    // numFmts (custom only; built-ins are referenced by reserved id).
+    if !reg.num_fmts.is_empty() {
+        let _ = write!(xml, "<numFmts count=\"{}\">", reg.num_fmts.len());
+        for nf in &reg.num_fmts {
+            let _ = write!(
+                xml,
+                "<numFmt numFmtId=\"{}\" formatCode=\"{}\"/>",
+                nf.id, escape_xml(&nf.code)
+            );
+        }
+        xml.push_str("</numFmts>");
+    } else {
+        xml.push_str("<numFmts count=\"0\"/>");
+    }
+
+    xml.push_str(&fonts_xml(reg));
+    xml.push_str(&fills_xml(reg));
+    xml.push_str(&borders_xml(reg));
+
+    xml.push_str("<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>");
+    xml.push_str(&cell_xfs_xml(reg));
+    xml.push_str("<cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles>");
+
+    xml.push_str("</styleSheet>");
+    xml
+}
+
+fn border_side_xml(name: &str, side: &super::style_registry::BorderSide) -> String {
+    if side.style.is_empty() {
+        return format!("<{}/>", name);
+    }
+    let color = side
+        .color_argb
+        .as_deref()
+        .unwrap_or("FF000000");
+    format!("<{} style=\"{}\" color=\"{}\"/>", name, escape_xml(&side.style), color)
 }
 
 /// Add xl/theme/theme1.xml
@@ -300,6 +424,188 @@ pub fn add_theme<W: IoWrite + Seek>(zip: &mut ZipWriter<W>) -> Result<()> {
     Ok(())
 }
 
+/// Build outline level and collapsed lookup vectors from a list of groups.
+/// Each group covers a range `[start, end]` (inclusive) and contributes
+/// its `level` (max wins) and `collapsed` flag (OR'd).
+fn build_outline_lookup(
+    count: usize,
+    groups: &[(usize, usize, u8, bool)],
+) -> (Vec<u8>, Vec<bool>) {
+    let mut levels = vec![0u8; count];
+    let mut collapsed = vec![false; count];
+    for &(start, end, level, coll) in groups {
+        for i in start..=end.min(count.saturating_sub(1)) {
+            levels[i] = levels[i].max(level);
+            collapsed[i] = collapsed[i] || coll;
+        }
+    }
+    (levels, collapsed)
+}
+
+fn sheet_views_xml(options: &WriteOptions) -> String {
+    if options.freeze_header {
+        let mut s = String::with_capacity(128);
+        s.push_str("<sheetViews>");
+        s.push_str("<sheetView workbookViewId=\"0\">");
+        s.push_str("<pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/>");
+        s.push_str("<selection pane=\"bottomLeft\" activeCell=\"A2\" sqref=\"A2\"/>");
+        s.push_str("</sheetView>");
+        s.push_str("</sheetViews>");
+        s
+    } else {
+        let mut s = String::with_capacity(64);
+        s.push_str("<sheetViews>");
+        s.push_str("<sheetView workbookViewId=\"0\">");
+        s.push_str("<selection activeCell=\"A1\" sqref=\"A1\"/>");
+        s.push_str("</sheetView>");
+        s.push_str("</sheetViews>");
+        s
+    }
+}
+
+fn cols_xml(
+    sheet: &SheetData,
+    col_outline: &[u8],
+    col_collapsed: &[bool],
+) -> String {
+    if sheet.column_widths.is_empty() {
+        return String::new();
+    }
+    let mut xml = String::with_capacity(sheet.column_widths.len() * 80);
+    xml.push_str(r#"<cols>"#);
+    for (col_idx, &width) in sheet.column_widths.iter().enumerate() {
+        let outline = if col_idx < col_outline.len() && col_outline[col_idx] > 0 {
+            format!(r#" outlineLevel="{}""#, col_outline[col_idx])
+        } else {
+            String::new()
+        };
+        let collapsed = if col_idx < col_collapsed.len() && col_collapsed[col_idx] {
+            r#" collapsed="1""#
+        } else {
+            ""
+        };
+        let _ = write!(
+            xml,
+            r#"<col min="{}" max="{}"{}{} width="{}" customWidth="1"/>"#,
+            col_idx + 1, col_idx + 1, outline, collapsed, width
+        );
+    }
+    xml.push_str(r#"</cols>"#);
+    xml
+}
+
+fn sheet_data_xml(
+    sheet: &SheetData,
+    row_outline: &[u8],
+    row_collapsed: &[bool],
+) -> String {
+    let mut xml = String::with_capacity(sheet.rows.len() * 64);
+    xml.push_str(r#"<sheetData>"#);
+    let mut col_buf = String::with_capacity(3);
+    for (row_idx, row) in sheet.rows.iter().enumerate() {
+        let outline_attr = if row_outline[row_idx] > 0 {
+            format!(r#" outlineLevel="{}""#, row_outline[row_idx])
+        } else {
+            String::new()
+        };
+        let collapsed_attr = if row_collapsed[row_idx] {
+            r#" collapsed="1" hidden="1""#
+        } else {
+            ""
+        };
+        let _ = write!(xml, r#"<row r="{}{}{}">"#, row_idx + 1, outline_attr, collapsed_attr);
+        for (col_idx, cell) in row.cells.iter().enumerate() {
+            if matches!(cell, CellData::Empty) {
+                continue;
+            }
+            let style_attr = row
+                .cell_styles
+                .get(col_idx)
+                .and_then(|s| *s)
+                .filter(|&i| i != 0)
+                .map(|i| format!(r#" s="{}""#, i))
+                .unwrap_or_default();
+            col_num_to_letter_into(col_idx + 1, &mut col_buf);
+            let cell_ref = format!("{}{}", col_buf, row_idx + 1);
+            match cell {
+                CellData::String(s) => {
+                    let _ = write!(
+                        xml,
+                        r#"<c r="{}"{} t="inlineStr"><is><t>"#,
+                        cell_ref, style_attr
+                    );
+                    escape_xml_into(s, &mut xml);
+                    xml.push_str(r#"</t></is></c>"#);
+                }
+                CellData::Number(n) => {
+                    let _ = write!(xml, r#"<c r="{}"{}><v>{}</v></c>"#, cell_ref, style_attr, n);
+                }
+                CellData::Bool(b) => {
+                    let _ = write!(
+                        xml,
+                        r#"<c r="{}"{} t="b"><v>{}</v></c>"#,
+                        cell_ref, style_attr, if *b { 1 } else { 0 }
+                    );
+                }
+                CellData::Formula(f) => {
+                    let formula = f.strip_prefix('=').unwrap_or(f);
+                    let _ = write!(xml, r#"<c r="{}"{}><f>"#, cell_ref, style_attr);
+                    escape_xml_into(formula, &mut xml);
+                    xml.push_str(r#"</f></c>"#);
+                }
+                CellData::Empty => unreachable!(),
+            }
+        }
+        xml.push_str(r#"</row>"#);
+    }
+    xml.push_str(r#"</sheetData>"#);
+    xml
+}
+
+fn merge_cells_xml(sheet: &SheetData) -> String {
+    if sheet.merge_cells.is_empty() {
+        return String::new();
+    }
+    let mut xml = String::with_capacity(sheet.merge_cells.len() * 60);
+    let _ = write!(xml, r#"<mergeCells count="{}">"#, sheet.merge_cells.len());
+    for mc in &sheet.merge_cells {
+        let start_ref = format!("{}{}", col_num_to_letter(mc.start_col + 1), mc.start_row + 1);
+        let end_ref = format!("{}{}", col_num_to_letter(mc.end_col + 1), mc.end_row + 1);
+        let _ = write!(xml, r#"<mergeCell ref="{}:{}"/>"#, start_ref, end_ref);
+    }
+    xml.push_str(r#"</mergeCells>"#);
+    xml
+}
+
+fn data_validations_xml(sheet: &SheetData) -> String {
+    if sheet.data_validations.is_empty() {
+        return String::new();
+    }
+    let mut xml = String::with_capacity(sheet.data_validations.len() * 100);
+    let _ = write!(xml, r#"<dataValidations count="{}">"#, sheet.data_validations.len());
+    for dv in &sheet.data_validations {
+        xml.push_str(&generate_data_validation_xml(dv));
+    }
+    xml.push_str(r#"</dataValidations>"#);
+    xml
+}
+
+fn hyperlinks_xml(sheet: &SheetData, has_chart: bool) -> String {
+    if sheet.hyperlinks.is_empty() {
+        return String::new();
+    }
+    let mut xml = String::with_capacity(sheet.hyperlinks.len() * 80);
+    xml.push_str(r#"<hyperlinks>"#);
+    let mut rel_id = if has_chart { 2 } else { 1 };
+    for hl in &sheet.hyperlinks {
+        let tooltip_attr = hl.tooltip.as_ref().map(|t| format!(r#" tooltip="{}""#, escape_xml(t))).unwrap_or_default();
+        let _ = write!(xml, r#"<hyperlink ref="{}" r:id="rId{}"{}/>"#, hl.cell_ref, rel_id, tooltip_attr);
+        rel_id += 1;
+    }
+    xml.push_str(r#"</hyperlinks>"#);
+    xml
+}
+
 /// Add worksheet XML
 pub fn add_worksheet<W: IoWrite + Seek>(
     zip: &mut ZipWriter<W>,
@@ -310,9 +616,21 @@ pub fn add_worksheet<W: IoWrite + Seek>(
 ) -> Result<()> {
     let max_row = sheet.rows.len();
     let max_col = sheet.rows.iter().map(|r| r.cells.len()).max().unwrap_or(0);
-
     let needs_r_namespace = has_chart || !sheet.hyperlinks.is_empty() || !sheet.comments.is_empty();
 
+    // Build outline lookups
+    let col_groups: Vec<(usize, usize, u8, bool)> = sheet.col_groups.iter()
+        .map(|g| (g.start_col, g.end_col, g.level, g.collapsed))
+        .collect();
+    let max_col_for_outline = sheet.column_widths.len().max(max_col);
+    let (col_outline, col_collapsed) = build_outline_lookup(max_col_for_outline, &col_groups);
+
+    let row_groups: Vec<(usize, usize, u8, bool)> = sheet.row_groups.iter()
+        .map(|g| (g.start_row, g.end_row, g.level, g.collapsed))
+        .collect();
+    let (row_outline, row_collapsed) = build_outline_lookup(max_row, &row_groups);
+
+    // Assemble worksheet XML
     let mut xml = String::with_capacity(max_row * max_col * 40 + 1024);
     xml.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
     if needs_r_namespace {
@@ -321,211 +639,49 @@ pub fn add_worksheet<W: IoWrite + Seek>(
         xml.push_str(r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#);
     }
 
-    // Sheet properties
     xml.push_str(r#"<sheetPr><outlinePr summaryBelow="1" summaryRight="1"/><pageSetUpPr/></sheetPr>"#);
 
-    // Dimension
     if max_row > 0 && max_col > 0 {
-        xml.push_str(&format!(
-            r#"<dimension ref="A1:{}{}"/>"#,
-            col_num_to_letter(max_col),
-            max_row
-        ));
+        let _ = write!(xml, r#"<dimension ref="A1:{}{}"/>"#, col_num_to_letter(max_col), max_row);
     } else {
         xml.push_str(r#"<dimension ref="A1"/>"#);
     }
 
-    // Sheet views
-    xml.push_str(r#"<sheetViews>"#);
-    if options.freeze_header {
-        xml.push_str(r#"<sheetView workbookViewId="0">"#);
-        xml.push_str(r#"<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>"#);
-        xml.push_str(r#"<selection pane="bottomLeft" activeCell="A2" sqref="A2"/>"#);
-        xml.push_str(r#"</sheetView>"#);
-    } else {
-        xml.push_str(r#"<sheetView workbookViewId="0">"#);
-        xml.push_str(r#"<selection activeCell="A1" sqref="A1"/>"#);
-        xml.push_str(r#"</sheetView>"#);
-    }
-    xml.push_str(r#"</sheetViews>"#);
-
-    // Sheet format properties (required by Excel/Numbers)
+    xml.push_str(&sheet_views_xml(options));
     xml.push_str(r#"<sheetFormatPr baseColWidth="8" defaultRowHeight="15"/>"#);
+    xml.push_str(&cols_xml(sheet, &col_outline, &col_collapsed));
+    xml.push_str(&sheet_data_xml(sheet, &row_outline, &row_collapsed));
 
-    // Build column outline level lookup
-    let mut col_outline: Vec<u8> = Vec::new();
-    let mut col_collapsed: Vec<bool> = Vec::new();
-    for cg in &sheet.col_groups {
-        let end = cg.end_col.max(col_outline.len().saturating_sub(1));
-        if col_outline.len() <= end {
-            col_outline.resize(end + 1, 0);
-            col_collapsed.resize(end + 1, false);
-        }
-        for c in cg.start_col..=cg.end_col {
-            if c < col_outline.len() {
-                col_outline[c] = col_outline[c].max(cg.level);
-                col_collapsed[c] = col_collapsed[c] || cg.collapsed;
-            }
-        }
-    }
-
-    // Column widths
-    if !sheet.column_widths.is_empty() {
-        xml.push_str(r#"<cols>"#);
-        for (col_idx, &width) in sheet.column_widths.iter().enumerate() {
-            let outline = if col_idx < col_outline.len() && col_outline[col_idx] > 0 {
-                format!(r#" outlineLevel="{}""#, col_outline[col_idx])
-            } else {
-                String::new()
-            };
-            let collapsed = if col_idx < col_collapsed.len() && col_collapsed[col_idx] {
-                r#" collapsed="1""#.to_string()
-            } else {
-                String::new()
-            };
-            xml.push_str(&format!(
-                r#"<col min="{}" max="{}"{}{} width="{}" customWidth="1"/>"#,
-                col_idx + 1,
-                col_idx + 1,
-                outline,
-                collapsed,
-                width
-            ));
-        }
-        xml.push_str(r#"</cols>"#);
-    }
-
-    // Build row outline level lookup
-    let mut row_outline: Vec<u8> = vec![0; sheet.rows.len()];
-    let mut row_collapsed: Vec<bool> = vec![false; sheet.rows.len()];
-    for rg in &sheet.row_groups {
-        for r in rg.start_row..=rg.end_row {
-            if r < row_outline.len() {
-                row_outline[r] = row_outline[r].max(rg.level);
-                row_collapsed[r] = row_collapsed[r] || rg.collapsed;
-            }
-        }
-    }
-
-    // Sheet data
-    xml.push_str(r#"<sheetData>"#);
-    let mut col_buf = String::with_capacity(3);
-    for (row_idx, row) in sheet.rows.iter().enumerate() {
-        let outline_attr = if row_outline[row_idx] > 0 {
-            format!(r#" outlineLevel="{}""#, row_outline[row_idx])
-        } else {
-            String::new()
-        };
-        let collapsed_attr = if row_collapsed[row_idx] {
-            r#" collapsed="1" hidden="1""#.to_string()
-        } else {
-            String::new()
-        };
-        let _ = write!(xml, r#"<row r="{}{}{}">"#, row_idx + 1, outline_attr, collapsed_attr);
-        for (col_idx, cell) in row.cells.iter().enumerate() {
-            match cell {
-                CellData::Empty => continue,
-                CellData::String(s) => {
-                    col_num_to_letter_into(col_idx + 1, &mut col_buf);
-                    let _ = write!(xml, r#"<c r="{}{}" t="inlineStr"><is><t>"#, col_buf, row_idx + 1);
-                    escape_xml_into(s, &mut xml);
-                    xml.push_str(r#"</t></is></c>"#);
-                }
-                CellData::Number(n) => {
-                    col_num_to_letter_into(col_idx + 1, &mut col_buf);
-                    let _ = write!(xml, r#"<c r="{}{}" t="n"><v>{}</v></c>"#, col_buf, row_idx + 1, n);
-                }
-                CellData::Formula(f) => {
-                    let formula = f.strip_prefix('=').unwrap_or(f);
-                    col_num_to_letter_into(col_idx + 1, &mut col_buf);
-                    let _ = write!(xml, r#"<c r="{}{}"><f>"#, col_buf, row_idx + 1);
-                    escape_xml_into(formula, &mut xml);
-                    xml.push_str(r#"</f></c>"#);
-                }
-            }
-        }
-        xml.push_str(r#"</row>"#);
-    }
-    xml.push_str(r#"</sheetData>"#);
-
-    // AutoFilter
     if options.auto_filter && max_row > 0 && max_col > 0 {
-        xml.push_str(&format!(
-            r#"<autoFilter ref="A1:{}{}"/>"#,
-            col_num_to_letter(max_col),
-            max_row
-        ));
+        let _ = write!(xml, r#"<autoFilter ref="A1:{}{}"/>"#, col_num_to_letter(max_col), max_row);
     }
 
-    // Conditional formatting
     if !sheet.conditional_formats.is_empty() {
-        let (cf_xml, _dxf_entries) =
-            super::cond_fmt_xml::generate_conditional_formatting_xml(&sheet.conditional_formats, 0);
+        let (cf_xml, _) = super::cond_fmt_xml::generate_conditional_formatting_xml(&sheet.conditional_formats, 0);
         xml.push_str(&cf_xml);
     }
 
-    // Merge cells
-    if !sheet.merge_cells.is_empty() {
-        xml.push_str(&format!(
-            r#"<mergeCells count="{}">"#,
-            sheet.merge_cells.len()
-        ));
-        for mc in &sheet.merge_cells {
-            let start_ref = format!("{}{}", col_num_to_letter(mc.start_col + 1), mc.start_row + 1);
-            let end_ref = format!("{}{}", col_num_to_letter(mc.end_col + 1), mc.end_row + 1);
-            xml.push_str(&format!(r#"<mergeCell ref="{}:{}"/>"#, start_ref, end_ref));
-        }
-        xml.push_str(r#"</mergeCells>"#);
-    }
+    xml.push_str(&merge_cells_xml(sheet));
+    xml.push_str(&data_validations_xml(sheet));
+    xml.push_str(&hyperlinks_xml(sheet, has_chart));
 
-    // Data validations
-    if !sheet.data_validations.is_empty() {
-        xml.push_str(&format!(
-            r#"<dataValidations count="{}">"#,
-            sheet.data_validations.len()
-        ));
-        for dv in &sheet.data_validations {
-            xml.push_str(&generate_data_validation_xml(dv));
-        }
-        xml.push_str(r#"</dataValidations>"#);
-    }
-
-    // Hyperlinks
-    if !sheet.hyperlinks.is_empty() {
-        xml.push_str(r#"<hyperlinks>"#);
-        let mut rel_id = if has_chart { 2 } else { 1 };
-        for hl in &sheet.hyperlinks {
-            let tooltip_attr = hl.tooltip.as_ref().map(|t| format!(r#" tooltip="{}""#, escape_xml(t))).unwrap_or_default();
-            xml.push_str(&format!(
-                r#"<hyperlink ref="{}" r:id="rId{}"{}/>"#,
-                hl.cell_ref, rel_id, tooltip_attr
-            ));
-            rel_id += 1;
-        }
-        xml.push_str(r#"</hyperlinks>"#);
-    }
-
-    // Page margins (use PrintSetup if provided, else defaults)
     let margins = sheet.print_setup.as_ref().and_then(|ps| ps.margins).unwrap_or_default();
-    xml.push_str(&format!(
+    let _ = write!(
+        xml,
         r#"<pageMargins left="{}" right="{}" top="{}" bottom="{}" header="{}" footer="{}"/>"#,
         margins.left, margins.right, margins.top, margins.bottom, margins.header, margins.footer
-    ));
+    );
 
-    // Page setup
     if let Some(ref ps) = sheet.print_setup {
         xml.push_str(&generate_page_setup_xml(ps));
     }
 
-    // Drawing reference (for charts)
     if has_chart {
         xml.push_str(r#"<drawing r:id="rId1"/>"#);
     }
 
-    // Sparklines (must come after pageMargins, before closing worksheet)
     if !sheet.sparkline_groups.is_empty() {
-        let sparkline_xml =
-            super::sparkline_xml::generate_sparkline_ext_xml(&sheet.sparkline_groups, &sheet.name);
+        let sparkline_xml = super::sparkline_xml::generate_sparkline_ext_xml(&sheet.sparkline_groups, &sheet.name);
         xml.push_str(&sparkline_xml);
     }
 
@@ -536,12 +692,9 @@ pub fn add_worksheet<W: IoWrite + Seek>(
     zip.start_file(format!("xl/worksheets/sheet{}.xml", idx + 1), opts)?;
     zip.write_all(xml.as_bytes())?;
 
-    // Worksheet rels (hyperlinks, comments, charts)
     if needs_r_namespace {
         add_worksheet_rels(zip, idx, has_chart, &sheet.hyperlinks, &sheet.comments)?;
     }
-
-    // Comments XML
     if !sheet.comments.is_empty() {
         add_comments_xml(zip, idx, &sheet.comments)?;
     }

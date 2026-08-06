@@ -8,5 +8,7 @@ mod parser;
 mod types;
 
 pub use evaluator::FormulaEvaluator;
+
+// Public API export - unused internally but part of library interface
 #[allow(unused_imports)]
 pub use types::FormulaResult;

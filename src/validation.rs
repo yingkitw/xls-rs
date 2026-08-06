@@ -265,14 +265,13 @@ impl DataValidator {
                     }
             }
             ValidationRule::Email => {
-                let email_regex =
-                    regex::Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")?;
+                let email_regex = crate::regex_cache::email_regex();
                 if !email_regex.is_match(value) {
                     return Err(anyhow::anyhow!("Invalid email format"));
                 }
             }
             ValidationRule::Url => {
-                let url_regex = regex::Regex::new(r"^https?://[^\s/$.?#].[^\s]*$")?;
+                let url_regex = crate::regex_cache::url_regex();
                 if !url_regex.is_match(value) {
                     return Err(anyhow::anyhow!("Invalid URL format"));
                 }

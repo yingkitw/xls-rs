@@ -38,8 +38,7 @@ impl super::profiler::DataProfiler {
         }
 
         // Check for email
-        let email_regex =
-            regex::Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
+        let email_regex = crate::regex_cache::email_regex();
         let email_count = sample.iter().filter(|v| email_regex.is_match(v)).count();
 
         if email_count as f64 / sample_size as f64 > 0.8 {
@@ -47,7 +46,7 @@ impl super::profiler::DataProfiler {
         }
 
         // Check for URL
-        let url_regex = regex::Regex::new(r"^https?://[^\s/$.?#].[^\s]*$").unwrap();
+        let url_regex = crate::regex_cache::url_regex();
         let url_count = sample.iter().filter(|v| url_regex.is_match(v)).count();
 
         if url_count as f64 / sample_size as f64 > 0.8 {
@@ -55,7 +54,7 @@ impl super::profiler::DataProfiler {
         }
 
         // Check for phone
-        let phone_regex = regex::Regex::new(r"^\+?[\d\s\-\(\)]{10,}$").unwrap();
+        let phone_regex = crate::regex_cache::phone_regex();
         let phone_count = sample.iter().filter(|v| phone_regex.is_match(v)).count();
 
         if phone_count as f64 / sample_size as f64 > 0.8 {

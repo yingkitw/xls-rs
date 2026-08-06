@@ -112,14 +112,29 @@ impl FilterOperator for DataOperations {
             );
         }
 
+        // Pre-compile regex if the condition is a regex filter
+        let precompiled_regex = if let FilterCondition::Regex(ref pattern) = condition {
+            Some(regex::Regex::new(pattern)?)
+        } else {
+            None
+        };
+
         // Pre-filter indices in parallel to avoid cloning until final collection
         let indices: Vec<usize> = data
             .par_iter()
             .enumerate()
             .filter(|(_idx, row)| {
                 let cell_value = row.get(column).map(|s| s.as_str()).unwrap_or("");
-                self.evaluate_condition(cell_value, &condition)
-                    .unwrap_or(false)
+                match &condition {
+                    FilterCondition::Regex(_) => {
+                        if let Some(re) = &precompiled_regex {
+                            re.is_match(cell_value)
+                        } else {
+                            false
+                        }
+                    }
+                    _ => self.evaluate_condition(cell_value, &condition).unwrap_or(false),
+                }
             })
             .map(|(idx, _)| idx)
             .collect();

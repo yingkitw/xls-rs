@@ -80,7 +80,10 @@ pub mod validation {
 
     /// Validate cell range string format
     pub fn validate_cell_range(range: &str) -> Result<()> {
-        let re = regex::Regex::new(r"^[A-Z]+[0-9]+(:[A-Z]+[0-9]+)?$")?;
+        static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        let re = RE.get_or_init(|| {
+            regex::Regex::new(r"^[A-Z]+[0-9]+(:[A-Z]+[0-9]+)?$").expect("cell range regex")
+        });
         if !re.is_match(range) {
             return Err(anyhow!("Invalid cell range format: {}", range));
         }
@@ -144,7 +147,8 @@ pub mod transform {
             return Vec::new();
         }
 
-        let mut result = vec![data[0].clone()]; // Keep header
+        let mut result = Vec::with_capacity(data.len());
+        result.push(data[0].clone()); // Keep header
         result.extend(data.iter().skip(1).filter(|row| predicate(row)).cloned());
         result
     }
@@ -158,7 +162,8 @@ pub mod transform {
             return Vec::new();
         }
 
-        let mut result = vec![data[0].clone()]; // Keep header
+        let mut result = Vec::with_capacity(data.len());
+        result.push(data[0].clone()); // Keep header
         let filtered: Vec<Vec<String>> = data
             .par_iter()
             .skip(1)
@@ -184,7 +189,6 @@ pub mod transform {
             return Ok(());
         }
 
-        let _header = data[0].clone();
         let mut data_rows: Vec<&mut Vec<String>> = data.iter_mut().skip(1).collect();
 
         data_rows.sort_by(|a, b| {
@@ -211,7 +215,6 @@ pub mod transform {
             return Ok(());
         }
 
-        let _header = data[0].clone();
         let mut data_rows: Vec<&mut Vec<String>> = data.iter_mut().skip(1).collect();
 
         data_rows.par_sort_by(|a, b| {

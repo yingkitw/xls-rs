@@ -14,7 +14,8 @@ impl DataOperations {
         let header = &data[0];
         let num_cols = header.len();
 
-        let mut columns: Vec<Vec<f64>> = vec![Vec::new(); num_cols];
+        let data_rows = data.len().saturating_sub(1);
+        let mut columns: Vec<Vec<f64>> = (0..num_cols).map(|_| Vec::with_capacity(data_rows)).collect();
         for row in data.iter().skip(1) {
             for (idx, val) in row.iter().enumerate() {
                 if let Ok(num) = val.parse::<f64>() {
@@ -23,7 +24,7 @@ impl DataOperations {
             }
         }
 
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(16);
 
         let mut stat_header = vec!["stat".to_string()];
         stat_header.extend(header.iter().cloned());
@@ -63,7 +64,8 @@ impl DataOperations {
         let header = &data[0];
 
         // Extract numeric values per column
-        let mut col_data: Vec<Vec<f64>> = vec![Vec::new(); columns.len()];
+        let data_rows = data.len().saturating_sub(1);
+        let mut col_data: Vec<Vec<f64>> = (0..columns.len()).map(|_| Vec::with_capacity(data_rows)).collect();
         for row in data.iter().skip(1) {
             for (i, &col_idx) in columns.iter().enumerate() {
                 if let Some(val) = row.get(col_idx).and_then(|v| v.parse::<f64>().ok()) {
@@ -72,7 +74,7 @@ impl DataOperations {
             }
         }
 
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(columns.len() + 1);
 
         let mut corr_header = vec!["".to_string()];
         for &col_idx in columns {
@@ -114,7 +116,8 @@ impl DataOperations {
 
         let header = &data[0];
 
-        let mut col_data: Vec<Vec<f64>> = vec![Vec::new(); columns.len()];
+        let data_rows = data.len().saturating_sub(1);
+        let mut col_data: Vec<Vec<f64>> = (0..columns.len()).map(|_| Vec::with_capacity(data_rows)).collect();
         for row in data.iter().skip(1) {
             for (i, &col_idx) in columns.iter().enumerate() {
                 if let Some(val) = row.get(col_idx).and_then(|v| v.parse::<f64>().ok()) {
@@ -123,7 +126,7 @@ impl DataOperations {
             }
         }
 
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(columns.len() + 1);
 
         let mut corr_header = vec!["".to_string()];
         for &col_idx in columns {
@@ -164,8 +167,8 @@ impl DataOperations {
             return Ok(Vec::new());
         }
 
-        let mut xs = Vec::new();
-        let mut ys = Vec::new();
+        let mut xs = Vec::with_capacity(data.len());
+        let mut ys = Vec::with_capacity(data.len());
         for row in data.iter().skip(1) {
             if let (Some(xv), Some(yv)) = (row.get(x_col), row.get(y_col))
                 && let (Ok(x), Ok(y)) = (xv.parse::<f64>(), yv.parse::<f64>()) {
@@ -364,7 +367,8 @@ impl DataOperations {
 
         let header = &data[0];
 
-        let mut col_data: Vec<Vec<f64>> = vec![Vec::new(); columns.len()];
+        let data_rows = data.len().saturating_sub(1);
+        let mut col_data: Vec<Vec<f64>> = (0..columns.len()).map(|_| Vec::with_capacity(data_rows)).collect();
         for row in data.iter().skip(1) {
             for (i, &col_idx) in columns.iter().enumerate() {
                 if let Some(val) = row.get(col_idx).and_then(|v| v.parse::<f64>().ok()) {
@@ -373,7 +377,7 @@ impl DataOperations {
             }
         }
 
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(columns.len() + 1);
 
         let mut corr_header = vec!["".to_string()];
         for &col_idx in columns {

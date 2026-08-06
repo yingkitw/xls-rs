@@ -213,7 +213,7 @@ impl<'a> XmlScanner<'a> {
     /// Parse attributes from a tag. Starts after the tag name.
     /// Returns a map of (local_name -> value) and the end position.
     fn parse_attributes(&self, attr_start: usize) -> (HashMap<String, String>, usize) {
-        let mut attrs = HashMap::new();
+        let mut attrs = HashMap::with_capacity(8);
         let mut pos = attr_start;
 
         loop {
@@ -619,7 +619,7 @@ impl XlsxReader {
         let mut scanner = XmlScanner::new(xml_str.as_bytes());
         scanner.skip_declaration();
 
-        let mut map = HashMap::new();
+        let mut map = HashMap::with_capacity(16);
         while scanner.find_open_tag("Relationship").is_some() {
             let tag_start = scanner.pos;
             let _tag_name = scanner.read_tag_name(tag_start);
@@ -640,7 +640,7 @@ impl XlsxReader {
         let mut scanner = XmlScanner::new(xml_str.as_bytes());
         scanner.skip_declaration();
 
-        let mut cells: HashMap<(u32, u16), XlsxCellValue> = HashMap::new();
+        let mut cells: HashMap<(u32, u16), XlsxCellValue> = HashMap::with_capacity(1024);
         let mut max_row: u32 = 0;
         let mut max_col: u16 = 0;
 

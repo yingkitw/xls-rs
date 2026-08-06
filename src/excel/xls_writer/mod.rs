@@ -8,16 +8,19 @@
 //!
 //! - Multiple sheets (max 31 characters per name, with character validation)
 //! - Cell data: strings, numbers, booleans, formulas, empty
-//! - Auto-sizing of column widths is not yet wired in, but the column-width
-//!   record is emitted when `set_column_width` is called.
+//! - Formula support via BIFF8 PTG encoder (SUM, AVERAGE, IF, VLOOKUP, etc.)
+//! - Merged cells
+//! - Freeze panes
+//! - Auto-filter
+//! - Column width configuration
 //! - Header detection is not performed; cells are written as-is.
 //!
 //! # Current limitations
 //!
 //! - No styling, fonts, fills, borders, alignment, number formats
 //! - No charts, sparklines, conditional formatting, images
-//! - No merged cells, data validation, hyperlinks, comments
-//! - No print setup, page margins, freeze panes, auto-filter
+//! - No data validation, hyperlinks, comments
+//! - No print setup, page margins
 //!
 //! # Round-trip
 //!
@@ -41,6 +44,7 @@ pub enum CellData {
     Number(f64),
     Bool(bool),
     Formula(String),
+    Error(String),
     Empty,
 }
 
@@ -74,6 +78,10 @@ impl RowData {
     pub fn add_empty(&mut self) {
         self.cells.push(CellData::Empty);
     }
+
+    pub fn add_error(&mut self, error: impl Into<String>) {
+        self.cells.push(CellData::Error(error.into()));
+    }
 }
 
 impl Default for RowData {
@@ -88,6 +96,14 @@ pub struct SheetData {
     pub name: String,
     pub rows: Vec<RowData>,
     pub column_widths: Vec<f64>,
+    /// Merged cell ranges: (start_row, start_col, end_row, end_col)
+    pub merge_cells: Vec<(u16, u16, u16, u16)>,
+    /// Freeze panes: first unfrozen row (0 = no freeze)
+    pub freeze_row: u16,
+    /// Freeze panes: first unfrozen column (0 = no freeze)
+    pub freeze_col: u16,
+    /// Auto-filter range: (first_row, first_col, last_row, last_col)
+    pub auto_filter: Option<(u16, u16, u16, u16)>,
 }
 
 impl SheetData {
@@ -96,6 +112,10 @@ impl SheetData {
             name: name.into(),
             rows: Vec::new(),
             column_widths: Vec::new(),
+            merge_cells: Vec::new(),
+            freeze_row: 0,
+            freeze_col: 0,
+            auto_filter: None,
         }
     }
 }
@@ -141,7 +161,8 @@ impl XlsWriter {
     /// Add data from a 2D vector of strings. Each cell is classified: if the
     /// string parses as `f64`, it becomes a number; if it matches "TRUE" or
     /// "FALSE" (case-insensitive) it becomes a boolean; if it starts with `=`
-    /// it becomes a formula; otherwise it stays a string. Empty strings
+    /// it becomes a formula; if it starts with `#` and matches a known error
+    /// code it becomes an error; otherwise it stays a string. Empty strings
     /// become empty cells.
     pub fn add_data(&mut self, data: &[Vec<String>]) {
         let Some(sheet) = self.sheets.last_mut() else { return };
@@ -152,6 +173,8 @@ impl XlsWriter {
                     r.add_empty();
                 } else if let Some(stripped) = cell.strip_prefix('=') {
                     r.add_formula(stripped);
+                } else if is_error(cell) {
+                    r.add_error(cell);
                 } else if let Some(n) = parse_number_like(cell) {
                     r.add_number(n);
                 } else if is_bool(cell) {
@@ -171,6 +194,31 @@ impl XlsWriter {
                 s.column_widths.resize(col + 1, 8.43);
             }
             s.column_widths[col] = width_chars;
+        }
+    }
+
+    /// Merge a cell range on the current sheet.
+    /// Rows and columns are 0-based, inclusive.
+    pub fn merge_cells(&mut self, start_row: u16, start_col: u16, end_row: u16, end_col: u16) {
+        if let Some(s) = self.sheets.last_mut() {
+            s.merge_cells.push((start_row, start_col, end_row, end_col));
+        }
+    }
+
+    /// Freeze panes on the current sheet.
+    /// `freeze_row` is the first unfrozen row (1 = freeze first row).
+    /// `freeze_col` is the first unfrozen column (1 = freeze first column).
+    pub fn freeze_panes(&mut self, freeze_row: u16, freeze_col: u16) {
+        if let Some(s) = self.sheets.last_mut() {
+            s.freeze_row = freeze_row;
+            s.freeze_col = freeze_col;
+        }
+    }
+
+    /// Set auto-filter range on the current sheet.
+    pub fn set_auto_filter(&mut self, first_row: u16, first_col: u16, last_row: u16, last_col: u16) {
+        if let Some(s) = self.sheets.last_mut() {
+            s.auto_filter = Some((first_row, first_col, last_row, last_col));
         }
     }
 
@@ -204,23 +252,78 @@ impl XlsWriter {
 
         // 3. Compute the workbook stream layout so BoundSheet positions are
         //    known. Layout (positions are byte offsets from the start of the
-        //    workbook stream):
+        //    workbook stream). Order follows the BIFF8 spec / xlwt reference:
         //
         //      [0] BOF (workbook)
-        //      ... CodePage, Window1, Fonts, XFs, Style, DateMode ...
-        //      [A] BoundSheet * N
-        //      ... Country, UseSelfs, SST, Window2 ...
+        //      [1] InterfaceHdr, MMS, InterfaceEnd      (required BIFF8 markers)
+        //      [2] WriteAccess                          (owner, 112 bytes)
+        //      [3] CodePage                             (0x04B0 = UTF-16)
+        //      [4] DSF, TabId, FnGroupName              (workbook shape)
+        //      [5] WindowProtect, Protect, ObjectProtect, Password,
+        //          Prot4Rev, Prot4RevPass, Backup, HideObj
+        //      [6] Window1                              (workbook window)
+        //      [7] DateMode, Precision, RefreshAll, BookBool
+        //      [8] Font, XF, Style                      (formatting table)
+        //      [9] BoundSheet * N                       (sheet directory)
+        //      [A] UseSelfs, Country, SST               (strings + locale)
         //      [B] (sheet 1 BOF + content + EOF)
         //      [C] (sheet 2 BOF + content + EOF)
         //      ...
         //      [EOF] workbook EOF
         let mut wb: Vec<u8> = Vec::new();
         wb.extend_from_slice(&B::bof_workbook());
+
+        // BIFF8 interface block (required).
+        wb.extend_from_slice(&B::interface_hdr());
+        wb.extend_from_slice(&B::mms());
+        wb.extend_from_slice(&B::interface_end());
+
+        // Owner / locale.
+        wb.extend_from_slice(&B::write_access());
         wb.extend_from_slice(&B::codepage());
-        wb.extend_from_slice(&B::window1());
-        wb.extend_from_slice(&B::default_fonts());
-        wb.extend_from_slice(&B::default_xf());
+
+        // Workbook shape.
+        wb.extend_from_slice(&B::dsf());
+        wb.extend_from_slice(&B::tab_id(self.sheets.len() as u16));
+        wb.extend_from_slice(&B::fn_group_name());
+
+        // Protection family (all off).
+        wb.extend_from_slice(&B::window_protect());
+        wb.extend_from_slice(&B::protect());
+        wb.extend_from_slice(&B::object_protect());
+        wb.extend_from_slice(&B::password());
+        wb.extend_from_slice(&B::prot4_rev());
+        wb.extend_from_slice(&B::prot4_rev_pass());
+        wb.extend_from_slice(&B::backup());
+        wb.extend_from_slice(&B::hide_obj());
+
+        // Workbook window (18-byte body).
+        wb.extend_from_slice(&B::window1(0));
+
+        // Calculation + flags.
         wb.extend_from_slice(&B::date_mode(0));
+        wb.extend_from_slice(&B::precision());
+        wb.extend_from_slice(&B::refresh_all());
+        wb.extend_from_slice(&B::book_bool());
+
+        // Formatting table.
+        // Order: FONT, FORMAT, XF, STYLE, PALETTE — matches xlwt and
+        // the BIFF8 spec. The PALETTE record sits between STYLE and
+        // USESELFS in Excel's stream; we follow xlwt and place it
+        // immediately after the style table.
+        wb.extend_from_slice(&B::default_fonts());
+        wb.extend_from_slice(&B::number_formats());
+        wb.extend_from_slice(&B::default_xf());
+        // Style records come after XF and before BoundSheet.
+        // This emits the built-in "Normal" style XF that xlwt and Excel
+        // always write; without it some versions of Excel complain about
+        // a missing style table.
+        wb.extend_from_slice(&B::default_styles());
+        // The 56-color default palette. Excel and xlwt always emit this
+        // even when the file uses no custom colors; omitting it leaves
+        // the color table empty and produces an "unreadable content"
+        // warning on some Excel versions.
+        wb.extend_from_slice(&B::default_palette());
 
         let mut bs_placeholders: Vec<usize> = Vec::new();
         for s in &self.sheets {
@@ -232,7 +335,13 @@ impl XlsWriter {
         wb.extend_from_slice(&B::use_selfs());
         wb.extend_from_slice(&B::country());
         wb.extend_from_slice(&sst_bytes);
-        wb.extend_from_slice(&B::window2());
+        // BIFF8 requires an EOF terminator after the workbook globals and
+        // before the first worksheet BOF. xlwt, Excel, and the spec all
+        // emit one. Without it, strict readers (and some Excel versions)
+        // reject the file as malformed because they look for EOF to bound
+        // the globals substream before the worksheet substreams begin.
+        wb.extend_from_slice(&B::eof());
+        // Note: WINDOW2 is per-sheet (in `build_sheet` below), not a workbook global.
 
         let sheets_start = wb.len();
         // Now we know each sheet's BOF offset.
@@ -297,6 +406,34 @@ fn build_sheet(
     let mut out = Vec::new();
     out.extend_from_slice(&B::bof_sheet());
 
+    // Per-sheet setup block (the BIFF8 "Sheet Block"). xlwt and Excel
+    // emit these records right after the sheet BOF and before
+    // DIMENSIONS. We follow the same order so strict readers see an
+    // Excel-shaped worksheet stream.
+    out.extend_from_slice(&B::calc_count());
+    out.extend_from_slice(&B::calc_mode());
+    out.extend_from_slice(&B::ref_mode());
+    out.extend_from_slice(&B::delta());
+    out.extend_from_slice(&B::iteration());
+    out.extend_from_slice(&B::safer_recalc());
+    out.extend_from_slice(&B::window_protect());
+    out.extend_from_slice(&B::protect());
+    out.extend_from_slice(&B::object_protect());
+    out.extend_from_slice(&B::password());
+    out.extend_from_slice(&B::guts());
+    out.extend_from_slice(&B::ws_bool());
+    out.extend_from_slice(&B::grid_set());
+    // Page margins (left, right, top, bottom). xlwt emits these even
+    // when the user hasn't customised them, so we follow.
+    out.extend_from_slice(&B::left_margin());
+    out.extend_from_slice(&B::right_margin());
+    out.extend_from_slice(&B::top_margin());
+    out.extend_from_slice(&B::bottom_margin());
+    out.extend_from_slice(&B::print_headers());
+    out.extend_from_slice(&B::print_gridlines());
+    out.extend_from_slice(&B::h_center());
+    out.extend_from_slice(&B::v_center());
+
     // Compute dimensions: max row / max col with any data.
     let mut max_row: u32 = 0;
     let mut max_col: u16 = 0;
@@ -311,12 +448,20 @@ fn build_sheet(
     // Emit dimensions even for empty sheets (Excel expects 1x1 minimum).
     if max_row == 0 { max_row = 1; }
     if max_col == 0 { max_col = 1; }
+    out.extend_from_slice(&B::default_row_height());
     out.extend_from_slice(&B::dimensions(max_row, max_col));
     out.extend_from_slice(&B::window2());
 
     // Column widths (ColInfo records). Width units: 1/256 of a character cell.
     if !sheet.column_widths.is_empty() {
-        out.extend_from_slice(&B::def_col_width(8));
+        // Emit DEFCOLWIDTH (0x0055) — the default column width for any
+        // column that doesn't have an explicit ColInfo entry. Excel's
+        // default is 8.43 characters; we use the same value. We
+        // express it in characters, NOT in 1/256-of-a-char units
+        // (ColInfo stores 1/256 but DEFCOLWIDTH stores characters
+        // directly). 8.43 in characters → 0x0843 (2115/256 rounded
+        // up so the width matches what Excel emits).
+        out.extend_from_slice(&B::def_col_width(0x0843));
         for (i, w) in sheet.column_widths.iter().enumerate() {
             out.extend_from_slice(&col_info(i as u16, i as u16, *w));
         }
@@ -351,9 +496,27 @@ fn build_sheet(
                         .map_err(|e| anyhow::anyhow!("bad formula '{}': {:?}", expr, e))?;
                     out.extend_from_slice(&B::formula_cell(row, col, 0, &ptg));
                 }
+                CellData::Error(e) => {
+                    out.extend_from_slice(&B::error_cell(row, col, 0, e));
+                }
                 CellData::Empty => {}
             }
         }
+    }
+
+    // Merged cells
+    if !sheet.merge_cells.is_empty() {
+        out.extend_from_slice(&B::merged_cells(&sheet.merge_cells));
+    }
+
+    // Freeze panes
+    if sheet.freeze_row > 0 || sheet.freeze_col > 0 {
+        out.extend_from_slice(&B::pane(sheet.freeze_row, sheet.freeze_col));
+    }
+
+    // Auto-filter
+    if let Some((fr, fc, lr, lc)) = sheet.auto_filter {
+        out.extend_from_slice(&B::auto_filter(fr, fc, lr, lc));
     }
 
     out.extend_from_slice(&B::eof());
@@ -402,27 +565,83 @@ fn is_bool(s: &str) -> bool {
     matches!(s.to_ascii_uppercase().as_str(), "TRUE" | "FALSE")
 }
 
+fn is_error(s: &str) -> bool {
+    matches!(
+        s,
+        "#NULL!" | "#DIV/0!" | "#VALUE!" | "#REF!" | "#NAME?" | "#NUM!" | "#N/A"
+    )
+}
+
 fn compobj_stream() -> Vec<u8> {
-    // Minimal CompObj stream (OLE link info for the workbook).
-    // Header: 0xFFFE 0000 0000 0000.
-    // Then "Workbook" as ANSI + null, plus a CLSID block.
+    // CompObj stream (OLE link info). Excel uses this to identify the
+    // file type via the user type ("Microsoft Excel Worksheet") and
+    // the clipboard format ("Excel.Sheet.8"). A truncated or wrong
+    // CompObj is one of the most common causes of Excel showing
+    // "unreadable content" errors, even when the BIFF records are
+    // otherwise valid.
+    //
+    // Layout (all multi-byte fields little-endian):
+    //   0x00: 0xFFFE 0x0001   byte order + version
+    //   0x04: 0x0002 0x0001   ???
+    //   0x08: 0xFFFFFFFF      reserved
+    //   0x0C: 16 bytes        CLSID (workbook: 2082...046)
+    //   0x1C: 4 bytes (u32)   user type length (in chars, UTF-16)
+    //   0x20: variable        user type (UTF-16LE) — "Microsoft Excel Worksheet"
+    //   ...                  user type padded to 4-byte boundary
+    //   4 bytes (u32)        clipboard format size (incl. size field)
+    //   4 bytes              reserved (0x0000000E)
+    //   variable             clipboard format name — "Excel.Sheet.8"
+    //   4 bytes (u32)        0x00000000 reserved
     let mut out = Vec::new();
-    out.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // reserved
-    out.extend_from_slice(&0x0000_0000u32.to_le_bytes());
-    out.extend_from_slice(&0xFFFF_FFFEu32.to_le_bytes()); // version
-    out.extend_from_slice(&0x0000_0000u32.to_le_bytes());
-    out.extend_from_slice(b"Workbook\0");
-    // ANSI padding to align CLSID block.
+
+    // Header (12 bytes)
+    out.extend_from_slice(&0x0001u16.to_le_bytes()); // [0..2] — must be 0x0001
+    out.extend_from_slice(&0xFFFEu16.to_le_bytes()); // [2..4] — byte order
+    out.extend_from_slice(&0x0002u16.to_le_bytes()); // [4..6] — version 2
+    out.extend_from_slice(&0x0001u16.to_le_bytes()); // [6..8] — ?
+    out.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // [8..12] — reserved
+
+    // CLSID for Excel workbook: 2082...046
+    let clsid: [u8; 16] = [
+        0x08, 0x20, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x46,
+    ];
+    out.extend_from_slice(&clsid);
+
+    // User type: "Microsoft Excel Worksheet" as UTF-16LE.
+    let user_type = "Microsoft Excel Worksheet";
+    let units: Vec<u16> = user_type.encode_utf16().collect();
+    out.extend_from_slice(&(units.len() as u32).to_le_bytes());
+    for u in &units {
+        out.extend_from_slice(&u.to_le_bytes());
+    }
     while out.len() % 4 != 0 {
         out.push(0);
     }
-    out.extend_from_slice(&[0u8; 16]); // CLSID
+
+    // Clipboard format: "Excel.Sheet.8". Size includes the size field
+    // itself (4 bytes) plus the reserved (4 bytes) plus the name.
+    let cf_name = "Excel.Sheet.8";
+    let cf_bytes: Vec<u16> = cf_name.encode_utf16().collect();
+    let cf_total_size = 4 + 4 + (cf_bytes.len() * 2) as u32;
+    out.extend_from_slice(&cf_total_size.to_le_bytes());
+    out.extend_from_slice(&0x0000_000Eu32.to_le_bytes());
+    for u in &cf_bytes {
+        out.extend_from_slice(&u.to_le_bytes());
+    }
+    while out.len() % 4 != 0 {
+        out.push(0);
+    }
+    out.extend_from_slice(&0x0000_0000u32.to_le_bytes());
+
     out
 }
 
 fn summary_information_stream() -> Vec<u8> {
-    // Minimal "\u{5}SummaryInformation" property set. Most readers accept
-    // an empty stream; we emit a valid (if empty) property set header.
+    // "\u{5}SummaryInformation" property set header. Most readers accept
+    // an empty property set, so we emit the minimal valid header with
+    // zero sections. This is what Excel writes by default for new
+    // workbooks.
     let mut out = Vec::new();
     // OS indicator + CLSID + section count.
     out.extend_from_slice(&0xFFFEu16.to_le_bytes()); // byte order

@@ -93,45 +93,58 @@ impl DataOperations {
         data[0].push(new_col_name.to_string());
         let header = data[0].clone();
 
+        // Pre-compile column name substitution regexes once (sorted by name length descending)
+        let mut indexed_header: Vec<(usize, &String)> =
+            header.iter().enumerate().collect();
+        indexed_header.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+
+        let col_regexes: Vec<(usize, regex::Regex)> = indexed_header
+            .iter()
+            .filter(|(_, name)| !name.is_empty() && formula.contains(name.as_str()))
+            .map(|(idx, name)| {
+                let pattern = format!(r"\b{}\b", regex::escape(name));
+                regex::Regex::new(&pattern).map(|re| (*idx, re))
+            })
+            .collect::<Result<_, _>>()?;
+
+        // Pre-compile single-letter cell reference regexes
+        let letter_regexes: Vec<(usize, regex::Regex)> = (0..header.len())
+            .map(|idx| {
+                let letter = (b'A' + idx as u8) as char;
+                let pattern = format!(r"\b{}\b", letter);
+                regex::Regex::new(&pattern).map(|re| (idx, re))
+            })
+            .collect::<Result<_, _>>()?;
+
         for row_idx in 1..data.len() {
-            let value = self.evaluate_row_formula(formula, &data[row_idx], &header)?;
+            let value = self.evaluate_row_formula_optimized(
+                formula,
+                &data[row_idx],
+                &col_regexes,
+                &letter_regexes,
+            )?;
             data[row_idx].push(value);
         }
 
         Ok(())
     }
 
-    fn evaluate_row_formula(
+    fn evaluate_row_formula_optimized(
         &self,
         formula: &str,
         row: &[String],
-        header: &[String],
+        col_regexes: &[(usize, regex::Regex)],
+        letter_regexes: &[(usize, regex::Regex)],
     ) -> Result<String> {
         let mut expr = formula.to_string();
 
-        // Replace column names using word boundaries to avoid partial substitutions.
-        // Process longer names first so "total_sales" doesn't get shadowed by "total".
-        let mut indexed_header: Vec<(usize, &String)> =
-            header.iter().enumerate().collect();
-        indexed_header.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
-
-        for (idx, col_name) in &indexed_header {
-            if col_name.is_empty() || !expr.contains(col_name.as_str()) {
-                continue;
-            }
+        for (idx, re) in col_regexes {
             let val = row.get(*idx).cloned().unwrap_or_default();
-            let pattern = format!(r"\b{}\b", regex::escape(col_name));
-            let re = regex::Regex::new(&pattern)?;
             expr = re.replace_all(&expr, val.as_str()).to_string();
         }
 
-        // Replace single-letter cell references (A, B, ...) using word boundaries.
-        // Only match standalone uppercase letters not part of function names.
-        for idx in 0..row.len() {
-            let letter = (b'A' + idx as u8) as char;
-            let val = row.get(idx).cloned().unwrap_or_default();
-            let pattern = format!(r"\b{}\b", letter);
-            let re = regex::Regex::new(&pattern)?;
+        for (idx, re) in letter_regexes {
+            let val = row.get(*idx).cloned().unwrap_or_default();
             expr = re.replace_all(&expr, val.as_str()).to_string();
         }
 
@@ -144,19 +157,22 @@ impl DataOperations {
 
     pub(crate) fn eval_arithmetic(&self, expr: &str) -> Result<f64> {
         let expr = expr.replace(" ", "");
+        self.eval_arithmetic_inner(&expr)
+    }
 
+    fn eval_arithmetic_inner(&self, expr: &str) -> Result<f64> {
         if let Ok(n) = expr.parse::<f64>() {
             return Ok(n);
         }
 
         if let Some(pos) = expr.rfind('*') {
-            let left = self.eval_arithmetic(&expr[..pos])?;
-            let right = self.eval_arithmetic(&expr[pos + 1..])?;
+            let left = self.eval_arithmetic_inner(&expr[..pos])?;
+            let right = self.eval_arithmetic_inner(&expr[pos + 1..])?;
             return Ok(left * right);
         }
         if let Some(pos) = expr.rfind('/') {
-            let left = self.eval_arithmetic(&expr[..pos])?;
-            let right = self.eval_arithmetic(&expr[pos + 1..])?;
+            let left = self.eval_arithmetic_inner(&expr[..pos])?;
+            let right = self.eval_arithmetic_inner(&expr[pos + 1..])?;
             if right == 0.0 {
                 anyhow::bail!("Division by zero");
             }
@@ -166,13 +182,13 @@ impl DataOperations {
         let bytes = expr.as_bytes();
         for i in (1..bytes.len()).rev() {
             if bytes[i] == b'+' {
-                let left = self.eval_arithmetic(&expr[..i])?;
-                let right = self.eval_arithmetic(&expr[i + 1..])?;
+                let left = self.eval_arithmetic_inner(&expr[..i])?;
+                let right = self.eval_arithmetic_inner(&expr[i + 1..])?;
                 return Ok(left + right);
             }
             if bytes[i] == b'-' {
-                let left = self.eval_arithmetic(&expr[..i])?;
-                let right = self.eval_arithmetic(&expr[i + 1..])?;
+                let left = self.eval_arithmetic_inner(&expr[..i])?;
+                let right = self.eval_arithmetic_inner(&expr[i + 1..])?;
                 return Ok(left - right);
             }
         }

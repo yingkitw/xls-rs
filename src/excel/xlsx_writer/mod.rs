@@ -5,22 +5,22 @@
 //!
 //! # Supported Features
 //! - Multiple sheets with validation (max 31 char name, invalid characters)
-//! - Cell data types: String, Number, Formula, Empty
+//! - Cell data types: String, Number, Bool, Formula, Empty
 //! - Column width configuration (auto-fit and manual)
 //! - Freeze headers (freeze top row)
 //! - Auto-filter for tables
-//! - Basic styling (bold, alignment, borders, fills)
+//! - Cell styling (bold, italic, underline, font size/name/color, fill color,
+//!   alignment, wrap, borders, number formats, date formatting)
+//! - Merged cells
+//! - Conditional formatting (color scales, data bars, icon sets, formula-based)
+//! - Sparklines (line, column, win/loss)
+//! - Data validation (list, whole, decimal, date, text length, custom)
+//! - Hyperlinks with tooltips
+//! - Cell comments with authors
+//! - Row/column outline grouping
+//! - Print setup (orientation, paper size, scale, fit-to-page, print area, margins)
+//! - Embedded charts (bar, column, line, area, pie, scatter, doughnut)
 //! - XML escaping for special characters
-//!
-//! # Current Limitations
-//! - **Chart generation**: Not implemented - requires complex XML drawing markup
-//!   - Needs: xl/drawings/, xl/charts/, worksheet relationships
-//! - **Sparklines**: Not implemented - requires additional chart XML
-//! - **Conditional formatting**: Not implemented - requires conditional formatting XML
-//! - **Advanced Excel features**: Some features require additional XML namespaces
-//! - **Merged cells**: Not implemented
-//! - **Data validation**: Not implemented
-//! - **Pivot tables**: Not implemented
 
 use anyhow::Result;
 use std::io::{Seek, Write};
@@ -32,13 +32,15 @@ pub mod chart_xml;
 pub mod cond_fmt_xml;
 pub mod sparkline_xml;
 pub mod streaming;
+pub mod style_registry;
 
 pub use types::{
-    CellComment, CellData, ColGroup, DataValidation, Hyperlink, MergeCell, PageMargins,
+    CellComment, CellData, ColGroup, DataValidation, Hyperlink, MergeCell, Operator, PageMargins,
     PageOrientation, PrintSetup, RowData, RowGroup, SheetData, ValidationType,
 };
 pub use cond_fmt_xml::{ConditionalFormat, ConditionalRule};
 pub use sparkline_xml::{Sparkline, SparklineGroup, SparklineType};
+pub use style_registry::{SharedStrings, StyleRegistry, XlsxCellStyle};
 
 use super::types::WriteOptions;
 use xml_gen::*;
@@ -51,15 +53,19 @@ pub struct XlsxWriter {
     options: WriteOptions,
     /// Chart config per sheet index (None = no chart for that sheet)
     chart_configs: Vec<Option<(ChartConfig, Vec<Vec<String>>)>>,
+    /// Style registry — defaults to a fresh registry (one cellXf: the
+    /// default). Callers register user styles via
+    /// `register_cell_style` / `register_named_format`.
+    pub styles: StyleRegistry,
+    /// Optional named-format registry: name → cellXf index. Lets a
+    /// caller register a style under a stable name once and reference
+    /// it from cells written anywhere.
+    named_formats: std::collections::BTreeMap<String, u32>,
 }
 
 impl XlsxWriter {
     pub fn new() -> Self {
-        Self {
-            sheets: Vec::new(),
-            options: WriteOptions::default(),
-            chart_configs: Vec::new(),
-        }
+        Self::with_options(WriteOptions::default())
     }
 
     pub fn with_options(options: WriteOptions) -> Self {
@@ -67,7 +73,35 @@ impl XlsxWriter {
             sheets: Vec::new(),
             options,
             chart_configs: Vec::new(),
+            styles: StyleRegistry::new(),
+            named_formats: std::collections::BTreeMap::new(),
         }
+    }
+
+    /// Register an `XlsxCellStyle` and return its `s="N"` index for
+    /// use with `RowData::set_cell_style`. Repeated registrations of
+    /// the same style return the same index.
+    pub fn register_cell_style(&mut self, style: &XlsxCellStyle) -> u32 {
+        self.styles.register(style)
+    }
+
+    /// Register a named format, e.g. "header", "money". Returns the
+    /// cellXf index, or the previously-registered index if `name` was
+    /// already used. The index is also returned from
+    /// `named_format_index`.
+    pub fn register_named_format(&mut self, name: &str, style: &XlsxCellStyle) -> u32 {
+        if let Some(&idx) = self.named_formats.get(name) {
+            return idx;
+        }
+        let idx = self.styles.register(style);
+        self.named_formats.insert(name.to_string(), idx);
+        idx
+    }
+
+    /// Look up a previously-registered named format. Returns `None` if
+    /// `name` is unknown.
+    pub fn named_format_index(&self, name: &str) -> Option<u32> {
+        self.named_formats.get(name).copied()
     }
 
     /// Set a chart for the current (last added) sheet
@@ -236,14 +270,7 @@ impl XlsxWriter {
         let chart_flags: Vec<bool> = (0..self.sheets.len())
             .map(|i| self.chart_configs.get(i).and_then(|c| c.as_ref()).is_some())
             .collect();
-        let comment_flags: Vec<bool> = (0..self.sheets.len())
-            .map(|i| {
-                self.sheets
-                    .get(i)
-                    .map(|s| !s.comments.is_empty())
-                    .unwrap_or(false)
-            })
-            .collect();
+        let comment_flags: Vec<bool> = self.sheets.iter().map(|s| !s.comments.is_empty()).collect();
 
         // Add [Content_Types].xml (with chart/comment content types if needed)
         add_content_types_ext(&mut zip, self.sheets.len(), &chart_flags, &comment_flags)?;
@@ -258,7 +285,7 @@ impl XlsxWriter {
         add_workbook_rels(&mut zip, self.sheets.len())?;
 
         // Add xl/styles.xml
-        add_styles(&mut zip)?;
+        add_styles_with_registry(&mut zip, &self.styles)?;
 
         // Add worksheets
         for (idx, sheet) in self.sheets.iter().enumerate() {
@@ -276,6 +303,7 @@ impl XlsxWriter {
         add_theme(&mut zip)?;
 
         zip.finish()?;
+        writer.flush()?;
         Ok(())
     }
 }
@@ -816,5 +844,172 @@ mod tests {
         assert!(!output.is_empty());
         assert_eq!(&output[0..4], b"PK\x03\x04");
         assert_eq!(writer.sheets[0].col_groups.len(), 1);
+    }
+
+    fn read_zip_part(zip_bytes: &[u8], name: &str) -> Option<String> {
+        let cursor = Cursor::new(zip_bytes);
+        let mut za = zip::ZipArchive::new(cursor).unwrap();
+        let mut s = String::new();
+        let mut f = za.by_name(name).ok()?;
+        use std::io::Read;
+        f.read_to_string(&mut s).unwrap();
+        Some(s)
+    }
+
+    #[test]
+    fn test_register_cell_style_emits_in_styles_xml() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("Styled").unwrap();
+        let mut row = RowData::new();
+        row.add_string("Hello");
+        row.add_number(42.0);
+        writer.add_row(row);
+
+        let idx = writer.register_cell_style(&XlsxCellStyle {
+            bold: Some(true),
+            fill_color: Some("305496".into()),
+            font_color: Some("FFFFFF".into()),
+            ..Default::default()
+        });
+        assert!(idx > 0, "custom style should not collide with default index 0");
+
+        let mut buf = Cursor::new(Vec::new());
+        writer.save(&mut buf).unwrap();
+        let styles = read_zip_part(buf.get_ref(), "xl/styles.xml").unwrap();
+
+        assert!(styles.contains("<numFmts"), "stylesheet has no <numFmts>");
+        assert!(styles.contains("<fills"), "stylesheet has no <fills>");
+        assert!(styles.contains("<cellXfs"), "stylesheet has no <cellXfs>");
+        assert!(
+            styles.contains("FF305496"),
+            "registered fill color should appear in <fills>"
+        );
+    }
+
+    #[test]
+    fn test_per_cell_style_index_emits_s_attr() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("PerCell").unwrap();
+
+        let header_idx = writer.register_cell_style(&XlsxCellStyle {
+            bold: Some(true),
+            fill_color: Some("305496".into()),
+            font_color: Some("FFFFFF".into()),
+            align: Some("center".into()),
+            ..Default::default()
+        });
+        let money_idx = writer.register_cell_style(&XlsxCellStyle {
+            number_format: Some("$#,##0.00".into()),
+            ..Default::default()
+        });
+
+        let mut header = RowData::new();
+        header.add_string("Item");
+        header.add_string("Amount");
+        header.set_cell_style(0, header_idx);
+        header.set_cell_style(1, header_idx);
+        writer.add_row(header);
+
+        let mut row = RowData::new();
+        row.add_string("Widget");
+        row.add_number(1500.5);
+        row.set_cell_style(1, money_idx);
+        writer.add_row(row);
+
+        let mut buf = Cursor::new(Vec::new());
+        writer.save(&mut buf).unwrap();
+        let sheet = read_zip_part(buf.get_ref(), "xl/worksheets/sheet1.xml").unwrap();
+
+        assert!(
+            sheet.contains(&format!(r#"s="{}""#, header_idx)),
+            "header cell missing s={}: sheet={}",
+            header_idx,
+            sheet
+        );
+        assert!(
+            sheet.contains(&format!(r#"s="{}""#, money_idx)),
+            "money cell missing s={}: sheet={}",
+            money_idx,
+            sheet
+        );
+        let styles = read_zip_part(buf.get_ref(), "xl/styles.xml").unwrap();
+        assert!(
+            styles.contains("$#,##0.00"),
+            "custom numFmt code should appear in styles.xml"
+        );
+    }
+
+    #[test]
+    fn test_named_format_register_and_lookup() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("Named").unwrap();
+        let first = writer.register_named_format(
+            "header",
+            &XlsxCellStyle {
+                bold: Some(true),
+                fill_color: Some("305496".into()),
+                ..Default::default()
+            },
+        );
+        let second = writer.register_named_format(
+            "header",
+            &XlsxCellStyle {
+                bold: Some(true),
+                fill_color: Some("305496".into()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(first, second, "re-registering same name returns same index");
+        assert_eq!(writer.named_format_index("header"), Some(first));
+        assert_eq!(writer.named_format_index("unknown"), None);
+    }
+
+    #[test]
+    fn test_empty_writer_minimal_styles() {
+        let writer = XlsxWriter::new();
+        let mut buf = Cursor::new(Vec::new());
+        writer.save(&mut buf).unwrap();
+        let styles = read_zip_part(buf.get_ref(), "xl/styles.xml").unwrap();
+        // No user styles → minimal styles.xml with one cellXf.
+        assert!(styles.contains("<cellXfs count=\"1\">"));
+        assert!(styles.contains("<fonts count=\"1\">"));
+        assert!(styles.contains("<fills count=\"2\">"));
+    }
+
+    #[test]
+    fn test_set_cell_style_skips_empty_cells() {
+        let mut writer = XlsxWriter::new();
+        writer.add_sheet("Empty").unwrap();
+        let idx = writer.register_cell_style(&XlsxCellStyle {
+            bold: Some(true),
+            ..Default::default()
+        });
+
+        let mut row = RowData::new();
+        row.add_string("A");
+        row.add_empty();
+        row.add_string("C");
+        // This is a no-op (empty cell), should not panic.
+        row.set_cell_style(1, idx);
+        // But the surrounding cells can be styled.
+        row.set_cell_style(0, idx);
+        row.set_cell_style(2, idx);
+        writer.add_row(row);
+
+        let mut buf = Cursor::new(Vec::new());
+        writer.save(&mut buf).unwrap();
+        let sheet = read_zip_part(buf.get_ref(), "xl/worksheets/sheet1.xml").unwrap();
+        assert!(sheet.contains(&format!(r#"s="{}""#, idx)));
+    }
+
+    #[test]
+    fn test_style_preset_helpers() {
+        let mut reg = StyleRegistry::new();
+        let h = XlsxCellStyle::header();
+        let n = XlsxCellStyle::note();
+        let hi = XlsxCellStyle::highlighted();
+        assert!(reg.register(&h) > 0);
+        assert!(reg.register(&n) > 0);
+        assert!(reg.register(&hi) > 0);
     }
 }

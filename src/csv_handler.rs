@@ -1,6 +1,7 @@
 use crate::traits::{
     CellRangeProvider, DataReader, DataWriteOptions, DataWriter, FileHandler, SchemaProvider,
 };
+use crate::limits::{DEFAULT_ESTIMATED_ROWS, BUFFER_CAPACITY};
 use anyhow::{Context, Result};
 use csv::{ReaderBuilder, WriterBuilder};
 use std::fs::File;
@@ -119,10 +120,12 @@ impl CsvHandler {
             .from_path(output_path)
             .with_context(|| format!("Failed to create CSV file: {}", output_path))?;
 
-        for result in reader.records() {
-            let record = result?;
-            let row: Vec<String> = record.iter().map(|s| s.to_string()).collect();
-            writer.write_record(sanitize_csv_row(&row))?;
+        let mut record = csv::StringRecord::new();
+        let mut sanitized: Vec<String> = Vec::new();
+        while reader.read_record(&mut record)? {
+            sanitized.clear();
+            sanitized.extend(record.iter().map(sanitize_csv_value));
+            writer.write_record(&sanitized)?;
         }
 
         writer.flush()?;
@@ -153,7 +156,7 @@ impl CsvHandler {
 
         let estimated_rows = range.end_row.saturating_sub(range.start_row) + 1;
         let _estimated_cols = range.end_col.saturating_sub(range.start_col) + 1;
-        let mut result = Vec::with_capacity(estimated_rows.min(1024));
+        let mut result = Vec::with_capacity(estimated_rows.min(DEFAULT_ESTIMATED_ROWS));
 
         for (row_idx, record) in reader.records().enumerate() {
             if row_idx < range.start_row {
@@ -187,14 +190,10 @@ impl CsvHandler {
             .from_path(path)
             .with_context(|| format!("Failed to open CSV file: {path}"))?;
 
-        let mut rows: Vec<Vec<String>> = Vec::with_capacity(1024);
-        for record in reader.records() {
-            let record = record?;
-            // Pre-allocate based on record length
-            let mut row = Vec::with_capacity(record.len());
-            for val in record.iter() {
-                row.push(String::from(val));
-            }
+        let mut rows: Vec<Vec<String>> = Vec::with_capacity(DEFAULT_ESTIMATED_ROWS);
+        let mut record = csv::StringRecord::new();
+        while reader.read_record(&mut record)? {
+            let row: Vec<String> = record.iter().map(String::from).collect();
             rows.push(row);
         }
 
@@ -320,7 +319,7 @@ pub struct StreamingCsvReader {
 impl StreamingCsvReader {
     pub fn open(path: &str) -> Result<Self> {
         let file = File::open(path).with_context(|| format!("Failed to open CSV file: {path}"))?;
-        let buf_reader = BufReader::with_capacity(64 * 1024, file); // 64KB buffer
+        let buf_reader = BufReader::with_capacity(BUFFER_CAPACITY, file); // 64KB buffer
 
         let reader = ReaderBuilder::new()
             .has_headers(false)
@@ -368,7 +367,7 @@ impl StreamingCsvWriter {
     pub fn create(path: &str) -> Result<Self> {
         let file =
             File::create(path).with_context(|| format!("Failed to create CSV file: {path}"))?;
-        let buf_writer = BufWriter::with_capacity(64 * 1024, file);
+        let buf_writer = BufWriter::with_capacity(BUFFER_CAPACITY, file);
 
         let writer = WriterBuilder::new()
             .has_headers(false)
@@ -414,7 +413,7 @@ impl DataReader for CsvHandler {
             .with_context(|| format!("Failed to open CSV file: {path}"))?;
 
         // Pre-allocate with capacity hint for better performance
-        let mut rows = Vec::with_capacity(1024);
+        let mut rows = Vec::with_capacity(DEFAULT_ESTIMATED_ROWS);
         for record in reader.records() {
             let record = record?;
             let mut row = Vec::with_capacity(record.len());

@@ -3,11 +3,114 @@
 //! Provides pipeline execution capabilities for chaining multiple operations.
 
 use crate::handler_registry::HandlerRegistry;
-use crate::operations::DataOperations;
+use crate::operations::{DataOperations, SortOrder};
 use crate::traits::DataWriteOptions;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
+
+/// Workflow operation types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowOperation {
+    Read,
+    Filter {
+        column: usize,
+        where_clause: String,
+    },
+    Sort {
+        column: usize,
+        ascending: bool,
+    },
+    Transform {
+        operation: TransformOp,
+    },
+    Mutate {
+        column: String,
+        formula: String,
+    },
+    Select {
+        columns: Vec<String>,
+    },
+    Describe,
+}
+
+/// Transform operation types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransformOp {
+    Replace {
+        find: String,
+        replace: String,
+        column: usize,
+    },
+    Dedupe,
+    Transpose,
+    Fillna {
+        value: String,
+    },
+    Dropna,
+}
+
+impl WorkflowOperation {
+    /// Parse from string (for backward compatibility with TOML/JSON configs)
+    pub fn from_str_with_args(operation: &str, args: Option<&serde_json::Value>) -> Result<Self> {
+        match operation {
+            "read" => Ok(WorkflowOperation::Read),
+            "filter" => {
+                let args = args.context("Filter requires args")?;
+                let column = args.get("column").and_then(|v| v.as_u64()).context("Missing column")? as usize;
+                let where_clause = args.get("where").and_then(|v| v.as_str()).context("Missing where clause")?.to_string();
+                Ok(WorkflowOperation::Filter { column, where_clause })
+            }
+            "sort" => {
+                let args = args.context("Sort requires args")?;
+                let column = args.get("column").and_then(|v| v.as_u64()).context("Missing column")? as usize;
+                let ascending = args.get("ascending").and_then(|v| v.as_bool()).unwrap_or(true);
+                Ok(WorkflowOperation::Sort { column, ascending })
+            }
+            "transform" => {
+                let args = args.context("Transform requires args")?;
+                let op_type = args.get("operation").and_then(|v| v.as_str()).context("Missing operation type")?;
+                let transform_op = match op_type {
+                    "replace" => {
+                        let find = args.get("find").and_then(|v| v.as_str()).context("Missing find")?.to_string();
+                        let replace = args.get("replace").and_then(|v| v.as_str()).context("Missing replace")?.to_string();
+                        let column = args.get("column").and_then(|v| v.as_u64()).context("Missing column")? as usize;
+                        TransformOp::Replace { find, replace, column }
+                    }
+                    "dedupe" => TransformOp::Dedupe,
+                    "transpose" => TransformOp::Transpose,
+                    "fillna" => {
+                        let value = args.get("value").and_then(|v| v.as_str()).context("Missing value")?.to_string();
+                        TransformOp::Fillna { value }
+                    }
+                    "dropna" => TransformOp::Dropna,
+                    _ => anyhow::bail!("Unknown transform operation: {}", op_type),
+                };
+                Ok(WorkflowOperation::Transform { operation: transform_op })
+            }
+            "mutate" => {
+                let args = args.context("Mutate requires args")?;
+                let column = args.get("column").and_then(|v| v.as_str()).context("Missing column")?.to_string();
+                let formula = args.get("formula").and_then(|v| v.as_str()).context("Missing formula")?.to_string();
+                Ok(WorkflowOperation::Mutate { column, formula })
+            }
+            "select" => {
+                let args = args.context("Select requires args")?;
+                let columns = args.get("columns").and_then(|v| v.as_array())
+                    .context("Missing columns array")?
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .collect();
+                Ok(WorkflowOperation::Select { columns })
+            }
+            "describe" => Ok(WorkflowOperation::Describe),
+            _ => anyhow::bail!("Unknown operation: {}", operation),
+        }
+    }
+}
 
 /// Workflow step
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +119,13 @@ pub struct WorkflowStep {
     pub input: Option<String>,
     pub output: Option<String>,
     pub args: Option<serde_json::Value>,
+}
+
+impl WorkflowStep {
+    /// Convert to typed operation (for internal use)
+    pub fn to_operation(&self) -> Result<WorkflowOperation> {
+        WorkflowOperation::from_str_with_args(&self.operation, self.args.as_ref())
+    }
 }
 
 /// Workflow configuration
@@ -105,94 +215,62 @@ impl WorkflowExecutor {
         let mut result = data.to_vec();
         let ops = DataOperations::new();
 
-        match operation {
-            "read" => Ok(data.to_vec()),
+        // Parse operation to enum for type-safe pattern matching
+        let op = WorkflowOperation::from_str_with_args(operation, args)?;
 
-            "filter" => {
-                if let Some(args) = args
-                    && let Some(column_idx) = args.get("column").and_then(|v| v.as_u64())
-                        && let Some(where_clause) = args.get("where").and_then(|v| v.as_str()) {
-                            result = ops.filter_rows(&result, column_idx as usize, where_clause, "")?;
-                        }
+        match op {
+            WorkflowOperation::Read => Ok(data.to_vec()),
+
+            WorkflowOperation::Filter { column, where_clause } => {
+                result = ops.filter_rows(&result, column, &where_clause, "")?;
                 Ok(result)
             }
 
-            "sort" => {
-                if let Some(args) = args
-                    && let Some(column_idx) = args.get("column").and_then(|v| v.as_u64()) {
-                        let ascending = args.get("ascending")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(true);
+            WorkflowOperation::Sort { column, ascending } => {
+                let order = if ascending { SortOrder::Ascending } else { SortOrder::Descending };
+                ops.sort_by_column(&mut result, column, order)?;
+                Ok(result)
+            }
 
-                        use crate::operations::types::SortOrder;
-                        let order = if ascending { SortOrder::Ascending } else { SortOrder::Descending };
-                        ops.sort_by_column(&mut result, column_idx as usize, order)?;
+            WorkflowOperation::Transform { operation: transform_op } => {
+                match transform_op {
+                    TransformOp::Replace { find, replace, column } => {
+                        let _count = ops.replace(&mut result, column, &find, &replace);
+                        println!("  Replaced '{}' with '{}' in column {}", find, replace, column);
                     }
-                Ok(result)
-            }
-
-            "transform" => {
-                if let Some(args) = args
-                    && let Some(op_type) = args.get("operation").and_then(|v| v.as_str()) {
-                        match op_type {
-                            "replace" => {
-                                if let Some(find) = args.get("find").and_then(|v| v.as_str())
-                                    && let Some(replace) = args.get("replace").and_then(|v| v.as_str())
-                                        && let Some(column_idx) = args.get("column").and_then(|v| v.as_u64()) {
-                                            let _count = ops.replace(&mut result, column_idx as usize, find, replace);
-                                            println!("  Replaced '{}' with '{}' in column {}", find, replace, column_idx);
-                                        }
-                            }
-                            "dedupe" => {
-                                let count = ops.deduplicate_mut(&mut result);
-                                println!("  Removed {} duplicate rows", count);
-                            }
-                            "transpose" => {
-                                result = ops.transpose(&result);
-                            }
-                            "fillna" => {
-                                if let Some(value) = args.get("value").and_then(|v| v.as_str()) {
-                                    ops.fillna(&mut result, value);
-                                }
-                            }
-                            "dropna" => {
-                                result = ops.dropna(&result);
-                            }
-                            _ => anyhow::bail!("Unknown transform operation: {}", op_type),
-                        }
+                    TransformOp::Dedupe => {
+                        let count = ops.deduplicate_mut(&mut result);
+                        println!("  Removed {} duplicate rows", count);
                     }
-                Ok(result)
-            }
-
-            "mutate" => {
-                if let Some(args) = args
-                    && let Some(column) = args.get("column").and_then(|v| v.as_str())
-                        && let Some(formula) = args.get("formula").and_then(|v| v.as_str()) {
-                            ops.mutate(&mut result, column, formula)?;
-                        }
-                Ok(result)
-            }
-
-            "select" => {
-                if let Some(args) = args
-                    && let Some(columns) = args.get("columns").and_then(|v| v.as_array()) {
-                        let column_names: Vec<&str> = columns
-                            .iter()
-                            .filter_map(|v| v.as_str())
-                            .collect();
-
-                        result = ops.select_columns_by_name(&result, &column_names)?;
+                    TransformOp::Transpose => {
+                        result = ops.transpose(&result);
                     }
+                    TransformOp::Fillna { value } => {
+                        ops.fillna(&mut result, &value);
+                    }
+                    TransformOp::Dropna => {
+                        result = ops.dropna(&result);
+                    }
+                }
                 Ok(result)
             }
 
-            "describe" => {
+            WorkflowOperation::Mutate { column, formula } => {
+                ops.mutate(&mut result, &column, &formula)?;
+                Ok(result)
+            }
+
+            WorkflowOperation::Select { columns } => {
+                let column_names: Vec<&str> = columns.iter().map(|s| s.as_str()).collect();
+                result = ops.select_columns_by_name(&result, &column_names)?;
+                Ok(result)
+            }
+
+            WorkflowOperation::Describe => {
                 let desc = ops.describe(&result)?;
                 println!("  Statistics: {:?}", desc);
                 Ok(desc)
             }
-
-            _ => anyhow::bail!("Unknown operation: {}", operation),
         }
     }
 }

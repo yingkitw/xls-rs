@@ -40,6 +40,15 @@ pub const MAX_FORMULA_RANGE_CELLS: usize = 1_000_000;
 /// Max FAT/mini-FAT sector hops when walking a CFB stream (cycle guard).
 pub const MAX_CFB_SECTOR_HOPS: usize = 4_000_000;
 
+/// Maximum entries in the Excel metadata cache before eviction.
+pub const METADATA_CACHE_SIZE: usize = 100;
+
+/// Default estimated row capacity for result vectors.
+pub const DEFAULT_ESTIMATED_ROWS: usize = 1024;
+
+/// Default buffer capacity for writers (64 KB).
+pub const BUFFER_CAPACITY: usize = 64 * 1024;
+
 /// Clamp dense grid dimensions so `rows * cols <= MAX_DENSE_CELLS`.
 /// Prefer keeping row count; shrink columns when over budget.
 pub fn clamp_dense_dims(max_row: usize, max_col: usize) -> (usize, usize) {

@@ -7,11 +7,11 @@
 pub enum RecordId {
     Bof = 0x0809,
     Eof = 0x000A,
-    CodePage = 0x00A1,
+    CodePage = 0x0042,
     DateMode = 0x0022,
     Dimensions = 0x0200,
     Index = 0x020B,
-    Window1 = 0x002D,
+    Window1 = 0x003D,
     Window2 = 0x023E,
     Font = 0x0031,
     Format = 0x041E,
@@ -19,6 +19,7 @@ pub enum RecordId {
     Style = 0x0293,
     BoundSheet = 0x0085,
     Sst = 0x00FC,
+    ExtSst = 0x00FF,
     Number = 0x0203,
     Rk = 0x027E,
     BoolErr = 0x0205,
@@ -26,17 +27,77 @@ pub enum RecordId {
     Formula = 0x0006,
     Row = 0x0208,
     ColInfo = 0x007D,
+    ColWidth = 0x0024,
     DefColWidth = 0x0055,
     Guts = 0x0080,
     Blank = 0x0201,
     MulRk = 0x00BD,
     Label = 0x0204,
-    UseSelfs = 0x0179,
+    UseSelfs = 0x0160,
     Country = 0x008C,
     Obj = 0x005D,
     TxO = 0x01B6,
     WriteProtect = 0x0086,
     Continue = 0x003C,
+    // BIFF8 setup records (must be recognized so the reader can skip past them).
+    InterfaceHdr = 0x00E1,
+    InterfaceEnd = 0x00E2,
+    Mms = 0x00C1,
+    WriteAccess = 0x005C,
+    Dsf = 0x0161,
+    TabId = 0x013D,
+    FnGroupName = 0x009C,
+    WindowProtect = 0x0019,
+    Protect = 0x0012,
+    ObjectProtect = 0x0063,
+    Password = 0x0013,
+    Prot4Rev = 0x01AF,
+    Prot4RevPass = 0x01BC,
+    Backup = 0x0040,
+    HideObj = 0x008D,
+    Precision = 0x000E,
+    RefreshAll = 0x01B7,
+    BookBool = 0x00DA,
+    Palette = 0x0092,
+    // Per-sheet setup records. The writer emits these right after the
+    // sheet BOF; the reader must know about them so it skips past
+    // them when iterating.
+    CalcCount = 0x000C,
+    CalcMode = 0x000D,
+    RefMode = 0x000F,
+    Delta = 0x0010,
+    Iteration = 0x0011,
+    SaferRecalc = 0x005F,
+    WsBool = 0x0081,
+    GridSet = 0x0082,
+    HCenter = 0x0083,
+    VCenter = 0x0084,
+    PrintHeaders = 0x002A,
+    PrintGridlines = 0x002B,
+    DefaultRowHeight = 0x0225,
+}
+
+/// Cached value type from a Formula record.
+#[derive(Debug, Clone)]
+pub enum FormulaCachedValue {
+    Number(f64),
+    String,
+    Bool(bool),
+    Error(String),
+}
+
+/// Map BIFF8 error code byte to Excel error name.
+pub fn error_name(code: u8) -> String {
+    match code {
+        0x00 => "NULL!".to_string(),
+        0x07 => "DIV/0!".to_string(),
+        0x0F => "VALUE!".to_string(),
+        0x17 => "REF!".to_string(),
+        0x1D => "NAME?".to_string(),
+        0x24 => "NUM!".to_string(),
+        0x2A => "N/A".to_string(),
+        _ => format!("ERR{}", code),
+    }
 }
 
 impl RecordId {
@@ -44,11 +105,11 @@ impl RecordId {
         match id {
             0x0809 => Some(RecordId::Bof),
             0x000A => Some(RecordId::Eof),
-            0x00A1 => Some(RecordId::CodePage),
+            0x0042 => Some(RecordId::CodePage),
             0x0022 => Some(RecordId::DateMode),
             0x0200 => Some(RecordId::Dimensions),
             0x020B => Some(RecordId::Index),
-            0x002D => Some(RecordId::Window1),
+            0x003D => Some(RecordId::Window1),
             0x023E => Some(RecordId::Window2),
             0x0031 => Some(RecordId::Font),
             0x041E => Some(RecordId::Format),
@@ -56,6 +117,7 @@ impl RecordId {
             0x0293 => Some(RecordId::Style),
             0x0085 => Some(RecordId::BoundSheet),
             0x00FC => Some(RecordId::Sst),
+            0x00FF => Some(RecordId::ExtSst),
             0x0203 => Some(RecordId::Number),
             0x027E => Some(RecordId::Rk),
             0x0205 => Some(RecordId::BoolErr),
@@ -63,17 +125,50 @@ impl RecordId {
             0x0006 => Some(RecordId::Formula),
             0x0208 => Some(RecordId::Row),
             0x007D => Some(RecordId::ColInfo),
+            0x0024 => Some(RecordId::ColWidth),
             0x0055 => Some(RecordId::DefColWidth),
             0x0080 => Some(RecordId::Guts),
             0x0201 => Some(RecordId::Blank),
             0x00BD => Some(RecordId::MulRk),
             0x0204 => Some(RecordId::Label),
-            0x0179 => Some(RecordId::UseSelfs),
+            0x0160 => Some(RecordId::UseSelfs),
             0x008C => Some(RecordId::Country),
             0x005D => Some(RecordId::Obj),
             0x01B6 => Some(RecordId::TxO),
             0x0086 => Some(RecordId::WriteProtect),
             0x003C => Some(RecordId::Continue),
+            0x00E1 => Some(RecordId::InterfaceHdr),
+            0x00E2 => Some(RecordId::InterfaceEnd),
+            0x00C1 => Some(RecordId::Mms),
+            0x005C => Some(RecordId::WriteAccess),
+            0x0161 => Some(RecordId::Dsf),
+            0x013D => Some(RecordId::TabId),
+            0x009C => Some(RecordId::FnGroupName),
+            0x0019 => Some(RecordId::WindowProtect),
+            0x0012 => Some(RecordId::Protect),
+            0x0063 => Some(RecordId::ObjectProtect),
+            0x0013 => Some(RecordId::Password),
+            0x01AF => Some(RecordId::Prot4Rev),
+            0x01BC => Some(RecordId::Prot4RevPass),
+            0x0040 => Some(RecordId::Backup),
+            0x008D => Some(RecordId::HideObj),
+            0x000E => Some(RecordId::Precision),
+            0x01B7 => Some(RecordId::RefreshAll),
+            0x00DA => Some(RecordId::BookBool),
+            0x0092 => Some(RecordId::Palette),
+            0x000C => Some(RecordId::CalcCount),
+            0x000D => Some(RecordId::CalcMode),
+            0x000F => Some(RecordId::RefMode),
+            0x0010 => Some(RecordId::Delta),
+            0x0011 => Some(RecordId::Iteration),
+            0x005F => Some(RecordId::SaferRecalc),
+            0x0081 => Some(RecordId::WsBool),
+            0x0082 => Some(RecordId::GridSet),
+            0x0083 => Some(RecordId::HCenter),
+            0x0084 => Some(RecordId::VCenter),
+            0x002A => Some(RecordId::PrintHeaders),
+            0x002B => Some(RecordId::PrintGridlines),
+            0x0225 => Some(RecordId::DefaultRowHeight),
             _ => None,
         }
     }
@@ -117,15 +212,40 @@ impl BiffRecord {
         BiffRecordIterator { data, offset: 0 }
     }
 
-    /// Parse BoundSheet record: returns (stream_pos, sheet_name)
+    /// Parse BoundSheet record: returns (stream_pos, sheet_name).
+    ///
+    /// BIFF8 layout (MS-XLS §2.4.86):
+    ///   - Position (4)
+    ///   - Visibility (2) — 0 = visible, 1 = hidden, 2 = very hidden
+    ///   - Type (1)
+    ///   - Reserved (1) — MUST be 0
+    ///   - Name (XlsUnicodeString)
+    ///
+    /// We also accept the legacy BIFF5/7 layout (1-byte visibility,
+    /// no reserved) for backward-compat with older writers.
     pub fn parse_bound_sheet(data: &[u8]) -> anyhow::Result<(u32, String)> {
         if data.len() < 6 {
             anyhow::bail!("BoundSheet record too short");
         }
 
         let stream_pos = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-        // Skip visibility (1 byte) and sheet type (1 byte)
-        let name_offset = 6;
+
+        // Detect layout: BIFF8 starts the name at offset 8, BIFF5/7 at
+        // offset 6. We can disambiguate by looking at the byte at
+        // offset 6: if it parses as a sensible cch (0..=255) AND the
+        // record is long enough, treat as BIFF5/7. Otherwise use
+        // BIFF8.
+        let is_legacy = data.len() >= 8
+            && (data[6] as usize) <= 255
+            && data[6] != 0 // cch 0 is a degenerate sheet name
+            && data[6] <= (data.len() - 8) as u8;
+
+        let (name_offset, visibility_end) = if is_legacy {
+            (6usize, 6usize)
+        } else {
+            (8usize, 8usize)
+        };
+        let _visibility = &data[4..visibility_end];
 
         if name_offset >= data.len() {
             anyhow::bail!("BoundSheet record missing name");
@@ -135,13 +255,13 @@ impl BiffRecord {
         let cch = data[name_offset] as usize;
         let flags = data[name_offset + 1];
         let is_high_byte = (flags & 0x01) != 0;
-        
+
         let expected_len = if is_high_byte {
             name_offset + 2 + cch * 2
         } else {
             name_offset + 2 + cch
         };
-        
+
         if data.len() < expected_len {
             anyhow::bail!("BoundSheet record name too short");
         }
@@ -336,6 +456,41 @@ impl BiffRecord {
         ]);
 
         Ok((row, col, xf_index, cached_result))
+    }
+
+    /// Parse Formula record and return the cached value type.
+    /// Returns (row, col, xf_index, FormulaResult) where FormulaResult
+    /// indicates whether the cached value is a number, string, boolean, or error.
+    pub fn parse_formula_result(data: &[u8]) -> anyhow::Result<(u16, u16, u16, FormulaCachedValue)> {
+        if data.len() < 20 {
+            anyhow::bail!("Formula record too short");
+        }
+
+        let row = u16::from_le_bytes([data[0], data[1]]);
+        let col = u16::from_le_bytes([data[2], data[3]]);
+        let xf_index = u16::from_le_bytes([data[4], data[5]]);
+
+        // Check for special value marker (0xFFFF in bytes 6-7)
+        let sentinel = u16::from_le_bytes([data[6], data[7]]);
+        if sentinel == 0xFFFF {
+            // Bytes 8 is the type: 0 = string, 1 = boolean, 2 = error
+            // Byte 9 is the value (for boolean/error)
+            let value_type = data[8];
+            let value_byte = data[9];
+            match value_type {
+                0 => Ok((row, col, xf_index, FormulaCachedValue::String)),
+                1 => Ok((row, col, xf_index, FormulaCachedValue::Bool(value_byte != 0))),
+                2 => Ok((row, col, xf_index, FormulaCachedValue::Error(error_name(value_byte)))),
+                _ => Ok((row, col, xf_index, FormulaCachedValue::Number(0.0))),
+            }
+        } else {
+            // It's a number (8 bytes at offset 6)
+            let num = f64::from_le_bytes([
+                data[6], data[7], data[8], data[9],
+                data[10], data[11], data[12], data[13],
+            ]);
+            Ok((row, col, xf_index, FormulaCachedValue::Number(num)))
+        }
     }
 
     /// Parse RK record (compressed number): returns (row, col, xf_index, value)

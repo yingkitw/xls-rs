@@ -246,15 +246,19 @@ impl DataOperations {
 
     /// Drop rows with any empty values
     pub fn dropna(&self, data: &[Vec<String>]) -> Vec<Vec<String>> {
-        data.iter()
-            .filter(|row| !row.iter().any(|cell| cell.is_empty()))
-            .cloned()
-            .collect()
+        let mut result = Vec::with_capacity(data.len());
+        result.extend(
+            data.iter()
+                .filter(|row| !row.iter().any(|cell| cell.is_empty()))
+                .cloned(),
+        );
+        result
     }
 
     /// Concatenate multiple datasets vertically
     pub fn concat(&self, datasets: &[Vec<Vec<String>>]) -> Vec<Vec<String>> {
-        let mut result = Vec::new();
+        let total_rows: usize = datasets.iter().map(|d| d.len()).sum();
+        let mut result = Vec::with_capacity(total_rows);
         for dataset in datasets {
             result.extend(dataset.iter().cloned());
         }
@@ -276,7 +280,7 @@ impl DataOperations {
             return Ok(Vec::new());
         }
 
-        let mut right_index: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut right_index: HashMap<String, Vec<usize>> = HashMap::with_capacity(right.len());
         for (idx, row) in right.iter().enumerate() {
             if let Some(key) = row.get(right_col) {
                 right_index.entry(key.clone()).or_default().push(idx);
@@ -286,8 +290,8 @@ impl DataOperations {
         let right_width = right.iter().map(|r| r.len()).max().unwrap_or(0);
         let empty_right: Vec<String> = vec![String::new(); right_width];
 
-        let mut result = Vec::new();
-        let mut matched_right: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        let mut result = Vec::with_capacity(left.len());
+        let mut matched_right: std::collections::HashSet<usize> = std::collections::HashSet::with_capacity(right.len());
 
         for left_row in left {
             let key = left_row.get(left_col).cloned().unwrap_or_default();
@@ -370,7 +374,8 @@ impl DataOperations {
         }
 
         let header = &data[0];
-        let mut groups: HashMap<String, Vec<Vec<f64>>> = HashMap::new();
+        let data_rows = data.len().saturating_sub(1);
+        let mut groups: HashMap<String, Vec<Vec<f64>>> = HashMap::with_capacity(data_rows.min(1024));
 
         for row in data.iter().skip(1) {
             let key = row.get(group_col).cloned().unwrap_or_default();
@@ -385,7 +390,7 @@ impl DataOperations {
             }
         }
 
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(groups.len() + 1);
 
         // Header
         let mut result_header = vec![

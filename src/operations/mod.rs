@@ -14,5 +14,7 @@ pub use core::DataOperations;
 pub use diff::{diff, ChangedRow, DiffResult};
 pub use histogram::{histogram, render_histogram};
 pub use types::{AggFunc, JoinType, SortOrder};
+
+// Public API exports - unused internally but part of library interface
 #[allow(unused_imports)]
 pub use types::{NoProgress, ProgressCallback, StderrProgress};

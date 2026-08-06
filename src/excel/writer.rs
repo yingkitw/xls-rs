@@ -196,7 +196,9 @@ impl ExcelHandler {
         }
     }
 
-    fn write_range_expand(
+    /// Internal implementation for writing data to a specific range.
+    /// Used by both write_range_expand and write_range_overwrite.
+    fn write_range_internal(
         &self,
         path: &str,
         data: &[Vec<String>],
@@ -213,7 +215,6 @@ impl ExcelHandler {
             writer.add_row(RowData::new());
         }
 
-        // Add empty cells for column offset
         for row in data {
             let mut row_data = RowData::new();
 
@@ -233,6 +234,17 @@ impl ExcelHandler {
         writer.save(&mut buf_writer)?;
 
         Ok(())
+    }
+
+    fn write_range_expand(
+        &self,
+        path: &str,
+        data: &[Vec<String>],
+        start_row: u32,
+        start_col: u16,
+        sheet_name: Option<&str>,
+    ) -> Result<()> {
+        self.write_range_internal(path, data, start_row, start_col, sheet_name)
     }
 
     fn write_range_preserve(
@@ -313,34 +325,7 @@ impl ExcelHandler {
         start_col: u16,
         sheet_name: Option<&str>,
     ) -> Result<()> {
-        let mut writer = XlsxWriter::new();
-        let name = sheet_name.unwrap_or("Sheet1");
-        writer.add_sheet(name)?;
-
-        // Add empty rows for offset
-        for _ in 0..start_row {
-            writer.add_row(RowData::new());
-        }
-
-        for row in data {
-            let mut row_data = RowData::new();
-
-            // Add empty cells for column offset
-            for _ in 0..start_col {
-                row_data.add_empty();
-            }
-
-            for cell in row {
-                super::add_cell_to_row(&mut row_data, cell);
-            }
-            writer.add_row(row_data);
-        }
-
-        let file = File::create(path)?;
-        let mut buf_writer = BufWriter::new(file);
-        writer.save(&mut buf_writer)?;
-
-        Ok(())
+        self.write_range_internal(path, data, start_row, start_col, sheet_name)
     }
 }
 

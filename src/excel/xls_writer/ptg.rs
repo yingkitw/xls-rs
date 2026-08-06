@@ -104,7 +104,9 @@ fn encode_token(t: &Token, out: &mut Vec<u8>) {
         Token::BinOp('=') => out.push(0x0C),
         Token::BinOp('<') => out.push(0x09),
         Token::BinOp('>') => out.push(0x0B),
-        Token::BinOp('!') => out.push(0x0E),
+        Token::BinOp('≤') => out.push(0x0A), // <=
+        Token::BinOp('≥') => out.push(0x0D), // >=
+        Token::BinOp('≠') => out.push(0x0E), // <> (same as != in BIFF8)
         Token::BinOp(c) => panic!("unknown operator {c}"),
         Token::UnaryMinus => out.push(0x13),
         Token::Percent => out.push(0x14),
@@ -210,7 +212,36 @@ impl<'a> Parser<'a> {
                 '^' => (c, 4, true),
                 '&' => (c, 1, false),
                 '=' => (c, 1, false),
-                '<' | '>' => (c, 1, false),
+                '<' => {
+                    // Check for <= and <>
+                    if self.src[self.pos + 1..].starts_with('=') {
+                        self.pos += 2;
+                        let next_min = 2; // prec + 1
+                        let rhs = self.parse_expression(next_min)?;
+                        tokens.push(Token::BinOp('≤'));
+                        tokens.extend(rhs);
+                        continue;
+                    } else if self.src[self.pos + 1..].starts_with('>') {
+                        self.pos += 2;
+                        let next_min = 2;
+                        let rhs = self.parse_expression(next_min)?;
+                        tokens.push(Token::BinOp('≠'));
+                        tokens.extend(rhs);
+                        continue;
+                    }
+                    ('<', 1, false)
+                }
+                '>' => {
+                    if self.src[self.pos + 1..].starts_with('=') {
+                        self.pos += 2;
+                        let next_min = 2;
+                        let rhs = self.parse_expression(next_min)?;
+                        tokens.push(Token::BinOp('≥'));
+                        tokens.extend(rhs);
+                        continue;
+                    }
+                    ('>', 1, false)
+                }
                 _ => break,
             };
             if prec < min_prec {
@@ -268,6 +299,22 @@ impl<'a> Parser<'a> {
             }
             return Err(FormulaError::UnexpectedEof);
         }
+        if c == '\'' {
+            // Quoted sheet name: 'Sheet Name'!A1
+            self.pos += 1;
+            while let Some(ch) = self.peek() {
+                self.pos += ch.len_utf8();
+                if ch == '\'' {
+                    break;
+                }
+            }
+            self.skip_ws();
+            if self.peek() == Some('!') {
+                self.pos += 1;
+                return self.parse_cell_or_range();
+            }
+            return Err(FormulaError::BadReference("expected ! after quoted sheet name".into()));
+        }
         if c.is_ascii_digit() || (c == '.' && self.src[self.pos + 1..].chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)) {
             return self.parse_number();
         }
@@ -276,6 +323,20 @@ impl<'a> Parser<'a> {
             let saved = self.pos;
             let name = self.read_name();
             self.skip_ws();
+            // Sheet-qualified reference: SheetName!A1 or SheetName!A1:B2
+            if self.peek() == Some('!') {
+                self.pos += 1; // skip '!'
+                // Parse the cell/range after the sheet name
+                return self.parse_cell_or_range();
+            }
+            // Boolean literals
+            let upper = name.to_ascii_uppercase();
+            if upper == "TRUE" && self.peek() != Some('(') {
+                return Ok(vec![Token::Bool(true)]);
+            }
+            if upper == "FALSE" && self.peek() != Some('(') {
+                return Ok(vec![Token::Bool(false)]);
+            }
             if self.peek() == Some('(') {
                 self.pos += 1;
                 let mut all_args: Vec<Vec<Token>> = Vec::new();

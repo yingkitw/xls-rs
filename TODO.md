@@ -225,6 +225,14 @@ Still open:
 - [ ] **Docker image**: Official `xls-rs` Docker image for CI pipelines.
 - [ ] **GitHub Action**: `uses: yingkitw/xls-rs-action@v1` for workflows.
 
+## Maintainability (XLSX writer refactoring)
+
+- [x] **Decompose `add_worksheet`**: Extracted into focused helpers — `sheet_views_xml`, `cols_xml`, `sheet_data_xml`, `merge_cells_xml`, `data_validations_xml`, `hyperlinks_xml`. Function reduced from ~270 to ~95 lines.
+- [x] **Decompose `styles_xml`**: Extracted into `fonts_xml`, `fills_xml`, `borders_xml`, `cell_xfs_xml`. Function reduced from ~130 to ~30 lines.
+- [x] **Deduplicate outline lookup**: Shared `build_outline_lookup` replaces duplicated row/col outline level + collapsed logic.
+- [x] **Deduplicate `XlsxWriter::new`**: Now delegates to `with_options(WriteOptions::default())` instead of duplicating struct initialization.
+- [x] **Simplify `comment_flags`**: Replaced verbose `get().map().unwrap_or()` with `iter().map()` in `save`.
+
 ## Hygiene
 
 - [x] Keep `.gitignore` aligned with generated artifacts (`target/`, `*.tmp.csv`, generated `examples/*.{xlsx,xls,parquet,avro}`).

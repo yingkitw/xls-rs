@@ -314,6 +314,15 @@ impl Layout {
             }
         }
         // Directory bytes.
+        // Per MS-CFB §2.6.1, the Root Entry's Stream Size field is the
+        // size of the *user-defined data* in the mini-stream — i.e. the
+        // number of bytes that contain stream data, padded to a multiple
+        // of the mini-sector size (64). It is NOT the padded-to-regular-
+        // sector size. The previous version of this code used
+        // `(mini_stream_sectors as u64) * SECTOR_SIZE as u64`, which
+        // over-reported the size and confused some readers (e.g. it
+        // implied the root owned more mini-stream than it did).
+        let mini_stream_size = (total_minisectors as u64) * MINI_SECTOR_SIZE as u64;
         let dir_bytes = build_directory(
             streams,
             &reg_starts,
@@ -322,7 +331,7 @@ impl Layout {
             &mini_sizes,
             dir_entry_count,
             mini_stream_start,
-            (mini_stream_sectors as u64) * SECTOR_SIZE as u64,
+            mini_stream_size,
         );
         for k in 0..num_dir_sectors {
             let sec = (dir_start + k) as usize;

@@ -9,7 +9,7 @@ Pick the next highest-priority item from `TODO.md` (or `ARCHITECTURE.md` if the 
 
 ### 2. Create Tests and Examples
 For every new capability:
-- Write tests in `tests/integration.rs` that exercise the feature end-to-end
+- Write integration tests in `tests/` that exercise the feature end-to-end
 - Add unit tests for core logic where appropriate
 - Provide a minimal usage example if the feature is client-facing
 

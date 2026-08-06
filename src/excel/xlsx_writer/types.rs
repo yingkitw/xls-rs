@@ -5,6 +5,7 @@
 pub enum CellData {
     String(String),
     Number(f64),
+    Bool(bool),
     Formula(String),
     Empty,
 }
@@ -13,6 +14,11 @@ pub enum CellData {
 #[derive(Debug, Clone)]
 pub struct RowData {
     pub cells: Vec<CellData>,
+    /// Per-cell style index into the workbook's `StyleRegistry`. The
+    /// vector is aligned with `cells`; a `None` (or missing entry)
+    /// means "use the workbook default style". Only emitted on `<c>`
+    /// when the value is `Some(idx) && idx != 0`.
+    pub cell_styles: Vec<Option<u32>>,
 }
 
 impl Default for RowData {
@@ -25,23 +31,58 @@ impl RowData {
     pub fn new() -> Self {
         Self {
             cells: Vec::new(),
+            cell_styles: Vec::new(),
         }
     }
 
     pub fn add_string(&mut self, value: &str) {
         self.cells.push(CellData::String(value.to_string()));
+        self.cell_styles.push(None);
     }
 
     pub fn add_number(&mut self, value: f64) {
         self.cells.push(CellData::Number(value));
+        self.cell_styles.push(None);
     }
 
-    pub fn add_formula(&mut self, formula: &str) {
-        self.cells.push(CellData::Formula(formula.to_string()));
+    pub fn add_formula(&mut self, formula: impl Into<String>) {
+        self.cells.push(CellData::Formula(formula.into()));
+        self.cell_styles.push(None);
+    }
+
+    pub fn add_bool(&mut self, value: bool) {
+        self.cells.push(CellData::Bool(value));
+        self.cell_styles.push(None);
     }
 
     pub fn add_empty(&mut self) {
         self.cells.push(CellData::Empty);
+        self.cell_styles.push(None);
+    }
+
+    /// Attach a style index (returned from
+    /// `XlsxWriter::register_cell_style`) to the cell in column
+    /// `col_idx` (0-based). Panics if `col_idx` is out of bounds or
+    /// refers to an `Empty` cell — styles on empty cells are dropped.
+    pub fn set_cell_style(&mut self, col_idx: usize, style_idx: u32) {
+        if col_idx >= self.cell_styles.len() {
+            panic!(
+                "set_cell_style: column {col_idx} is out of bounds (row has {} cells)",
+                self.cell_styles.len()
+            );
+        }
+        if matches!(self.cells[col_idx], CellData::Empty) {
+            return;
+        }
+        self.cell_styles[col_idx] = Some(style_idx);
+    }
+
+    /// Convenience: style the just-appended cell.
+    pub fn style_last(&mut self, style_idx: u32) {
+        let last = self.cell_styles.len().saturating_sub(1);
+        if last < self.cells.len() && !matches!(self.cells[last], CellData::Empty) {
+            self.cell_styles[last] = Some(style_idx);
+        }
     }
 }
 

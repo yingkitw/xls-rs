@@ -9,7 +9,7 @@ mod cfb_reader;
 mod biff_reader;
 
 use cfb_reader::CfbReader;
-use biff_reader::{BiffRecord, RecordId};
+use biff_reader::{BiffRecord, RecordId, FormulaCachedValue, error_name};
 
 /// Cell data type for reading.
 #[derive(Debug, Clone)]
@@ -123,6 +123,19 @@ impl XlsReader {
         Self::from_owned_bytes(bytes)
     }
 
+    /// Extract the raw bytes of the "Workbook" BIFF8 stream from an XLS
+    /// file. Useful for layout / structure regression tests that need to
+    /// inspect the underlying BIFF8 records (record ids, body lengths)
+    /// without going through the cell-level API.
+    pub fn read_workbook_stream(path: &str) -> Result<Vec<u8>> {
+        let bytes = std::fs::read(path)
+            .with_context(|| format!("Failed to read file: {}", path))?;
+        let cfb = CfbReader::parse(bytes).context("Failed to parse CFB container")?;
+        cfb.get_stream("Workbook")
+            .or_else(|| cfb.get_stream("Book"))
+            .context("Workbook stream not found in CFB")
+    }
+
     /// Parse workbook BIFF8 records
     fn parse_workbook(data: &[u8]) -> Result<Self> {
         let mut reader = Self {
@@ -188,7 +201,7 @@ impl XlsReader {
                 RecordId::BoolErr => {
                     let (row, col, _xf, value, is_error) = BiffRecord::parse_boolerr(&record.data).ok()?;
                     if is_error {
-                        cells.insert((row, col), CellValue::Error(value.to_string()));
+                        cells.insert((row, col), CellValue::Error(error_name(value)));
                     } else {
                         cells.insert((row, col), CellValue::Bool(value != 0));
                     }
@@ -196,10 +209,18 @@ impl XlsReader {
                     max_col = max_col.max(col);
                 }
                 RecordId::Formula => {
-                    let (row, col, _xf, _result) = BiffRecord::parse_formula(&record.data).ok()?;
-                    // Formulas store cached result; for now, mark as empty
-                    // A full implementation would evaluate or use the cached value
-                    cells.insert((row, col), CellValue::Empty);
+                    let (row, col, _xf, result) = BiffRecord::parse_formula_result(&record.data).ok()?;
+                    let cell_value = match result {
+                        FormulaCachedValue::Number(n) => CellValue::Number(n),
+                        FormulaCachedValue::Bool(b) => CellValue::Bool(b),
+                        FormulaCachedValue::Error(e) => CellValue::Error(e),
+                        FormulaCachedValue::String => {
+                            // String result follows in a STRING record (id 0x00FC7)
+                            // For now, use empty string as placeholder
+                            CellValue::String(String::new())
+                        }
+                    };
+                    cells.insert((row, col), cell_value);
                     max_row = max_row.max(row);
                     max_col = max_col.max(col);
                 }

@@ -65,11 +65,11 @@ pub use error_traits::{
 pub use excel::{
     add_cell_to_row, add_cells_to_row, classify_cell, CellComment, CellData, CellStyle,
     ChartConfig, ColGroup, ConditionalFormat, ConditionalRule, DataChartType, DataValidation,
-    ExcelHandler, FeatureDetector, FeatureSeverity, Hyperlink, MergeCell, PageMargins,
-    PageOrientation, PlaceholderInfo, PrintSetup, RowData, RowGroup, Sparkline, SparklineGroup,
-    SparklineType, StreamingXlsxWriter, TemplateData, TemplateFiller, TemplateReader,
-    UnsupportedFeature, ValidationType, WriteMode, WriteOptions, XlsRowData, XlsSheetData, XlsWriter,
-    XlsxWriter,
+    ExcelHandler, FeatureDetector, FeatureSeverity, Hyperlink, MergeCell, Operator, PageMargins,
+    PageOrientation, PlaceholderInfo, PrintSetup, RowData, RowGroup, SharedStrings, Sparkline,
+    SparklineGroup, SparklineType, StreamingXlsxWriter, StyleRegistry, TemplateData, TemplateFiller,
+    TemplateReader, UnsupportedFeature, ValidationType, WriteMode, WriteOptions, XlsRowData,
+    XlsSheetData, XlsWriter, XlsxCellStyle, XlsxWriter,
 };
 pub use format_detector::DefaultFormatDetector;
 pub use formula::{FormulaEvaluator, FormulaResult};

@@ -26,7 +26,7 @@ All three surfaces delegate to the same underlying operations registered in `Cap
 
 - Core types: `ExcelHandler`, `Converter`, `CsvHandler`, `ParquetHandler`, `AvroHandler`, `GoogleSheetsHandler`.
 - Operations: `DataOperations` (sort, filter, join, concat, groupby, pivot, describe with percentiles/skewness/kurtosis, correlation (Pearson/Spearman), simple linear regression, etc.), `DataValidator`, `DataProfiler`, `AnomalyDetector` (Z-score, Modified Z-score, IQR, percentile), `TextAnalyzer`.
-- Excel-specific: `XlsxWriter`, `StreamingXlsxWriter`, `XlsWriter` (BIFF8 / OLE2 from scratch using only `std`), `WriteMode`, charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping, freeze panes, auto-filter.
+- Excel-specific: `XlsxWriter`, `StreamingXlsxWriter`, `XlsWriter` (BIFF8 / OLE2 from scratch using only `std`), `WriteMode`, charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping, freeze panes, auto-filter. XLSX writer XML generation is modular (`xml_gen.rs` with focused helpers for worksheet sections and styles, `style_registry.rs`, `cond_fmt_xml.rs`, `sparkline_xml.rs`, `chart_xml.rs`).
 - Streaming: `CsvStreamingReader`, `StreamingProcessor`.
 - Formula: `FormulaEvaluator` for in-memory evaluation of Excel expressions.
 

@@ -14,7 +14,7 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 ### I/O layer
 
 - `src/csv_handler.rs`: CSV read/write with formula-injection sanitization (`sanitize_csv_row` / `write_records_safe`).
-- `src/excel/`: Excel read (native readers for `.xlsx`, `.xls`, and `.ods`) + write (`XlsxWriter`, `StreamingXlsxWriter`, `XlsWriter`). Includes `WriteMode` (Expand/Preserve/Overwrite). Writer supports charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping (outline), freeze panes, and auto-filter. **XLS (BIFF8) write path is implemented from scratch in `src/excel/xls_writer/`** — see below.
+- `src/excel/`: Excel read (native readers for `.xlsx`, `.xls`, and `.ods`) + write (`XlsxWriter`, `StreamingXlsxWriter`, `XlsWriter`). Includes `WriteMode` (Expand/Preserve/Overwrite). Writer supports charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping (outline), freeze panes, and auto-filter. XLSX writer is modular: `xml_gen.rs` (worksheet/styles XML), `style_registry.rs` (cell style registry), `cond_fmt_xml.rs` (conditional formatting XML), `sparkline_xml.rs` (sparkline XML), `chart_xml.rs` (chart XML), `types.rs` (data types), `streaming.rs` (streaming writer). **XLS (BIFF8) write path is implemented from scratch in `src/excel/xls_writer/`** — see below.
 - `src/columnar/`: Parquet (`arrow` / `parquet`) and Avro (`apache-avro`) handlers.
 - `src/google_sheets.rs`: Google Sheets API v4 client for read/write/append/list; uses `ureq` for HTTP.
 - `src/converter.rs`: `Converter` — format-agnostic entry point that routes to the correct handler by extension.
@@ -94,7 +94,7 @@ Library API ──→ direct call ───────────────�
 
 ## Testing layout
 
-- `tests/`: integration tests (28 test files covering all major features)
+- `tests/`: integration tests (34 test files, 676 tests covering all major features)
 - `tests/common/mod.rs`: shared paths + example fixture creation for tests
 - `benches/performance.rs`: Criterion benchmarks for read/write/convert hot paths
 

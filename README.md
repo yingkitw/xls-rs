@@ -271,10 +271,10 @@ For large CSV files, use `xls-rs stream` or the `CsvStreamingReader` API. XLSX r
 ## Current limitations
 
 - **MCP hosting:** `xls-rs serve` does not yet launch a transport; embed `XlsRsMcpServer` in an async host.
-- **Legacy writes:** native `.xls` and `.ods` output is not implemented. Writer routing may accept those extensions but emits XLSX content, so write `.xlsx` instead.
+- **Legacy XLS writes:** native `.xls` (BIFF8) output is implemented from scratch using only `std`. `.ods` output is not implemented; writer routing may accept `.ods` but emits XLSX content, so write `.xlsx` instead.
 - **Encryption:** `EncryptionAlgorithm::Aes256` currently delegates to the XOR test implementation. Do not use the encryption API for production security.
 - **Excel fidelity:** grid reads do not execute VBA macros or expand pivot tables. Merged ranges usually expose only the top-left value.
-- **Sheet enumeration:** `sheets` and `read-all` currently use the XLSX-specific reader path.
+- **Sheet enumeration:** `sheets` and `read-all` currently use the XLSX-specific reader path; XLS sheet enumeration uses the native BIFF8 reader.
 - **Streaming:** CSV supports chunked processing; XLSX does not yet provide a true row-by-row SAX reader.
 - **Formula coverage:** the built-in evaluator supports a practical subset of Excel formulas, not the complete Excel calculation engine.
 - **Surface parity:** advanced library analytics are not all exposed through CLI and MCP.
@@ -307,7 +307,7 @@ No. The current `Aes256` enum path uses the XOR test implementation and must not
 
 ### What is the minimum supported Rust version?
 
-The current package metadata requires Rust 1.88 or newer.
+The current package metadata requires Rust 1.88 or newer. Edition 2024.
 
 ## Development
 

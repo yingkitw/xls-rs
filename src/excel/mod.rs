@@ -13,9 +13,9 @@ pub mod xlsx_reader;
 pub mod ods_reader;
 pub mod template;
 
+// Public API exports - unused internally but part of library interface
 #[allow(unused_imports)]
 pub use cell_typer::{add_cell_to_row, add_cells_to_row, classify_cell};
-#[allow(unused_imports)]
 pub use chart::{ChartConfig, DataChartType};
 pub use feature_detector::{FeatureDetector, FeatureSeverity, UnsupportedFeature};
 pub use reader::ExcelHandler;
@@ -25,8 +25,9 @@ pub use types::{CellStyle, WriteOptions};
 pub use xls_writer::{RowData as XlsRowData, SheetData as XlsSheetData, XlsWriter};
 pub use xlsx_writer::{
     CellComment, CellData, ColGroup, ConditionalFormat, ConditionalRule, DataValidation,
-    Hyperlink, MergeCell, PageMargins, PageOrientation, PrintSetup, RowData, RowGroup, Sparkline,
-    SparklineGroup, SparklineType, ValidationType, XlsxWriter,
+    Hyperlink, MergeCell, Operator, PageMargins, PageOrientation, PrintSetup, RowData, RowGroup, 
+    Sparkline, SparklineGroup, SparklineType, ValidationType, XlsxCellStyle, XlsxWriter,
     streaming::StreamingXlsxWriter,
+    style_registry::{SharedStrings, StyleRegistry},
 };
 pub use template::{PlaceholderInfo, TemplateData, TemplateFiller, TemplateReader};
