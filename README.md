@@ -1,6 +1,8 @@
 # xls-rs
 
-**xls-rs is a Rust spreadsheet CLI, library, and Model Context Protocol (MCP) server for reading, writing, converting, and analyzing Excel, CSV, ODS, Parquet, and Avro files.** It combines pandas-style data operations, Excel formula evaluation, native XLSX authoring, streaming CSV processing, and data-quality tools without requiring Microsoft Excel.
+<!-- SEO/GEO: Rust spreadsheet tool, XLSX writer, Excel CLI, CSV converter, MCP server -->
+
+**xls-rs is a Rust spreadsheet CLI, library, and Model Context Protocol (MCP) server for reading, writing, converting, and analyzing Excel (XLSX/XLS), CSV, ODS, Parquet, and Avro files.** It combines pandas-style data operations, Excel formula evaluation, native XLSX authoring, streaming CSV processing, and data-quality tools — all without requiring Microsoft Excel, Python, or a JVM.
 
 [![Crates.io](https://img.shields.io/crates/v/xls-rs.svg)](https://crates.io/crates/xls-rs)
 [![Documentation](https://docs.rs/xls-rs/badge.svg)](https://docs.rs/xls-rs)
@@ -14,7 +16,7 @@ xls-rs --help
 
 ## What is xls-rs?
 
-xls-rs is a command-line tool and embeddable Rust crate for spreadsheet and tabular-data workflows. Use it to convert CSV to XLSX, XLSX to Parquet, Excel to CSV, or Avro to CSV; inspect and transform data from the terminal; generate styled Excel workbooks; or expose selected spreadsheet tools to AI agents through MCP.
+xls-rs is a command-line tool and embeddable Rust crate for spreadsheet and tabular-data workflows. Use it to convert CSV to XLSX, XLSX to Parquet, Excel to CSV, or Avro to CSV; inspect and transform data from the terminal; generate styled Excel workbooks with charts and conditional formatting; or expose selected spreadsheet tools to AI agents through MCP.
 
 | Surface | Name | Best for |
 |---|---|---|
@@ -28,17 +30,19 @@ xls-rs is a command-line tool and embeddable Rust crate for spreadsheet and tabu
 - **One Rust toolkit for common spreadsheet formats:** CSV, XLSX, XLS, ODS, Parquet, Avro, and Google Sheets.
 - **Pandas-style operations from the shell:** sort, filter, join, groupby, pivot, melt, describe, correlation, regression, sampling, missing-value handling, and more.
 - **Native XLSX generation:** formulas, styles, charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, validation, print setup, freeze panes, and auto-filter.
+- **Native XLS (BIFF8) generation:** legacy `.xls` format written from scratch using only `std` — no external dependencies.
 - **Production-oriented CSV safety:** formula-injection sanitization on write paths and explicit overwrite guards.
 - **Large-file support:** buffered and chunked CSV readers, writers, and streaming commands.
 - **AI integration:** 18 MCP tools, including capability discovery, conversion, filtering, validation, profiling, and Excel authoring.
-- **No Microsoft Excel dependency:** reads and writes use native Rust format handlers.
+- **No Microsoft Excel dependency:** reads and writes use native Rust format handlers. No Office, Python, or JVM required.
 
 ### Who is it for?
 
-- Data engineers converting spreadsheet and columnar formats in ETL pipelines.
-- Rust developers who need an Excel and CSV library with a CLI surface.
-- Analysts looking for pandas-style spreadsheet operations without Python.
-- AI-agent developers building an MCP spreadsheet server or automation workflow.
+- **Data engineers** converting spreadsheet and columnar formats in ETL pipelines.
+- **Rust developers** who need an Excel and CSV library with a CLI surface.
+- **Analysts** looking for pandas-style spreadsheet operations without Python.
+- **AI-agent developers** building an MCP spreadsheet server or automation workflow.
+- **DevOps teams** needing a lightweight, dependency-free spreadsheet CLI for CI/CD pipelines.
 
 ## Format support
 
@@ -199,6 +203,32 @@ The native XLSX writer supports:
 - Row and column grouping, merged cells, hyperlinks, comments, and data validation.
 - Freeze panes, auto-filter, print areas, margins, orientation, scale, and fit-to-page settings.
 
+### Comparison with alternatives
+
+| Feature | xls-rs | Calamine | openpyxl | xsv | Polars | xlsxwriter |
+|---|---|---:|---:|---:|---:|---:|
+| Language | Rust | Rust | Python | Rust | Rust | Python |
+| XLSX read | Yes | Yes | Yes | No | No | No |
+| XLSX write | Yes | No | Yes | No | No | Yes |
+| XLS (BIFF8) write | Yes | No | No | No | No | No |
+| CSV read/write | Yes | No | No | Yes | Yes | No |
+| Parquet/Avro | Yes | No | No | No | Yes | No |
+| Charts/styles | Yes | No | Yes | No | No | Yes |
+| Pandas-style ops | Yes | No | No | Limited | Yes | No |
+| CLI | Yes | No | No | Yes | Yes | No |
+| MCP server | Yes | No | No | No | No | No |
+| Excel dependency | None | None | None | None | None | None |
+
+### Common use cases
+
+- **CSV to Excel conversion:** `xls-rs convert --input data.csv --output report.xlsx`
+- **Excel to Parquet for analytics:** `xls-rs convert --input report.xlsx --output data.parquet`
+- **Generate styled XLSX with charts:** Use `XlsxWriter` in Rust or `xls-rs export-styled` CLI
+- **Filter and sort spreadsheet data:** `xls-rs filter --input sales.csv --output filtered.csv --where-clause "Revenue > 1000"`
+- **Read Excel ranges:** `xls-rs read --input report.xlsx --sheet Sheet1 --range A1:D20 --format json`
+- **AI agent spreadsheet automation:** Embed `XlsRsMcpServer` in a Tokio/RMCP host for LLM-driven Excel workflows
+- **ETL pipeline spreadsheet processing:** Use the library API in Rust services for format conversion and data transformation
+
 ## CLI reference
 
 ### Global flags
@@ -283,19 +313,31 @@ For large CSV files, use `xls-rs stream` or the `CsvStreamingReader` API. XLSX r
 
 ### Can xls-rs convert CSV to Excel XLSX?
 
-Yes. Run `xls-rs convert --input data.csv --output data.xlsx` or call `Converter::convert` from Rust.
+Yes. Run `xls-rs convert --input data.csv --output data.xlsx` or call `Converter::convert` from Rust. The XLSX writer supports styles, charts, formulas, freeze panes, auto-filter, and more.
 
 ### Can xls-rs read XLSX files without Microsoft Excel?
 
-Yes. xls-rs reads Excel files natively and does not require Office, LibreOffice, or a JVM.
+Yes. xls-rs reads Excel files natively in Rust and does not require Office, LibreOffice, or a JVM. It parses the OOXML (ZIP + XML) format directly.
+
+### Can xls-rs write XLS (legacy Excel) files?
+
+Yes. xls-rs includes a from-scratch BIFF8/OLE2 writer implemented in pure Rust using only the standard library. It supports multiple sheets, strings (UTF-16), numbers, booleans, formulas, and column widths.
 
 ### Is xls-rs an alternative to openpyxl, Calamine, xsv, or Polars?
 
-It overlaps with each tool but has a different scope. Compared with Calamine or other read-only libraries, xls-rs adds native XLSX writing, conversion, analytics, CLI, and MCP surfaces. Compared with openpyxl, it is Rust-native and supports Parquet and Avro, but has less template and macro fidelity. Compared with Polars or xsv, it focuses more on spreadsheet formats and Excel authoring than on a full lazy query engine.
+It overlaps with each tool but has a different scope. Compared with Calamine or other read-only libraries, xls-rs adds native XLSX writing, conversion, analytics, CLI, and MCP surfaces. Compared with openpyxl, it is Rust-native and supports Parquet and Avro, but has less template and macro fidelity. Compared with Polars or xsv, it focuses more on spreadsheet formats and Excel authoring than on a full lazy query engine. See the [comparison table](#comparison-with-alternatives) above.
 
 ### Does xls-rs support pandas-style DataFrame operations?
 
 It supports many familiar tabular operations, including groupby, join, pivot, melt, describe, correlation, sampling, and missing-value handling. It is not a drop-in pandas DataFrame implementation and does not yet include lazy query planning.
+
+### Can xls-rs create Excel charts and conditional formatting?
+
+Yes. The XLSX writer supports bar, column, line, area, pie, doughnut, and scatter charts, plus color scales, data bars, icon sets, and formula-based conditional formatting. Sparklines (line, column, win/loss) are also supported.
+
+### Is xls-rs suitable for ETL pipelines?
+
+Yes. The CLI is designed for shell scripts and CI/CD with `--overwrite` guards, `--quiet` mode, and stdin/stdout support. The library API works well in Rust services for format conversion and data transformation.
 
 ### Is the MCP server ready to use from the CLI?
 
@@ -333,3 +375,12 @@ Licensed under the Apache License 2.0. The SPDX license declaration is defined i
 - [Crate on crates.io](https://crates.io/crates/xls-rs)
 - [API documentation on docs.rs](https://docs.rs/xls-rs)
 - [Issue tracker](https://github.com/yingkitw/xls-rs/issues)
+
+---
+
+<details>
+<summary>Keywords</summary>
+
+Rust spreadsheet library, Rust XLSX writer, Rust Excel reader, CSV converter, XLSX to Parquet, CSV to Excel, Rust Excel CLI, MCP spreadsheet server, BIFF8 writer, XLS writer Rust, pandas-style operations Rust, Excel without Microsoft Office, Rust data analysis CLI, spreadsheet ETL Rust, conditional formatting Rust, Excel charts Rust, sparklines Rust, Avro converter, ODS reader Rust, Google Sheets API Rust, Rust tabular data toolkit, openpyxl alternative Rust, Calamine alternative, xsv alternative, Polars spreadsheet, xlsxwriter Rust equivalent.
+
+</details>

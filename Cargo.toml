@@ -7,7 +7,7 @@ repository = "https://github.com/yingkitw/xls-rs"
 readme = "README.md"
 homepage = "https://github.com/yingkitw/xls-rs"
 documentation = "https://docs.rs/xls-rs"
-keywords = ["excel", "csv", "parquet", "spreadsheet", "mcp-server"]
+keywords = ["xlsx", "excel", "csv", "spreadsheet", "mcp"]
 categories = [
     "command-line-utilities",
     "parser-implementations",
@@ -15,7 +15,7 @@ categories = [
     "encoding",
     "api-bindings",
 ]
-description = "Rust spreadsheet CLI, library, and MCP server for reading, writing, converting, and analyzing XLSX, XLS, CSV, ODS, Parquet, and Avro with pandas-style operations."
+description = "Rust spreadsheet CLI, library, and MCP server for reading, writing, converting, and analyzing XLSX, XLS, CSV, ODS, Parquet, and Avro files. Native XLSX writer with charts, styles, conditional formatting, sparklines, and formulas. Pandas-style data operations without Python. No Microsoft Excel dependency."
 exclude = [
     ".claude/**",
     "AGENTS.md",
@@ -26,6 +26,11 @@ exclude = [
     "examples/*.avro",
     "examples/test_*.csv",
 ]
+
+[package.metadata]
+# SEO/GEO: keywords for discoverability across crates.io, docs.rs, and AI engines
+# Primary: xlsx, excel, csv, spreadsheet, rust
+# Secondary: parquet, avro, ods, mcp, cli, data-analysis, etl, convert
 
 [package.metadata.docs.rs]
 all-features = true
