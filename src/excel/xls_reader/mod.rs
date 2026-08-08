@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 
-mod cfb_reader;
+pub mod cfb_reader;
 mod biff_reader;
 
 use cfb_reader::CfbReader;

@@ -38,6 +38,26 @@ impl XlsxCellValue {
     }
 }
 
+/// Structured table info read from an XLSX file.
+#[derive(Debug, Clone)]
+pub struct XlsxTableInfo {
+    pub name: String,
+    /// A1 range, e.g. "A1:C10"
+    pub range: String,
+    /// 0-based start row
+    pub start_row: u32,
+    /// 0-based start col
+    pub start_col: u16,
+    /// 0-based end row (inclusive)
+    pub end_row: u32,
+    /// 0-based end col (inclusive)
+    pub end_col: u16,
+    /// Column names from the table definition
+    pub column_names: Vec<String>,
+    /// Style name (e.g. "TableStyleMedium2")
+    pub style_name: Option<String>,
+}
+
 /// Sheet data for XLSX reading.
 #[derive(Debug, Clone)]
 pub struct XlsxSheetData {
@@ -45,6 +65,8 @@ pub struct XlsxSheetData {
     pub cells: Vec<Vec<XlsxCellValue>>,
     /// Per-cell style index (the `s` attribute on `<c>`), keyed by (row, col).
     pub style_indices: HashMap<(u32, u16), u32>,
+    /// Structured tables defined on this sheet.
+    pub tables: Vec<XlsxTableInfo>,
 }
 
 impl XlsxSheetData {
@@ -53,6 +75,7 @@ impl XlsxSheetData {
             name: name.into(),
             cells: Vec::new(),
             style_indices: HashMap::new(),
+            tables: Vec::new(),
         }
     }
 
@@ -500,6 +523,17 @@ fn parse_cell_ref(ref_str: &str) -> (u32, u16) {
     (row.saturating_sub(1), col.saturating_sub(1))
 }
 
+/// Parse an A1 range like "A1:C10" into (start_row, start_col, end_row, end_col) 0-based.
+fn parse_a1_range(range: &str) -> Option<(u32, u16, u32, u16)> {
+    let parts: Vec<&str> = range.split(':').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let (sr, sc) = parse_cell_ref(parts[0]);
+    let (er, ec) = parse_cell_ref(parts[1]);
+    Some((sr, sc, er, ec))
+}
+
 /// XLSX workbook reader.
 pub struct XlsxReader {
     sheets: Vec<XlsxSheetData>,
@@ -524,6 +558,47 @@ impl XlsxReader {
         let mut archive = ZipArchive::new(reader)
             .context("Failed to open XLSX archive")?;
         Self::from_archive(&mut archive)
+    }
+
+    /// Read a password-protected XLSX file from any Read+Seek source.
+    ///
+    /// Requires the `password` feature.
+    #[cfg(feature = "password")]
+    pub fn from_reader_with_password<R: std::io::Read + std::io::Seek>(
+        reader: R,
+        password: &str,
+    ) -> Result<Self> {
+        use super::xlsx_crypto;
+
+        // Read all bytes into memory
+        let mut buf = Vec::new();
+        let mut reader = reader;
+        reader.read_to_end(&mut buf)
+            .context("Failed to read encrypted XLSX data")?;
+
+        if xlsx_crypto::is_encrypted_xlsx(&buf) {
+            let zip_bytes = xlsx_crypto::decrypt_xlsx(&buf, password)?;
+            let cursor = std::io::Cursor::new(zip_bytes);
+            let mut archive = ZipArchive::new(cursor)
+                .context("Failed to open decrypted XLSX archive")?;
+            Self::from_archive(&mut archive)
+        } else {
+            // Not encrypted — try as normal ZIP
+            let cursor = std::io::Cursor::new(buf);
+            let mut archive = ZipArchive::new(cursor)
+                .context("Failed to open XLSX archive")?;
+            Self::from_archive(&mut archive)
+        }
+    }
+
+    /// Read a password-protected XLSX file from a path.
+    ///
+    /// Requires the `password` feature.
+    #[cfg(feature = "password")]
+    pub fn from_path_with_password(path: &str, password: &str) -> Result<Self> {
+        let file = std::fs::File::open(path)
+            .with_context(|| format!("Failed to open XLSX file: {}", path))?;
+        Self::from_reader_with_password(file, password)
     }
 
     fn from_archive<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>) -> Result<Self> {
@@ -559,6 +634,41 @@ impl XlsxReader {
             let mut sheet = XlsxSheetData::new(name.clone());
             sheet.cells = cells;
             sheet.style_indices = style_indices;
+
+            // Read sheet rels to find table references
+            // Derive rels path from the actual sheet path:
+            // "xl/worksheets/sheet1.xml" → "xl/worksheets/_rels/sheet1.xml.rels"
+            let sheet_rels_path = if sheet_path.ends_with(".xml") {
+                let base = sheet_path.strip_suffix(".xml").unwrap();
+                format!("{}_rels/{}.xml.rels",
+                    base.rfind('/').map(|i| &base[..i]).unwrap_or("."),
+                    base.rfind('/').map(|i| &base[i+1..]).unwrap_or(base))
+            } else {
+                String::new()
+            };
+            if !sheet_rels_path.is_empty() {
+                if let Ok(sheet_rels_xml) = Self::read_zip_entry(archive, &sheet_rels_path) {
+                    let table_paths = Self::parse_table_rels(&sheet_rels_xml);
+                    for table_path in table_paths {
+                        let full_path = if table_path.starts_with('/') {
+                            table_path[1..].to_string()
+                        } else {
+                            // Relative to xl/worksheets/, so resolve from xl/
+                            if table_path.starts_with("../") {
+                                format!("xl/{}", &table_path[3..])
+                            } else {
+                                format!("xl/worksheets/{}", table_path)
+                            }
+                        };
+                        if let Ok(table_xml) = Self::read_zip_entry(archive, &full_path) {
+                            if let Some(table_info) = Self::parse_table_xml(&table_xml) {
+                                sheet.tables.push(table_info);
+                            }
+                        }
+                    }
+                }
+            }
+
             sheets.push(sheet);
         }
 
@@ -697,6 +807,93 @@ impl XlsxReader {
             scanner.skip_open_tag();
         }
         map
+    }
+
+    /// Parse worksheet rels XML and return Target paths for table relationships.
+    fn parse_table_rels(xml: &[u8]) -> Vec<String> {
+        let xml_str = String::from_utf8_lossy(xml);
+        let mut scanner = XmlScanner::new(xml_str.as_bytes());
+        scanner.skip_declaration();
+
+        let mut paths = Vec::new();
+        while scanner.find_open_tag("Relationship").is_some() {
+            let tag_start = scanner.pos;
+            let tag_name = scanner.read_tag_name(tag_start);
+            let name_end = tag_start + tag_name.len();
+            let (attrs, _) = scanner.parse_attributes(name_end);
+            let rel_type = attrs.get("Type").cloned().unwrap_or_default();
+            if rel_type.contains("/table") {
+                if let Some(target) = attrs.get("Target") {
+                    paths.push(target.clone());
+                }
+            }
+            scanner.skip_open_tag();
+        }
+        paths
+    }
+
+    /// Parse a table XML file (xl/tables/tableN.xml) into XlsxTableInfo.
+    fn parse_table_xml(xml: &[u8]) -> Option<XlsxTableInfo> {
+        let xml_str = String::from_utf8_lossy(xml);
+        let mut scanner = XmlScanner::new(xml_str.as_bytes());
+        scanner.skip_declaration();
+
+        // Find <table> tag
+        scanner.find_open_tag("table")?;
+        let tag_start = scanner.pos;
+        let _tag_name = scanner.read_tag_name(tag_start);
+        let name_end = tag_start + _tag_name.len();
+        let (attrs, _) = scanner.parse_attributes(name_end);
+
+        let name = attrs.get("name").cloned().unwrap_or_default();
+        let range = attrs.get("ref").cloned().unwrap_or_default();
+
+        if name.is_empty() || range.is_empty() {
+            return None;
+        }
+
+        // Parse the A1 range (e.g., "A1:C10")
+        let (start_row, start_col, end_row, end_col) = parse_a1_range(&range)?;
+
+        scanner.skip_open_tag();
+
+        // Parse <tableColumns>
+        let mut column_names = Vec::new();
+        if scanner.find_open_tag("tableColumns").is_some() {
+            scanner.skip_open_tag();
+            while scanner.find_open_tag("tableColumn").is_some() {
+                let cs = scanner.pos;
+                let _tn = scanner.read_tag_name(cs);
+                let ne = cs + _tn.len();
+                let (cattrs, _) = scanner.parse_attributes(ne);
+                if let Some(col_name) = cattrs.get("name") {
+                    column_names.push(col_name.clone());
+                }
+                scanner.skip_open_tag();
+            }
+        }
+
+        // Parse <tableStyleInfo> (optional)
+        let mut style_name = None;
+        if scanner.find_open_tag("tableStyleInfo").is_some() {
+            let ss = scanner.pos;
+            let _tn = scanner.read_tag_name(ss);
+            let ne = ss + _tn.len();
+            let (sattrs, _) = scanner.parse_attributes(ne);
+            style_name = sattrs.get("name").cloned();
+            scanner.skip_open_tag();
+        }
+
+        Some(XlsxTableInfo {
+            name,
+            range,
+            start_row,
+            start_col,
+            end_row,
+            end_col,
+            column_names,
+            style_name,
+        })
     }
 
     fn parse_sheet(xml: &[u8], shared_strings: &[String]) -> (Vec<Vec<XlsxCellValue>>, HashMap<(u32, u16), u32>) {
@@ -949,6 +1146,11 @@ impl XlsxReader {
     /// Returns `true` if the workbook contains VBA macros.
     pub fn has_macros(&self) -> bool {
         self.vba_project.is_some()
+    }
+
+    /// Get all structured tables on a given sheet.
+    pub fn tables(&self, sheet: usize) -> Option<&[XlsxTableInfo]> {
+        self.sheets.get(sheet).map(|s| s.tables.as_slice())
     }
 }
 

@@ -217,4 +217,71 @@ pub struct SheetData {
     pub comments: Vec<CellComment>,
     pub row_groups: Vec<RowGroup>,
     pub col_groups: Vec<ColGroup>,
+    pub tables: Vec<Table>,
+}
+
+/// Excel structured table (auto-expanding range with headers, banded rows, etc.)
+#[derive(Debug, Clone)]
+pub struct Table {
+    /// Display name (must be unique in the workbook, no spaces)
+    pub name: String,
+    /// 0-based start row (header row)
+    pub start_row: usize,
+    /// 0-based start column
+    pub start_col: usize,
+    /// 0-based end row (last data row, inclusive)
+    pub end_row: usize,
+    /// 0-based end column (inclusive)
+    pub end_col: usize,
+    /// Column names. If empty, auto-generated from the first row or default names.
+    pub column_names: Vec<String>,
+    /// Show banded rows (alternating row colors)
+    pub show_banded_rows: bool,
+    /// Show banded columns (alternating column colors)
+    pub show_banded_columns: bool,
+    /// Show filter button in header
+    pub show_filter_button: bool,
+    /// Show totals row
+    pub show_totals_row: bool,
+    /// Style info (built-in table style name)
+    pub style: Option<TableStyleInfo>,
+}
+
+impl Default for Table {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            start_row: 0,
+            start_col: 0,
+            end_row: 0,
+            end_col: 0,
+            column_names: Vec::new(),
+            show_banded_rows: true,
+            show_banded_columns: false,
+            show_filter_button: true,
+            show_totals_row: false,
+            style: Some(TableStyleInfo::default()),
+        }
+    }
+}
+
+/// Built-in table style info
+#[derive(Debug, Clone)]
+pub struct TableStyleInfo {
+    /// Style name, e.g. "TableStyleMedium2"
+    pub name: String,
+    /// Show first column emphasis
+    pub show_first_column: bool,
+    /// Show last column emphasis
+    pub show_last_column: bool,
+}
+
+impl Default for TableStyleInfo {
+    fn default() -> Self {
+        Self {
+            name: "TableStyleMedium2".to_string(),
+            show_first_column: false,
+            show_last_column: false,
+        }
+    }
 }

@@ -67,9 +67,9 @@ pub use excel::{
     ChartConfig, ColGroup, ConditionalFormat, ConditionalRule, DataChartType, DataValidation,
     ExcelHandler, FeatureDetector, FeatureSeverity, Hyperlink, MergeCell, Operator, PageMargins,
     PageOrientation, PlaceholderInfo, PrintSetup, RowData, RowGroup, SharedStrings, Sparkline,
-    SparklineGroup, SparklineType, StreamingXlsxWriter, StyleRegistry, TemplateData, TemplateFiller,
-    TemplateReader, UnsupportedFeature, ValidationType, WriteMode, WriteOptions, XlsRowData,
-    XlsSheetData, XlsWriter, XlsxCellStyle, XlsxStyleTable, XlsxWriter,
+    SparklineGroup, SparklineType, StreamingXlsxWriter, StyleRegistry, Table, TableStyleInfo,
+    TemplateData, TemplateFiller, TemplateReader, UnsupportedFeature, ValidationType, WriteMode,
+    WriteOptions, XlsRowData, XlsSheetData, XlsWriter, XlsxCellStyle, XlsxStyleTable, XlsxWriter,
 };
 pub use format_detector::DefaultFormatDetector;
 pub use formula::{FormulaEvaluator, FormulaResult};

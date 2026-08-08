@@ -44,6 +44,7 @@ Institutional knowledge and pattern library for xls-rs development.
 - **Auto-filter**: `<autoFilter ref="A1:Z1000"/>` element defining filter range
 - **Row/column grouping**: `outlineLevel` attributes on `<row>` and `<col>` elements
 - **VBA macros**: `xl/vbaProject.bin` is an OLE2 compound document. When present, `[Content_Types].xml` must include `<Default Extension="bin" ContentType="application/vnd.ms-office.vbaProject"/>` and workbook content type changes to `application/vnd.ms-excel.sheet.macroEnabled.main+xml`. API: `XlsxReader::vba_project() -> Option<&[u8]>`, `XlsxWriter::set_vba_project(Vec<u8>)`. VBA bin stored uncompressed (Stored compression method).
+- **Password-protected XLSX**: Encrypted XLSX is an OLE2 (CFB) container with `EncryptionInfo` and `EncryptedPackage` streams. Agile Encryption (v4): EncryptionInfo is 4-byte version header + XML with encryption params. Key derivation: PBKDF2-HMAC-SHA512(password_utf16le, salt, spinCount, keySize). Package decryption: AES-256-CBC with IV = first 16 bytes of keyData salt. EncryptedPackage stream: 4-byte size + 4-byte padding + encrypted ZIP data. Behind `password` feature flag. API: `XlsxReader::from_reader_with_password(reader, password)`. CFB reader's `get_stream` uses mini-FAT for streams < 4096 bytes — test containers must pad streams to >= 4096 or set up mini-FAT properly.
 
 ### XLS (BIFF) Reader/Writer Conventions
 - **BIFF8 format**: OLE2 container + BIFF8 records; sector size 512 bytes

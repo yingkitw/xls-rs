@@ -13,6 +13,8 @@ pub mod xlsx_reader;
 pub mod xlsx_style_reader;
 pub mod ods_reader;
 pub mod template;
+#[cfg(feature = "password")]
+pub mod xlsx_crypto;
 
 // Public API exports - unused internally but part of library interface
 #[allow(unused_imports)]
@@ -26,8 +28,8 @@ pub use types::{CellStyle, WriteOptions};
 pub use xls_writer::{RowData as XlsRowData, SheetData as XlsSheetData, XlsWriter};
 pub use xlsx_writer::{
     CellComment, CellData, ColGroup, ConditionalFormat, ConditionalRule, DataValidation,
-    Hyperlink, MergeCell, Operator, PageMargins, PageOrientation, PrintSetup, RowData, RowGroup, 
-    Sparkline, SparklineGroup, SparklineType, ValidationType, XlsxCellStyle, XlsxWriter,
+    Hyperlink, MergeCell, Operator, PageMargins, PageOrientation, PrintSetup, RowData, RowGroup,
+    Sparkline, SparklineGroup, SparklineType, Table, TableStyleInfo, ValidationType, XlsxCellStyle, XlsxWriter,
     streaming::StreamingXlsxWriter,
     style_registry::{SharedStrings, StyleRegistry},
 };

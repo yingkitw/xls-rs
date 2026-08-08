@@ -37,7 +37,7 @@ pub mod style_registry;
 
 pub use types::{
     CellComment, CellData, ColGroup, DataValidation, Hyperlink, MergeCell, Operator, PageMargins,
-    PageOrientation, PrintSetup, RowData, RowGroup, SheetData, ValidationType,
+    PageOrientation, PrintSetup, RowData, RowGroup, SheetData, Table, TableStyleInfo, ValidationType,
 };
 pub use cond_fmt_xml::{ConditionalFormat, ConditionalRule};
 pub use sparkline_xml::{Sparkline, SparklineGroup, SparklineType};
@@ -142,6 +142,7 @@ impl XlsxWriter {
             comments: Vec::new(),
             row_groups: Vec::new(),
             col_groups: Vec::new(),
+            tables: Vec::new(),
         });
         Ok(())
     }
@@ -232,6 +233,13 @@ impl XlsxWriter {
         }
     }
 
+    /// Add a structured table to the current sheet
+    pub fn add_table(&mut self, table: Table) {
+        if let Some(sheet) = self.sheets.last_mut() {
+            sheet.tables.push(table);
+        }
+    }
+
     /// Add a row to the current sheet
     pub fn add_row(&mut self, row: RowData) {
         if let Some(sheet) = self.sheets.last_mut() {
@@ -276,14 +284,15 @@ impl XlsxWriter {
     pub fn save<W: Write + Seek>(&self, mut writer: W) -> Result<()> {
         let mut zip = ZipWriter::new(&mut writer);
 
-        // Determine which sheets have charts or comments
+        // Determine which sheets have charts, comments, or tables
         let chart_flags: Vec<bool> = (0..self.sheets.len())
             .map(|i| self.chart_configs.get(i).and_then(|c| c.as_ref()).is_some())
             .collect();
         let comment_flags: Vec<bool> = self.sheets.iter().map(|s| !s.comments.is_empty()).collect();
+        let table_flags: Vec<bool> = self.sheets.iter().map(|s| !s.tables.is_empty()).collect();
 
-        // Add [Content_Types].xml (with chart/comment content types if needed)
-        add_content_types_ext(&mut zip, self.sheets.len(), &chart_flags, &comment_flags, self.vba_project.is_some())?;
+        // Add [Content_Types].xml (with chart/comment/table content types if needed)
+        add_content_types_ext(&mut zip, self.sheets.len(), &chart_flags, &comment_flags, self.vba_project.is_some(), &table_flags)?;
 
         // Add _rels/.rels
         add_rels(&mut zip)?;
@@ -297,9 +306,26 @@ impl XlsxWriter {
         // Add xl/styles.xml
         add_styles_with_registry(&mut zip, &self.styles)?;
 
-        // Add worksheets
+        // Add worksheets — assign table rel IDs (global table index)
+        let mut table_global_idx = 1usize;
         for (idx, sheet) in self.sheets.iter().enumerate() {
-            add_worksheet(&mut zip, idx, sheet, &self.options, chart_flags[idx])?;
+            let table_rel_id = if !sheet.tables.is_empty() {
+                Some(table_global_idx as u32)
+            } else {
+                None
+            };
+            add_worksheet(&mut zip, idx, sheet, &self.options, chart_flags[idx], table_rel_id)?;
+            // Advance global table index by the number of tables on this sheet
+            table_global_idx += sheet.tables.len();
+        }
+
+        // Add table XML files
+        let mut table_global_idx = 1usize;
+        for sheet in &self.sheets {
+            for table in &sheet.tables {
+                add_table_xml(&mut zip, table_global_idx, table)?;
+                table_global_idx += 1;
+            }
         }
 
         // Add chart files for sheets that have charts

@@ -1,6 +1,6 @@
 [package]
 name = "xls-rs"
-version = "0.1.12"
+version = "0.1.13"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/yingkitw/xls-rs"
@@ -66,6 +66,11 @@ clap_complete = { version = "4.5", optional = true }
 notify = { version = "6", optional = true }
 ctrlc = { version = "3", optional = true }
 tempfile = "3.12"
+aes = { version = "0.8", optional = true }
+cbc = { version = "0.1", features = ["alloc"], optional = true }
+sha2 = { version = "0.10", optional = true }
+hmac = { version = "0.12", optional = true }
+pbkdf2 = { version = "0.12", optional = true }
 
 [features]
 default = ["watch", "completions", "mcp", "parquet", "avro", "gsheets"]
@@ -75,6 +80,7 @@ mcp = ["dep:rmcp"]
 parquet = ["dep:parquet", "dep:arrow-array", "dep:arrow-schema"]
 avro = ["dep:apache-avro"]
 gsheets = ["dep:ureq"]
+password = ["dep:aes", "dep:cbc", "dep:sha2", "dep:hmac", "dep:pbkdf2"]
 
 # Smaller `target/` and fewer incremental rename failures when the disk is almost full.
 [profile.dev]
@@ -109,3 +115,7 @@ required-features = ["parquet", "avro"]
 [[test]]
 name = "test_handler_registry"
 required-features = ["parquet", "avro"]
+
+[[test]]
+name = "test_password"
+required-features = ["password"]

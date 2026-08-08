@@ -10,7 +10,7 @@ use zip::ZipWriter;
 use zip::write::FileOptions;
 
 use super::style_registry::StyleRegistry;
-use super::types::{CellData, SheetData};
+use super::types::{CellData, SheetData, Table};
 use super::WriteOptions;
 
 /// Escape special XML characters
@@ -84,16 +84,17 @@ pub fn add_content_types<W: IoWrite + Seek>(
     sheet_count: usize,
 ) -> Result<()> {
     let no_flags = vec![false; sheet_count];
-    add_content_types_ext(zip, sheet_count, &no_flags, &no_flags, false)
+    add_content_types_ext(zip, sheet_count, &no_flags, &no_flags, false, &no_flags)
 }
 
-/// Add [Content_Types].xml with optional chart/drawing/comment/VBA content types
+/// Add [Content_Types].xml with optional chart/drawing/comment/VBA/table content types
 pub fn add_content_types_ext<W: IoWrite + Seek>(
     zip: &mut ZipWriter<W>,
     sheet_count: usize,
     chart_flags: &[bool],
     comment_flags: &[bool],
     has_vba: bool,
+    table_flags: &[bool],
 ) -> Result<()> {
     let mut xml = String::with_capacity(1024);
     xml.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
@@ -122,6 +123,8 @@ pub fn add_content_types_ext<W: IoWrite + Seek>(
     add_chart_content_types(&mut xml, sheet_count, chart_flags);
     // Comments content types
     add_comment_content_types(&mut xml, comment_flags);
+    // Table content types
+    add_table_content_types(&mut xml, sheet_count, table_flags);
 
     xml.push_str(r#"</Types>"#);
 
@@ -622,10 +625,11 @@ pub fn add_worksheet<W: IoWrite + Seek>(
     sheet: &SheetData,
     options: &WriteOptions,
     has_chart: bool,
+    table_rel_id: Option<u32>,
 ) -> Result<()> {
     let max_row = sheet.rows.len();
     let max_col = sheet.rows.iter().map(|r| r.cells.len()).max().unwrap_or(0);
-    let needs_r_namespace = has_chart || !sheet.hyperlinks.is_empty() || !sheet.comments.is_empty();
+    let needs_r_namespace = has_chart || !sheet.hyperlinks.is_empty() || !sheet.comments.is_empty() || table_rel_id.is_some();
 
     // Build outline lookups
     let col_groups: Vec<(usize, usize, u8, bool)> = sheet.col_groups.iter()
@@ -694,6 +698,10 @@ pub fn add_worksheet<W: IoWrite + Seek>(
         xml.push_str(&sparkline_xml);
     }
 
+    if let Some(rid) = table_rel_id {
+        let _ = write!(xml, r#"<tableParts count="1"><tablePart r:id="rId{}"/></tableParts>"#, rid);
+    }
+
     xml.push_str(r#"</worksheet>"#);
 
     let opts = FileOptions::<()>::default()
@@ -702,7 +710,7 @@ pub fn add_worksheet<W: IoWrite + Seek>(
     zip.write_all(xml.as_bytes())?;
 
     if needs_r_namespace {
-        add_worksheet_rels(zip, idx, has_chart, &sheet.hyperlinks, &sheet.comments)?;
+        add_worksheet_rels(zip, idx, has_chart, &sheet.hyperlinks, &sheet.comments, table_rel_id)?;
     }
     if !sheet.comments.is_empty() {
         add_comments_xml(zip, idx, &sheet.comments)?;
@@ -739,6 +747,87 @@ pub fn add_comment_content_types(xml: &mut String, comment_flags: &[bool]) {
             ));
         }
     }
+}
+
+/// Add content types for tables
+pub fn add_table_content_types(xml: &mut String, _sheet_count: usize, table_flags: &[bool]) {
+    let mut table_idx = 1;
+    for has_tables in table_flags {
+        if *has_tables {
+            xml.push_str(&format!(
+                r#"<Override PartName="/xl/tables/table{}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>"#,
+                table_idx
+            ));
+            table_idx += 1;
+        }
+    }
+}
+
+/// Convert 0-based (row, col) to A1 cell reference (e.g., (0,0) → "A1")
+fn a1_ref(row: usize, col: usize) -> String {
+    format!("{}{}", col_num_to_letter(col + 1), row + 1)
+}
+
+/// Generate and add xl/tables/tableN.xml to the ZIP archive
+pub fn add_table_xml<W: IoWrite + Seek>(
+    zip: &mut ZipWriter<W>,
+    table_global_idx: usize,
+    table: &Table,
+) -> Result<()> {
+    let ref_start = a1_ref(table.start_row, table.start_col);
+    let ref_end = a1_ref(table.end_row, table.end_col);
+
+    let mut xml = String::with_capacity(512);
+    xml.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
+    let _ = write!(
+        xml,
+        r#"<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" name="{}" displayName="{}" ref="{}:{}" totalsRowCount="{}"{}>"#,
+        escape_xml(&table.name),
+        escape_xml(&table.name),
+        ref_start,
+        ref_end,
+        if table.show_totals_row { 1 } else { 0 },
+        if !table.show_filter_button { r#" headerRowCount="0""# } else { "" }
+    );
+
+    // Table columns
+    let col_count = table.end_col.saturating_sub(table.start_col) + 1;
+    let _ = write!(xml, r#"<tableColumns count="{}">"#, col_count);
+    for i in 0..col_count {
+        let name = table
+            .column_names
+            .get(i)
+            .cloned()
+            .unwrap_or_else(|| format!("Column{}", i + 1));
+        let _ = write!(
+            xml,
+            r#"<tableColumn id="{}" name="{}"/>"#,
+            i + 1,
+            escape_xml(&name)
+        );
+    }
+    xml.push_str(r#"</tableColumns>"#);
+
+    // Table style info
+    if let Some(style) = &table.style {
+        let _ = write!(
+            xml,
+            r#"<tableStyleInfo name="{}" showFirstColumn="{}" showLastColumn="{}" showRowStripes="{}" showColumnStripes="{}"/>"#,
+            escape_xml(&style.name),
+            if style.show_first_column { 1 } else { 0 },
+            if style.show_last_column { 1 } else { 0 },
+            if table.show_banded_rows { 1 } else { 0 },
+            if table.show_banded_columns { 1 } else { 0 },
+        );
+    }
+
+    xml.push_str(r#"</table>"#);
+
+    let opts = FileOptions::<()>::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file(format!("xl/tables/table{}.xml", table_global_idx), opts)?;
+    zip.write_all(xml.as_bytes())?;
+    Ok(())
 }
 
 fn generate_data_validation_xml(dv: &super::types::DataValidation) -> String {
@@ -847,6 +936,7 @@ fn add_worksheet_rels<W: IoWrite + Seek>(
     has_chart: bool,
     hyperlinks: &[super::types::Hyperlink],
     comments: &[super::types::CellComment],
+    table_rel_id: Option<u32>,
 ) -> Result<()> {
     let sheet_idx = idx + 1;
     let mut xml = String::with_capacity(512);
@@ -875,6 +965,14 @@ fn add_worksheet_rels<W: IoWrite + Seek>(
         xml.push_str(&format!(
             r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments{}.xml"/>"#,
             rel_id, sheet_idx
+        ));
+        rel_id += 1;
+    }
+
+    if let Some(table_global_idx) = table_rel_id {
+        xml.push_str(&format!(
+            r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table{}.xml"/>"#,
+            rel_id, table_global_idx
         ));
     }
 
