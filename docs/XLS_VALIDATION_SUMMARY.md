@@ -1,5 +1,7 @@
 # XLS Generation and Validation Summary
 
+**Version**: 0.1.11 | **Last updated**: 2026-08-08 | **License**: Apache-2.0
+
 ## Status: ✅ XLS Generation is Working Correctly
 
 The xls-rs XLS writer generates **valid BIFF8 format XLS files** that can be read by:

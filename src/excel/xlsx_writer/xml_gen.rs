@@ -84,22 +84,31 @@ pub fn add_content_types<W: IoWrite + Seek>(
     sheet_count: usize,
 ) -> Result<()> {
     let no_flags = vec![false; sheet_count];
-    add_content_types_ext(zip, sheet_count, &no_flags, &no_flags)
+    add_content_types_ext(zip, sheet_count, &no_flags, &no_flags, false)
 }
 
-/// Add [Content_Types].xml with optional chart/drawing/comment content types
+/// Add [Content_Types].xml with optional chart/drawing/comment/VBA content types
 pub fn add_content_types_ext<W: IoWrite + Seek>(
     zip: &mut ZipWriter<W>,
     sheet_count: usize,
     chart_flags: &[bool],
     comment_flags: &[bool],
+    has_vba: bool,
 ) -> Result<()> {
     let mut xml = String::with_capacity(1024);
     xml.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
     xml.push_str(r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">"#);
     xml.push_str(r#"<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>"#);
     xml.push_str(r#"<Default Extension="xml" ContentType="application/xml"/>"#);
-    xml.push_str(r#"<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>"#);
+    if has_vba {
+        xml.push_str(r#"<Default Extension="bin" ContentType="application/vnd.ms-office.vbaProject"/>"#);
+    }
+    let workbook_ct = if has_vba {
+        "application/vnd.ms-excel.sheet.macroEnabled.main+xml"
+    } else {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
+    };
+    xml.push_str(&format!(r#"<Override PartName="/xl/workbook.xml" ContentType="{}"/>"#, workbook_ct));
     for idx in 0..sheet_count {
         xml.push_str(&format!(
             r#"<Override PartName="/xl/worksheets/sheet{}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>"#,

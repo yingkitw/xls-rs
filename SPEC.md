@@ -1,5 +1,7 @@
 # SPEC
 
+**Version**: 0.1.11 | **Last updated**: 2026-08-08 | **License**: Apache-2.0
+
 ## Project
 
 `xls-rs` provides three capability surfaces built from the same core:
@@ -46,14 +48,15 @@ All three surfaces delegate to the same underlying operations registered in `Cap
 
 ## Error normalization
 
-- Every `ErrorKind` variant has a stable string `code()` for programmatic matching (e.g., `column_not_found`, `invalid_cell_ref`, `unsupported_format`).
+- Every `ErrorKind` variant has a stable string `code()` for programmatic matching (e.g., `column_not_found`, `invalid_cell_ref`, `unsupported_format`). See [`MEMORY.md`](MEMORY.md#security-considerations) for security-related error handling.
 - CLI prints human-friendly messages; MCP embeds the same code in JSON-RPC `error.data`.
 - `mcp_error_data` enriches errors with request context (input/output paths, sheet, range, cell) and heuristics parsed from the error text.
 
 ## Non-functional requirements
 
 - **Rust edition**: 2024
-- **Quality gates**: `cargo build` and `cargo test` must pass.
+- **Minimum supported Rust version**: 1.70+ (see `Cargo.toml`)
+- **Quality gates**: `cargo build` and `cargo test` must pass. See [`MEMORY.md`](MEMORY.md#testing-patterns) for testing conventions.
 - **Cross-platform**: should work on macOS/Linux/Windows (where dependencies allow).
-- **Safety**: CSV formula-injection sanitization on all write paths; overwrite guards; path traversal prevention.
+- **Safety**: CSV formula-injection sanitization on all write paths; overwrite guards; path traversal prevention. See [`MEMORY.md`](MEMORY.md#security-considerations) for security patterns.
 

@@ -1,5 +1,7 @@
 # xls-rs
 
+**Version**: 0.1.11 | **Last updated**: 2026-08-08
+
 <!-- SEO/GEO: Rust spreadsheet tool, XLSX writer, Excel CLI, CSV converter, MCP server -->
 
 **xls-rs is a Rust spreadsheet CLI, library, and Model Context Protocol (MCP) server for reading, writing, converting, and analyzing Excel (XLSX/XLS), CSV, ODS, Parquet, and Avro files.** It combines pandas-style data operations, Excel formula evaluation, native XLSX authoring, streaming CSV processing, and data-quality tools — all without requiring Microsoft Excel, Python, or a JVM.
@@ -7,7 +9,7 @@
 [![Crates.io](https://img.shields.io/crates/v/xls-rs.svg)](https://crates.io/crates/xls-rs)
 [![Documentation](https://docs.rs/xls-rs/badge.svg)](https://docs.rs/xls-rs)
 [![License](https://img.shields.io/crates/l/xls-rs.svg)](#license)
-[![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust 1.70+](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
 
 ```bash
 cargo install xls-rs
@@ -65,20 +67,23 @@ For operation-level parity across the library, CLI, and MCP surfaces, see [`TODO
 The legacy `.xls` format (Microsoft Compound File Binary container + BIFF8 records) is implemented in pure Rust using only the standard library. No `zip`, no external file-format crates, and no platform-specific code are used in the write path.
 
 ```rust
-use xls_rs::{XlsRowData, XlsWriter};
+use xls_rs::XlsWriter;
 
-let mut w = XlsWriter::new();
-w.add_sheet("People")?;
-let mut header = XlsRowData::new();
-header.add_string("Name");
-header.add_string("Age");
-w.add_row(header);
-let mut row = XlsRowData::new();
-row.add_string("Alice");
-row.add_number(30.0);
-row.add_bool(true);
-w.add_row(row);
-w.save("people.xls")?;
+fn main() -> anyhow::Result<()> {
+    let mut w = XlsWriter::new();
+    w.add_sheet("People")?;
+    let mut header = XlsRowData::new();
+    header.add_string("Name");
+    header.add_string("Age");
+    w.add_row(header);
+    let mut row = XlsRowData::new();
+    row.add_string("Alice");
+    row.add_number(30.0);
+    row.add_bool(true);
+    w.add_row(row);
+    w.save("people.xls")?;
+    Ok(())
+}
 ```
 
 Currently supported: multiple sheets (31-char names, validated), strings (ASCII + UTF-16, including astral codepoints), numbers (`f64`), booleans, basic formulas (cell references, ranges, `+ - * / ^`, comparisons, function calls for SUM/AVERAGE/MIN/MAX/COUNT/IF/ABS/ROUND/IFERROR/VLOOKUP/etc.), column widths, and auto-fit. The output is verified to round-trip through our native `XlsReader` and any standard BIFF8 reader.
@@ -142,9 +147,9 @@ xls-rs filter --input sales.csv --output premium.csv --where-clause "Price > 100
 ### Use xls-rs as a Rust spreadsheet library
 
 ```rust
-use xls_rs::{Converter, DataOperations};
+use xls_rs::DataOperations;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let converter = Converter::new();
     let data = converter
         .read_any_data("sales.csv", None)
@@ -155,6 +160,7 @@ fn main() {
         .expect("failed to describe data");
 
     println!("{summary:#?}");
+    Ok(())
 }
 ```
 
@@ -163,9 +169,12 @@ Convert between supported formats with the library API:
 ```rust
 use xls_rs::Converter;
 
-Converter::new()
-    .convert("sales.csv", "sales.xlsx", None)
-    .expect("conversion failed");
+fn main() -> anyhow::Result<()> {
+    Converter::new()
+        .convert("sales.csv", "sales.xlsx", None)
+        .expect("conversion failed");
+    Ok(())
+}
 ```
 
 ## Capabilities
@@ -353,17 +362,26 @@ The current package metadata requires Rust 1.88 or newer. Edition 2024.
 
 ## Development
 
+See [`AGENTS.md`](AGENTS.md) for the development workflow and [`MEMORY.md`](MEMORY.md) for patterns and conventions.
+
 ```bash
-cargo test
-cargo clippy --all-targets --all-features
-cargo bench --bench performance
+cargo test                  # all unit tests + integration tests
+cargo test --examples       # examples compile and run
+cargo clippy --all-targets --all-features                # lint pass (warnings acceptable but noted)
+cargo bench --bench performance  # performance benchmarks
 ```
+
+### Contributing
+
+We welcome contributions! Please see [`AGENTS.md`](AGENTS.md) for development guidelines and [`MEMORY.md`](MEMORY.md) for proven patterns. All changes should include tests and follow the established conventions for code style, error handling, and documentation.
 
 Additional project documentation:
 
 - [Architecture](ARCHITECTURE.md)
 - [Technical specification](SPEC.md)
 - [Roadmap and capability parity](TODO.md)
+- [Development patterns and memory](MEMORY.md)
+- [Agent development workflow](AGENTS.md)
 
 ## License
 

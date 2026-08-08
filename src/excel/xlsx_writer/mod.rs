@@ -25,6 +25,7 @@
 use anyhow::Result;
 use std::io::{Seek, Write};
 use zip::ZipWriter;
+use zip::write::FileOptions;
 
 mod types;
 mod xml_gen;
@@ -61,6 +62,7 @@ pub struct XlsxWriter {
     /// caller register a style under a stable name once and reference
     /// it from cells written anywhere.
     named_formats: std::collections::BTreeMap<String, u32>,
+    vba_project: Option<Vec<u8>>,
 }
 
 impl XlsxWriter {
@@ -75,6 +77,7 @@ impl XlsxWriter {
             chart_configs: Vec::new(),
             styles: StyleRegistry::new(),
             named_formats: std::collections::BTreeMap::new(),
+            vba_project: None,
         }
     }
 
@@ -262,6 +265,13 @@ impl XlsxWriter {
         }
     }
 
+    /// Set VBA project bytes (from `xl/vbaProject.bin`). When set,
+    /// the output file will be macro-enabled (`.xlsm`) with the
+    /// appropriate content types.
+    pub fn set_vba_project(&mut self, data: Vec<u8>) {
+        self.vba_project = Some(data);
+    }
+
     /// Save the workbook to a writer
     pub fn save<W: Write + Seek>(&self, mut writer: W) -> Result<()> {
         let mut zip = ZipWriter::new(&mut writer);
@@ -273,7 +283,7 @@ impl XlsxWriter {
         let comment_flags: Vec<bool> = self.sheets.iter().map(|s| !s.comments.is_empty()).collect();
 
         // Add [Content_Types].xml (with chart/comment content types if needed)
-        add_content_types_ext(&mut zip, self.sheets.len(), &chart_flags, &comment_flags)?;
+        add_content_types_ext(&mut zip, self.sheets.len(), &chart_flags, &comment_flags, self.vba_project.is_some())?;
 
         // Add _rels/.rels
         add_rels(&mut zip)?;
@@ -301,6 +311,14 @@ impl XlsxWriter {
 
         // Add xl/theme/theme1.xml
         add_theme(&mut zip)?;
+
+        // Add VBA project if present (macro-enabled .xlsm)
+        if let Some(vba) = &self.vba_project {
+            let opts = FileOptions::<()>::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("xl/vbaProject.bin", opts)?;
+            zip.write_all(vba)?;
+        }
 
         zip.finish()?;
         writer.flush()?;

@@ -1,5 +1,13 @@
 # ARCHITECTURE
 
+**Version**: 0.1.11 | **Last updated**: 2026-08-08 | **License**: Apache-2.0
+
+## Table of Contents
+- [High level](#high-level)
+- [Key modules](#key-modules)
+- [Data flow](#data-flow)
+- [Testing layout](#testing-layout)
+
 ## High level
 
 This repository builds:
@@ -11,7 +19,7 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 
 ## Key modules
 
-### I/O layer
+### I/O Layer
 
 - `src/csv_handler.rs`: CSV read/write with formula-injection sanitization (`sanitize_csv_row` / `write_records_safe`).
 - `src/excel/`: Excel read (native readers for `.xlsx`, `.xls`, and `.ods`) + write (`XlsxWriter`, `StreamingXlsxWriter`, `XlsWriter`). Includes `WriteMode` (Expand/Preserve/Overwrite). Writer supports charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping (outline), freeze panes, and auto-filter. XLSX writer is modular: `xml_gen.rs` (worksheet/styles XML), `style_registry.rs` (cell style registry), `cond_fmt_xml.rs` (conditional formatting XML), `sparkline_xml.rs` (sparkline XML), `chart_xml.rs` (chart XML), `types.rs` (data types), `streaming.rs` (streaming writer). **XLS (BIFF8) write path is implemented from scratch in `src/excel/xls_writer/`** — see below.
@@ -20,7 +28,7 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 - `src/converter.rs`: `Converter` — format-agnostic entry point that routes to the correct handler by extension.
 - `src/handler_registry.rs`: Maps file extensions to `DataReader` / `DataWriter` implementations.
 
-### Operations layer
+### Operations Layer
 
 - `src/operations/`: pandas-style operations — sort, filter, join, concat, groupby, pivot, melt, rolling, crosstab, transpose, select, dedupe, sample, clip, normalize, zscore, fillna, dropna, rename, drop, mutate, astype, unique, value-counts, corr (Pearson & Spearman), describe (with percentiles, skewness, kurtosis), simple linear regression (`regress`), head, tail, info, dtypes.
 - `src/formula/`: Excel formula parsing and evaluation (`FormulaEvaluator`).
@@ -32,24 +40,24 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 - `src/timeseries.rs`: Temporal resampling, rolling aggregates, trend detection.
 - `src/geospatial.rs`: Coordinate parsing and distance/bearing calculations.
 
-### Capabilities layer
+### Capabilities Layer
 
 - `src/capabilities/`: Individual capability implementations (`SortCapability`, `ReadExcelCapability`, `ApplyFormulaCapability`, `ConvertCapability`, `FilterCapability`, etc.).
 - `src/capability_catalog.rs`: Static catalog of operations + formats; used for parity tracking between library / CLI / MCP.
 - `src/capabilities/registry.rs`: `CapabilityRegistry` — runtime registry that MCP tools and CLI handlers call into.
 
-### Streaming layer
+### Streaming Layer
 
 - `src/streaming.rs`: Core streaming traits (`StreamingDataReader`, `StreamingDataWriter`) + `CsvStreamingReader` for chunked CSV I/O.
 - `src/streaming_ops.rs`: Schema inference (`infer_schema`), `head`, `tail`, `get_info` without loading entire datasets.
 
-### Server layer
+### Server Layer
 
 - `src/mcp.rs`: `XlsRsMcpServer` — MCP tool definitions and routing to `CapabilityRegistry`.
 - `src/mcp_enrichment.rs`: Builds structured `error.data` with request context and stable error codes.
 - `src/api.rs`: Optional HTTP API server (`--features api`) with `POST /api/read`.
 
-### Support layer
+### Support Layer
 
 - `src/error.rs` / `src/error_traits.rs`: `XlsRsError`, `ErrorKind`, stable error codes, and trait-based error categorization.
 - `src/config.rs`: TOML config discovery and typed `Config` struct (includes `google_sheets.access_token`, `default_format`, etc.).

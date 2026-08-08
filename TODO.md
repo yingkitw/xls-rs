@@ -1,16 +1,36 @@
 # TODO
 
+**Version**: 0.1.11 | **Last updated**: 2026-08-08 | **License**: Apache-2.0
+
+## Table of Contents
+- [North star](#north-star)
+- [Parity work (library ↔ CLI ↔ MCP)](#parity-work-library--cli--mcp)
+- [XLS/XLSX manipulation (core)](#xlsxlsx-manipulation-core)
+- [Format coverage & fidelity](#format-coverage--fidelity)
+- [CLI UX & reliability](#cli-ux--reliability)
+- [MCP server (tooling completeness)](#mcp-server-tooling-completeness)
+- [Performance & large files](#performance--large-files)
+- [Safety & correctness](#safety--correctness)
+- [Testing & fixtures](#testing--fixtures)
+- [API server (`--features api`)](#api-server---features-api)
+- [Google Sheets](#google-sheets)
+- [Workflow](#workflow)
+- [Styled Excel export](#styled-excel-export)
+- [Competitive capabilities (gaps vs. popular tools)](#competitive-capabilities-gaps-vs-popular-tools)
+- [Maintainability (XLSX writer refactoring)](#maintainability-xlsx-writer-refactoring)
+- [Hygiene](#hygiene)
+
 ## North star
 
-- [ ] Maintain **capability parity** across **library** (`xls_rs`), **CLI** (`xls-rs`), and **MCP server** (`XlsRsMcpServer`) so the same operations and formats are available everywhere with consistent semantics, errors, and defaults.
+- [ ] Maintain **capability parity** across **library** (`xls_rs`), **CLI** (`xls-rs`), and **MCP server** (`XlsRsMcpServer`) so the same operations and formats are available everywhere with consistent semantics, errors, and defaults. See [`MEMORY.md`](MEMORY.md) for proven patterns and domain knowledge.
 
 ## Parity work (library ↔ CLI ↔ MCP)
 
-- [x] Define a single “capability catalog” (operations + I/O formats + options) and track parity gaps. (`src/capability_catalog.rs`)
+- [x] Define a single "capability catalog" (operations + I/O formats + options) and track parity gaps. (`src/capability_catalog.rs`) - See [`MEMORY.md`](MEMORY.md#cli-mcp-patterns) for CLI/MCP patterns.
 - [x] Ensure every CLI command maps 1:1 to a library entry point (no hidden behavior in CLI). — All commands now delegate to `IoCommandHandler`, `TransformCommandHandler`, `PandasCommandHandler`, or `AdvancedCommandHandler`.
 - [x] Every MCP tool delegates to `CapabilityRegistry::execute` (same entry points as capabilities; error wrapping in `src/mcp.rs` + `src/mcp_enrichment.rs`).
 - [x] Normalize error surface:
-  - [x] Stable error codes/messages for CLI + MCP (same root causes, same wording) (`ErrorKind::code`, `mcp_error_data`)
+  - [x] Stable error codes/messages for CLI + MCP (same root causes, same wording) (`ErrorKind::code`, `mcp_error_data`) - See [`MEMORY.md`](MEMORY.md#cli-mcp-patterns) for error handling patterns.
   - [x] Structured MCP error payloads with actionable fields (file, sheet, range, cell, I/O paths)
     - [x] JSON-RPC `error.data` with `kind` / `detail` on tool failures (`src/mcp.rs`)
     - [x] Rich fields: request context (input/output/sheet/range/cell) plus heuristics from error text (`src/mcp_enrichment.rs`)
@@ -19,11 +39,11 @@
   - [x] CLI command (smoke) (`tests/test_parity_smoke.rs`)
   - [x] CLI read format + config (`tests/test_cli_read_format.rs`)
   - [x] Capability registry (same code path as MCP tools) (`tests/test_mcp_registry.rs`)
-  - [x] compare normalized outputs for deterministic parity (`tests/test_excel_parity.rs` — `test_read_range_normalized_parity_cli_vs_library`)
+  - [x] compare normalized outputs for deterministic parity (`tests/test_excel_parity.rs` — `test_read_range_normalized_parity_cli_vs_library`) - See [`MEMORY.md`](MEMORY.md#testing-patterns) for round-trip test patterns.
 
 ## XLS/XLSX manipulation (core)
 
-- [x] **Native XLS (BIFF8) write from scratch** — implemented in `src/excel/xls_writer/` using only `std` (no `zip`, no external dependencies for the write path). Produces valid OLE2 / CFB containers with BIFF8 records. Supports multiple sheets, strings (ASCII + UTF-16, including astral codepoints), numbers, booleans, basic formulas (refs, ranges, arithmetic, comparisons, ~25 common functions), column widths, and auto-fit. Round-trips through native `XlsReader`. Wired into `Converter::convert` for `*.xls` outputs and `ExcelHandler::write_xls` for the library API. CLI: `xls-rs convert --input foo.csv --output foo.xls`. Example: `examples/write_xls.rs`. 32 tests pass (20 unit + 12 integration).
+- [x] **Native XLS (BIFF8) write from scratch** — implemented in `src/excel/xls_writer/` using only `std` (no `zip`, no external dependencies for the write path). Produces valid OLE2 / CFB containers with BIFF8 records. Supports multiple sheets, strings (ASCII + UTF-16, including astral codepoints), numbers, booleans, basic formulas (refs, ranges, arithmetic, comparisons, ~25 common functions), column widths, and auto-fit. Round-trips through native `XlsReader`. Wired into `Converter::convert` for `*.xls` outputs and `ExcelHandler::write_xls` for the library API. CLI: `xls-rs convert --input foo.csv --output foo.xls`. Example: `examples/write_xls.rs`. 32 tests pass (20 unit + 12 integration). See [`MEMORY.md`](MEMORY.md#excel-format-patterns) for BIFF8 patterns.
 - [x] **Native XLS (BIFF8) read from scratch** — implemented in `src/excel/xls_reader/` using only `std`. Parses CFB/BIFF8 format and returns structured cell data with full API compatibility. Supports strings, numbers, booleans, formulas, empty cells, and RK compressed numbers. Integrated into `ExcelHandler` for automatic `.xls` file handling. Verified end-to-end with native writer (write → read → convert). 11 unit tests pass.
   - [x] Range reads: CLI `read --range` and HTTP `api` read use `CellRange` + `filter_by_range` (same helper as columnar paths)
   - [x] Range reads identical across all backends where semantics differ today (`read_sheet_data` returns `Vec<Vec<String>>` directly for XLSX/XLS/ODS without CSV serialization round-trip; `read_range` also returns structured data)
@@ -32,10 +52,10 @@
     - [x] CSV / Parquet / Avro: no sheet concept; `sheet` parameter gracefully ignored
 - [x] **Write parity**:
   - [x] XLSX writer: formulas/styles/charts/sparklines/condfmt APIs reachable from CLI + MCP (`write_styled`, `add_chart`, `add_sparkline`, `conditional_format` capabilities + MCP tools)
-  - [x] Cell typing rules (number/date/string/empty) consistent across writers (`classify_cell` / `add_cell_to_row` used by `XlsxWriter`, `StreamingXlsxWriter`, and `ExcelHandler` write paths)
+  - [x] Cell typing rules (number/date/string/empty) consistent across writers (`classify_cell` / `add_cell_to_row` used by `XlsxWriter`, `StreamingXlsxWriter`, and `ExcelHandler` write paths) - See [`MEMORY.md`](MEMORY.md#cell-type-inference-and-formatting-preservation).
 - [x] **Edit operations** (in-place style transforms):
-  - [x] “apply formula” to a range (not just a single cell)
-  - [x] “write range” that can expand sheet bounds safely (`ExcelHandler::write_range_expand`)
+  - [x] "apply formula" to a range (not just a single cell)
+  - [x] "write range" that can expand sheet bounds safely (`ExcelHandler::write_range_expand`)
   - [x] preserve/overwrite behavior explicitly configurable (`WriteMode::Preserve/Overwrite/Expand`; CLI `--mode` on `write-range`)
 
 ## Format coverage & fidelity
@@ -49,7 +69,7 @@
   - [x] `.avro`
 - [x] Ensure round-trip expectations are tested:
   - [x] CSV → XLSX → CSV (`tests/test_converter.rs` — `test_roundtrip_csv_xlsx_csv_data_preserved`)
-  - [x] XLSX → Parquet/Avro → CSV (`test_roundtrip_xlsx_parquet_csv_preserves_grid`, `test_roundtrip_xlsx_avro_csv_preserves_grid`)
+  - [x] XLSX → Parquet/Avro → CSV (`test_roundtrip_xlsx_parquet_csv_preserves_grid`, `test_roundtrip_xlsx_avro_csv_preserves_grid`) - See [`MEMORY.md`](MEMORY.md#round-trip-test-structure).
 - [x] Add explicit constraints for unsupported features (merged cells, pivot tables, etc.) and fail with clear errors.
   - [x] Documented high-level limitations in README (“Read limitations”)
   - [x] XLSX: `FeatureDetector::detect_potential_issues` scans the zip (worksheets, charts) and returns structured `UnsupportedFeature` values; use with `validate_for_write` or custom reporting. Optional stricter “fail on read” mode still open.
@@ -125,13 +145,13 @@
 
 - [x] CLI `export-styled` presets: `default`, `minimal`, `report`, `executive` / `corporate`.
 
-## Competitive capabilities (gaps vs. popular tools)
+## Competitive Capabilities (Gaps vs. Popular Tools)
 
-### Excel fidelity (openpyxl / excelize / SheetJS gaps)
+### Excel Fidelity (openpyxl / excelize / SheetJS Gaps)
 
 - [x] **Template-based generation**: Read an existing `.xlsx` as a template, fill data into named ranges / placeholder cells, write back. Implemented in `src/excel/template/` with `TemplateReader` (detects `{{placeholder}}` cells via native XLSX reader) and `TemplateFiller` (replaces placeholders and writes via `XlsxWriter`). API: `TemplateFiller::fill_from_file(template, output, &values, sheet)`. 7 unit tests pass.
-- [ ] **Read existing styles / images / charts**: Currently we write styles/charts but cannot read them back from existing files. Needed for template workflows and round-trip fidelity.
-- [ ] **`.xlsm` (macro-enabled) read/write**: Preserve VBA macros on copy/edit. openpyxl supports this in "keep_vba" mode; SheetJS preserves `vbaProject.bin`.
+- [x] **Read existing styles**: Implemented XLSX style reading via `src/excel/xlsx_style_reader.rs` — parses `styles.xml` (fonts, fills, borders, numFmts, cellXfs, alignment) into `XlsxStyleTable`. Integrated into `XlsxReader` with `cell_style(sheet, row, col) -> Option<XlsxCellStyle>` API. 11 unit tests + 7 integration tests (round-trip write→read→verify) pass. Images and charts reading still pending.
+- [x] **`.xlsm` (macro-enabled) read/write**: Preserve VBA macros on copy/edit. `XlsxReader::vba_project()` reads `xl/vbaProject.bin`; `XlsxWriter::set_vba_project()` writes it back with macro-enabled content types. 5 integration tests pass.
 - [ ] **Password-protected Excel**: Support reading `.xlsx` encrypted with a password (msoffcrypto-style). Excelize and openpyxl both support this.
 - [ ] **Excel structured tables**: Read/write `Table` objects (auto-expanding ranges with headers, total rows, banded rows). openpyxl has full `Table` support.
 - [x] **Freeze panes**: Set freeze rows/columns on write (`freeze_header` in `WriteOptions`, generates `<pane ySplit="1" state="frozen"/>`).
@@ -145,7 +165,7 @@
 - [ ] **Slicers / timelines**: Write Excel UI slicers connected to tables / pivot tables. Excelize advanced feature.
 - [ ] **Pivot charts**: Charts bound to pivot tables (distinct from regular charts). openpyxl.
 
-### Performance & scale (xsv / polars / duckdb gaps)
+### Performance & Scale (xsv / polars / duckdb Gaps)
 
 **Memory safety mitigations (2026-07)**:
 - [x] **Dense-grid OOM guards**: XLSX/XLS readers clamp densified sheet dimensions (`src/limits.rs` `MAX_DENSE_CELLS`) so a far-corner cell ref cannot allocate a full Excel matrix.
@@ -174,7 +194,7 @@ Still open:
 - [ ] **Parallel Excel reading**: Multi-threaded sheet parsing (one thread per worksheet or chunk). Polars parallelizes Parquet/CSV reads; Excel is harder but feasible per-sheet.
 - [ ] **Incremental Excel append**: Append rows to an existing `.xlsx` without rewriting the entire ZIP archive. Currently we rewrite the whole file. openpyxl supports true append for some operations.
 
-### SQL & query engine (q / duckdb / csvkit gaps)
+### SQL & Query Engine (q / duckdb / csvkit Gaps)
 
 - [ ] **DuckDB-style SQL on files**: Embed a lightweight SQL engine (or call DuckDB via FFI) to run `SELECT * FROM 'sales.csv' WHERE amount > 100`. `q` tool and `duckdb` CLI are the gold standard here.
 - [ ] **Window functions**: `ROW_NUMBER()`, `RANK()`, `LEAD()`, `LAG()`, `NTILE()` over ordered partitions. Standard SQL / polars / pandas feature.
@@ -182,7 +202,7 @@ Still open:
 - [ ] **SQL JOIN across files**: `JOIN` two CSV/Excel files by a key column in SQL. csvsql / duckdb do this.
 - [ ] **Fuzzy join / record linkage**: Approximate string matching joins (e.g., join on "Company Name" with typos). Python `fuzzywuzzy` / `recordlinkage` libraries; no good Rust equivalent yet.
 
-### Format coverage (polars / miller / csvkit gaps)
+### Format Coverage (polars / miller / csvkit Gaps)
 
 - [ ] **JSON / JSONLines first-class**: Native read/write with nested flattening/unflattening. `xsv` has `json` subcommand; `mlr` (miller) is excellent here. Currently only partial JSON support.
 - [ ] **YAML read/write**: Read YAML as tabular (with dot-path flattening) and write YAML. `dasel` / `yq` territory.
@@ -197,7 +217,7 @@ Still open:
 - [x] **HTML table export**: Basic HTML table output via `--format html` on `read`, `head`, `tail`, `describe`, and other inspect commands. Rich CSS styling still open.
 - [ ] **LaTeX table export**: Academic paper tables. pandas `to_latex`.
 
-### Interactive & UX (visidata / Tad / xsv gaps)
+### Interactive & UX (visidata / Tad / xsv Gaps)
 
 - [ ] **REPL / interactive mode**: Drop into an interactive shell (`xls-rs repl`) where you can chain operations and inspect intermediate results. Like `visidata` or a lightweight `ipython` for spreadsheets.
 - [ ] **TUI data explorer**: Terminal UI with arrow-key navigation, sorting, filtering, column selection. `visidata` / `tad` are the benchmarks.

@@ -10,6 +10,7 @@ pub mod xls_writer;
 pub mod xls_reader;
 pub mod xlsx_writer;
 pub mod xlsx_reader;
+pub mod xlsx_style_reader;
 pub mod ods_reader;
 pub mod template;
 
@@ -31,3 +32,4 @@ pub use xlsx_writer::{
     style_registry::{SharedStrings, StyleRegistry},
 };
 pub use template::{PlaceholderInfo, TemplateData, TemplateFiller, TemplateReader};
+pub use xlsx_style_reader::XlsxStyleTable;

@@ -69,7 +69,7 @@ pub use excel::{
     PageOrientation, PlaceholderInfo, PrintSetup, RowData, RowGroup, SharedStrings, Sparkline,
     SparklineGroup, SparklineType, StreamingXlsxWriter, StyleRegistry, TemplateData, TemplateFiller,
     TemplateReader, UnsupportedFeature, ValidationType, WriteMode, WriteOptions, XlsRowData,
-    XlsSheetData, XlsWriter, XlsxCellStyle, XlsxWriter,
+    XlsSheetData, XlsWriter, XlsxCellStyle, XlsxStyleTable, XlsxWriter,
 };
 pub use format_detector::DefaultFormatDetector;
 pub use formula::{FormulaEvaluator, FormulaResult};

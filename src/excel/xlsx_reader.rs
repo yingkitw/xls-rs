@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::io::Read;
 use zip::ZipArchive;
 
+use super::xlsx_style_reader::XlsxStyleTable;
+
 /// Cell value types for XLSX reading.
 #[derive(Debug, Clone)]
 pub enum XlsxCellValue {
@@ -41,6 +43,8 @@ impl XlsxCellValue {
 pub struct XlsxSheetData {
     pub name: String,
     pub cells: Vec<Vec<XlsxCellValue>>,
+    /// Per-cell style index (the `s` attribute on `<c>`), keyed by (row, col).
+    pub style_indices: HashMap<(u32, u16), u32>,
 }
 
 impl XlsxSheetData {
@@ -48,6 +52,7 @@ impl XlsxSheetData {
         Self {
             name: name.into(),
             cells: Vec::new(),
+            style_indices: HashMap::new(),
         }
     }
 
@@ -70,21 +75,26 @@ impl XlsxSheetData {
             .and_then(|r| r.get(col))
             .unwrap_or(&XlsxCellValue::Empty)
     }
+
+    /// Get the style index (`s` attribute) for a cell, if any.
+    pub fn cell_style_index(&self, row: u32, col: u16) -> Option<u32> {
+        self.style_indices.get(&(row, col)).copied()
+    }
 }
 
 /// Minimal XML scanner for extracting data from well-formed XLSX XML.
-struct XmlScanner<'a> {
-    data: &'a [u8],
-    pos: usize,
+pub(crate) struct XmlScanner<'a> {
+    pub(crate) data: &'a [u8],
+    pub(crate) pos: usize,
 }
 
 impl<'a> XmlScanner<'a> {
-    fn new(data: &'a [u8]) -> Self {
+    pub(crate) fn new(data: &'a [u8]) -> Self {
         Self { data, pos: 0 }
     }
 
     /// Skip whitespace and XML declarations/comments.
-    fn skip_whitespace(&mut self) {
+    pub(crate) fn skip_whitespace(&mut self) {
         while self.pos < self.data.len() {
             match self.data[self.pos] {
                 b' ' | b'\t' | b'\n' | b'\r' => self.pos += 1,
@@ -94,7 +104,7 @@ impl<'a> XmlScanner<'a> {
     }
 
     /// Skip XML declaration <?xml ... ?>
-    fn skip_declaration(&mut self) {
+    pub(crate) fn skip_declaration(&mut self) {
         self.skip_whitespace();
         if self.pos + 5 <= self.data.len() && &self.data[self.pos..self.pos + 5] == b"<?xml"
             && let Some(end) = self.find_from(b"?>", self.pos) {
@@ -115,7 +125,7 @@ impl<'a> XmlScanner<'a> {
         }
     }
 
-    fn find_from(&self, needle: &[u8], from: usize) -> Option<usize> {
+    pub(crate) fn find_from(&self, needle: &[u8], from: usize) -> Option<usize> {
         if needle.is_empty() || from >= self.data.len() {
             return None;
         }
@@ -130,7 +140,7 @@ impl<'a> XmlScanner<'a> {
 
     /// Find the next opening tag with the given local name.
     /// Returns the position right after the tag name start, or None.
-    fn find_open_tag(&mut self, local_name: &str) -> Option<usize> {
+    pub(crate) fn find_open_tag(&mut self, local_name: &str) -> Option<usize> {
         let name_bytes = local_name.as_bytes();
         while self.pos < self.data.len() {
             // Find '<'
@@ -181,7 +191,7 @@ impl<'a> XmlScanner<'a> {
         None
     }
 
-    fn find_colon_in_tag(&self, start: usize) -> Option<usize> {
+    pub(crate) fn find_colon_in_tag(&self, start: usize) -> Option<usize> {
         let mut i = start;
         while i < self.data.len() {
             let c = self.data[i];
@@ -198,7 +208,7 @@ impl<'a> XmlScanner<'a> {
 
     /// Get the tag name at the current position (after '<').
     /// Returns the full tag name including namespace prefix.
-    fn read_tag_name(&self, start: usize) -> String {
+    pub(crate) fn read_tag_name(&self, start: usize) -> String {
         let mut end = start;
         while end < self.data.len() {
             let c = self.data[end];
@@ -210,9 +220,42 @@ impl<'a> XmlScanner<'a> {
         String::from_utf8_lossy(&self.data[start..end]).to_string()
     }
 
+    /// Find the next opening tag of any name. Returns (tag_name, tag_start_pos).
+    /// Skips closing tags, declarations, and comments.
+    pub(crate) fn find_any_open_tag(&mut self) -> Option<(String, usize)> {
+        while self.pos < self.data.len() {
+            if self.data[self.pos] != b'<' {
+                self.pos += 1;
+                continue;
+            }
+            if self.pos + 1 < self.data.len() {
+                let next = self.data[self.pos + 1];
+                if next == b'/' || next == b'?' || next == b'!' {
+                    self.pos += 1;
+                    continue;
+                }
+            }
+            let tag_start = self.pos + 1;
+            let tag_name = self.read_tag_name(tag_start);
+            if !tag_name.is_empty() {
+                self.pos = tag_start;
+                return Some((tag_name, tag_start));
+            }
+            self.pos += 1;
+        }
+        None
+    }
+
+    /// Find the position of the next closing tag `</local_name>`.
+    /// Returns the position of the '<' in `</tag>`, or None.
+    pub(crate) fn find_close_tag(&self, local_name: &str, from: usize) -> Option<usize> {
+        let close = format!("</{}", local_name);
+        self.find_from(close.as_bytes(), from)
+    }
+
     /// Parse attributes from a tag. Starts after the tag name.
     /// Returns a map of (local_name -> value) and the end position.
-    fn parse_attributes(&self, attr_start: usize) -> (HashMap<String, String>, usize) {
+    pub(crate) fn parse_attributes(&self, attr_start: usize) -> (HashMap<String, String>, usize) {
         let mut attrs = HashMap::with_capacity(8);
         let mut pos = attr_start;
 
@@ -279,7 +322,7 @@ impl<'a> XmlScanner<'a> {
 
     /// Extract text content between current position and the closing tag.
     /// Assumes we're positioned right after the opening tag's '>'.
-    fn read_text_until_close(&mut self, local_name: &str) -> String {
+    pub(crate) fn read_text_until_close(&mut self, local_name: &str) -> String {
         let text_start = self.pos;
         // Find closing tag </...local_name>
         // We need to find the matching close tag, handling nesting
@@ -377,7 +420,7 @@ impl<'a> XmlScanner<'a> {
 
     /// Skip past the current opening tag (from '<' to '>' or '/>').
     /// Positions right after the '>' or '/>'.
-    fn skip_open_tag(&mut self) {
+    pub(crate) fn skip_open_tag(&mut self) {
         while self.pos < self.data.len() {
             let c = self.data[self.pos];
             if c == b'>' {
@@ -402,7 +445,7 @@ impl<'a> XmlScanner<'a> {
 
     /// Check if the tag at current position is self-closing.
     /// Call this right after find_open_tag returns.
-    fn is_self_closing(&self, tag_name_start: usize) -> bool {
+    pub(crate) fn is_self_closing(&self, tag_name_start: usize) -> bool {
         // Scan from tag name start to find '/>' or '>'
         let mut pos = tag_name_start;
         while pos < self.data.len() {
@@ -427,7 +470,7 @@ impl<'a> XmlScanner<'a> {
     }
 }
 
-fn xml_unescape(s: &str) -> String {
+pub(crate) fn xml_unescape(s: &str) -> String {
     if !s.contains('&') {
         return s.to_string();
     }
@@ -460,11 +503,13 @@ fn parse_cell_ref(ref_str: &str) -> (u32, u16) {
 /// XLSX workbook reader.
 pub struct XlsxReader {
     sheets: Vec<XlsxSheetData>,
+    styles: XlsxStyleTable,
+    vba_project: Option<Vec<u8>>,
 }
 
 impl XlsxReader {
     pub fn new() -> Self {
-        Self { sheets: Vec::new() }
+        Self { sheets: Vec::new(), styles: XlsxStyleTable::default(), vba_project: None }
     }
 
     /// Read an XLSX file from a path.
@@ -484,6 +529,9 @@ impl XlsxReader {
     fn from_archive<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>) -> Result<Self> {
         // Read shared strings
         let shared_strings = Self::read_shared_strings(archive)?;
+
+        // Read styles
+        let styles = Self::read_styles(archive);
 
         // Read workbook.xml to get sheet names and r:ids
         let workbook_xml = Self::read_zip_entry(archive, "xl/workbook.xml")
@@ -507,11 +555,27 @@ impl XlsxReader {
             };
             let sheet_xml = Self::read_zip_entry(archive, &sheet_path)
                 .with_context(|| format!("Failed to read sheet XML: {}", sheet_path))?;
-            let cells = Self::parse_sheet(&sheet_xml, &shared_strings);
-            sheets.push(XlsxSheetData::new(name.clone()).tap_cells(cells));
+            let (cells, style_indices) = Self::parse_sheet(&sheet_xml, &shared_strings);
+            let mut sheet = XlsxSheetData::new(name.clone());
+            sheet.cells = cells;
+            sheet.style_indices = style_indices;
+            sheets.push(sheet);
         }
 
-        Ok(Self { sheets })
+        // Read VBA project if present (macro-enabled .xlsm)
+        let vba_project = match Self::read_zip_entry(archive, "xl/vbaProject.bin") {
+            Ok(data) => Some(data),
+            Err(_) => None,
+        };
+
+        Ok(Self { sheets, styles, vba_project })
+    }
+
+    fn read_styles<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>) -> XlsxStyleTable {
+        match Self::read_zip_entry(archive, "xl/styles.xml") {
+            Ok(data) => XlsxStyleTable::parse(&data),
+            Err(_) => XlsxStyleTable::default(),
+        }
     }
 
     fn read_zip_entry<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>, name: &str) -> Result<Vec<u8>> {
@@ -635,23 +699,24 @@ impl XlsxReader {
         map
     }
 
-    fn parse_sheet(xml: &[u8], shared_strings: &[String]) -> Vec<Vec<XlsxCellValue>> {
+    fn parse_sheet(xml: &[u8], shared_strings: &[String]) -> (Vec<Vec<XlsxCellValue>>, HashMap<(u32, u16), u32>) {
         let xml_str = String::from_utf8_lossy(xml);
         let mut scanner = XmlScanner::new(xml_str.as_bytes());
         scanner.skip_declaration();
 
         let mut cells: HashMap<(u32, u16), XlsxCellValue> = HashMap::with_capacity(1024);
+        let mut style_indices: HashMap<(u32, u16), u32> = HashMap::new();
         let mut max_row: u32 = 0;
         let mut max_col: u16 = 0;
 
         // Find <sheetData>
         if scanner.find_open_tag("sheetData").is_none() {
-            return Vec::new();
+            return (Vec::new(), style_indices);
         }
         let sd_start = scanner.pos;
         if scanner.is_self_closing(sd_start) {
             scanner.skip_open_tag();
-            return Vec::new();
+            return (Vec::new(), style_indices);
         }
         scanner.skip_open_tag();
 
@@ -679,11 +744,16 @@ impl XlsxReader {
 
                 let cell_ref = c_attrs.get("r").cloned().unwrap_or_default();
                 let cell_type = c_attrs.get("t").cloned().unwrap_or_else(|| "n".to_string());
+                let style_idx = c_attrs.get("s").and_then(|s| s.parse::<u32>().ok());
                 let (row_idx, col_idx) = if cell_ref.is_empty() {
                     (0u32, 0u16)
                 } else {
                     parse_cell_ref(&cell_ref)
                 };
+
+                if let Some(si) = style_idx {
+                    style_indices.insert((row_idx, col_idx), si);
+                }
 
                 if scanner.is_self_closing(c_tag_start) {
                     scanner.skip_open_tag();
@@ -814,13 +884,13 @@ impl XlsxReader {
 
         // Convert sparse map to dense grid (clamped to avoid OOM from far-corner refs)
         if max_row == 0 && max_col == 0 && cells.is_empty() {
-            return Vec::new();
+            return (Vec::new(), style_indices);
         }
 
         let (n_rows, n_cols) =
             crate::limits::clamp_dense_dims(max_row as usize, max_col as usize);
         if n_rows == 0 || n_cols == 0 {
-            return Vec::new();
+            return (Vec::new(), style_indices);
         }
 
         let mut result = vec![vec![XlsxCellValue::Empty; n_cols]; n_rows];
@@ -831,7 +901,7 @@ impl XlsxReader {
                 result[r][c] = value;
             }
         }
-        result
+        (result, style_indices)
     }
 
     pub fn sheet_names(&self) -> Vec<String> {
@@ -855,23 +925,36 @@ impl XlsxReader {
             .map(|s| (s.name.clone(), s.to_string_vec()))
             .collect()
     }
+
+    /// Get a reference to the parsed style table.
+    pub fn styles(&self) -> &XlsxStyleTable {
+        &self.styles
+    }
+
+    /// Resolve the style for a cell at (row, col) in the given sheet.
+    /// Returns `None` if the sheet or cell is out of range, or if the
+    /// cell has no style index.
+    pub fn cell_style(&self, sheet: usize, row: u32, col: u16) -> Option<super::xlsx_writer::XlsxCellStyle> {
+        let sheet_data = self.sheets.get(sheet)?;
+        let style_idx = sheet_data.cell_style_index(row, col)?;
+        self.styles.resolve_style(style_idx)
+    }
+
+    /// Get the raw VBA project bytes (`xl/vbaProject.bin`) if the file
+    /// is macro-enabled (`.xlsm`).
+    pub fn vba_project(&self) -> Option<&[u8]> {
+        self.vba_project.as_deref()
+    }
+
+    /// Returns `true` if the workbook contains VBA macros.
+    pub fn has_macros(&self) -> bool {
+        self.vba_project.is_some()
+    }
 }
 
 impl Default for XlsxReader {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-// Helper trait for builder-style cell assignment
-trait TapCells {
-    fn tap_cells(self, cells: Vec<Vec<XlsxCellValue>>) -> Self;
-}
-
-impl TapCells for XlsxSheetData {
-    fn tap_cells(mut self, cells: Vec<Vec<XlsxCellValue>>) -> Self {
-        self.cells = cells;
-        self
     }
 }
 
