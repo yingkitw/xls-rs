@@ -415,8 +415,8 @@ impl TimeSeriesProcessor {
             numerator += (values[i] - mean) * (values[i + lag] - mean);
         }
 
-        for i in 0..values.len() {
-            denominator += (values[i] - mean).powi(2);
+        for v in values {
+            denominator += (v - mean).powi(2);
         }
 
         if denominator == 0.0 {

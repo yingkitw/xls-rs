@@ -137,27 +137,30 @@ impl XlsxCellStyle {
 
     /// Convenience: bold + 14pt header style.
     pub fn header() -> Self {
-        let mut s = Self::default();
-        s.bold = Some(true);
-        s.font_size = Some(14.0);
-        s
+        Self {
+            bold: Some(true),
+            font_size: Some(14.0),
+            ..Default::default()
+        }
     }
 
     /// Convenience: bold + accent fill (for highlighted cells).
     pub fn highlighted() -> Self {
-        let mut s = Self::default();
-        s.bold = Some(true);
-        s.fill_color = Some("305496".to_string());
-        s.font_color = Some("FFFFFF".to_string());
-        s
+        Self {
+            bold: Some(true),
+            fill_color: Some("305496".to_string()),
+            font_color: Some("FFFFFF".to_string()),
+            ..Default::default()
+        }
     }
 
     /// Convenience: italic + dim text (for notes).
     pub fn note() -> Self {
-        let mut s = Self::default();
-        s.italic = Some(true);
-        s.font_color = Some("595959".to_string());
-        s
+        Self {
+            italic: Some(true),
+            font_color: Some("595959".to_string()),
+            ..Default::default()
+        }
     }
 }
 

@@ -10,6 +10,8 @@ use zip::ZipArchive;
 
 use super::xlsx_style_reader::XlsxStyleTable;
 
+type ParsedSheet = (Vec<Vec<XlsxCellValue>>, HashMap<(u32, u16), u32>);
+
 /// Cell value types for XLSX reading.
 #[derive(Debug, Clone)]
 pub enum XlsxCellValue {
@@ -20,20 +22,20 @@ pub enum XlsxCellValue {
     Empty,
 }
 
-impl XlsxCellValue {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for XlsxCellValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            XlsxCellValue::String(s) => s.clone(),
+            XlsxCellValue::String(s) => write!(f, "{}", s),
             XlsxCellValue::Number(n) => {
                 if n.fract() == 0.0 && n.abs() < 1e15 {
-                    format!("{}", *n as i64)
+                    write!(f, "{}", *n as i64)
                 } else {
-                    format!("{}", n)
+                    write!(f, "{}", n)
                 }
             }
-            XlsxCellValue::Bool(b) => if *b { "TRUE".to_string() } else { "FALSE".to_string() },
-            XlsxCellValue::Error(e) => format!("#{}", e),
-            XlsxCellValue::Empty => String::new(),
+            XlsxCellValue::Bool(b) => write!(f, "{}", if *b { "TRUE" } else { "FALSE" }),
+            XlsxCellValue::Error(e) => write!(f, "#{}", e),
+            XlsxCellValue::Empty => Ok(()),
         }
     }
 }
@@ -623,8 +625,8 @@ impl XlsxReader {
             let target = rels_map.get(rid)
                 .cloned()
                 .unwrap_or_else(|| format!("worksheets/sheet{}.xml", sheets_info.iter().position(|(n, _)| n == name).map(|i| i + 1).unwrap_or(1)));
-            let sheet_path = if target.starts_with('/') {
-                target[1..].to_string()
+            let sheet_path = if let Some(stripped) = target.strip_prefix('/') {
+                stripped.to_string()
             } else {
                 format!("xl/{}", target)
             };
@@ -640,43 +642,37 @@ impl XlsxReader {
             // "xl/worksheets/sheet1.xml" → "xl/worksheets/_rels/sheet1.xml.rels"
             let sheet_rels_path = if sheet_path.ends_with(".xml") {
                 let base = sheet_path.strip_suffix(".xml").unwrap();
-                format!("{}_rels/{}.xml.rels",
-                    base.rfind('/').map(|i| &base[..i]).unwrap_or("."),
-                    base.rfind('/').map(|i| &base[i+1..]).unwrap_or(base))
+                let dir = base.rfind('/').map(|i| &base[..i]).unwrap_or(".");
+                let file = base.rfind('/').map(|i| &base[i+1..]).unwrap_or(base);
+                format!("{}/_rels/{}.xml.rels", dir, file)
             } else {
                 String::new()
             };
-            if !sheet_rels_path.is_empty() {
-                if let Ok(sheet_rels_xml) = Self::read_zip_entry(archive, &sheet_rels_path) {
+            if !sheet_rels_path.is_empty()
+                && let Ok(sheet_rels_xml) = Self::read_zip_entry(archive, &sheet_rels_path)
+            {
                     let table_paths = Self::parse_table_rels(&sheet_rels_xml);
                     for table_path in table_paths {
-                        let full_path = if table_path.starts_with('/') {
-                            table_path[1..].to_string()
+                        let full_path = if let Some(stripped) = table_path.strip_prefix('/') {
+                            stripped.to_string()
+                        } else if let Some(stripped) = table_path.strip_prefix("../") {
+                            format!("xl/{}", stripped)
                         } else {
-                            // Relative to xl/worksheets/, so resolve from xl/
-                            if table_path.starts_with("../") {
-                                format!("xl/{}", &table_path[3..])
-                            } else {
-                                format!("xl/worksheets/{}", table_path)
-                            }
+                            format!("xl/worksheets/{}", table_path)
                         };
-                        if let Ok(table_xml) = Self::read_zip_entry(archive, &full_path) {
-                            if let Some(table_info) = Self::parse_table_xml(&table_xml) {
-                                sheet.tables.push(table_info);
-                            }
+                        if let Ok(table_xml) = Self::read_zip_entry(archive, &full_path)
+                            && let Some(table_info) = Self::parse_table_xml(&table_xml)
+                        {
+                            sheet.tables.push(table_info);
                         }
                     }
-                }
             }
 
             sheets.push(sheet);
         }
 
         // Read VBA project if present (macro-enabled .xlsm)
-        let vba_project = match Self::read_zip_entry(archive, "xl/vbaProject.bin") {
-            Ok(data) => Some(data),
-            Err(_) => None,
-        };
+        let vba_project = Self::read_zip_entry(archive, "xl/vbaProject.bin").ok();
 
         Ok(Self { sheets, styles, vba_project })
     }
@@ -822,10 +818,10 @@ impl XlsxReader {
             let name_end = tag_start + tag_name.len();
             let (attrs, _) = scanner.parse_attributes(name_end);
             let rel_type = attrs.get("Type").cloned().unwrap_or_default();
-            if rel_type.contains("/table") {
-                if let Some(target) = attrs.get("Target") {
-                    paths.push(target.clone());
-                }
+            if rel_type.contains("/table")
+                && let Some(target) = attrs.get("Target")
+            {
+                paths.push(target.clone());
             }
             scanner.skip_open_tag();
         }
@@ -860,16 +856,33 @@ impl XlsxReader {
         // Parse <tableColumns>
         let mut column_names = Vec::new();
         if scanner.find_open_tag("tableColumns").is_some() {
+            let tc_start = scanner.pos;
             scanner.skip_open_tag();
-            while scanner.find_open_tag("tableColumn").is_some() {
-                let cs = scanner.pos;
-                let _tn = scanner.read_tag_name(cs);
-                let ne = cs + _tn.len();
-                let (cattrs, _) = scanner.parse_attributes(ne);
-                if let Some(col_name) = cattrs.get("name") {
-                    column_names.push(col_name.clone());
+            // Find the end of tableColumns to bound our search
+            let tc_end = scanner.find_close_tag("tableColumns", tc_start);
+            loop {
+                let save_pos = scanner.pos;
+                if scanner.find_open_tag("tableColumn").is_some() {
+                    // Check if we went past </tableColumns>
+                    if let Some(end) = tc_end
+                        && scanner.pos >= end
+                    {
+                        scanner.pos = save_pos;
+                        break;
+                    }
+                    let cs = scanner.pos;
+                    let _tn = scanner.read_tag_name(cs);
+                    let ne = cs + _tn.len();
+                    let (cattrs, _) = scanner.parse_attributes(ne);
+                    if let Some(col_name) = cattrs.get("name") {
+                        column_names.push(col_name.clone());
+                    }
+                    scanner.skip_open_tag();
+                } else {
+                    // No more tableColumn tags — restore pos to before the failed search
+                    scanner.pos = save_pos;
+                    break;
                 }
-                scanner.skip_open_tag();
             }
         }
 
@@ -896,7 +909,7 @@ impl XlsxReader {
         })
     }
 
-    fn parse_sheet(xml: &[u8], shared_strings: &[String]) -> (Vec<Vec<XlsxCellValue>>, HashMap<(u32, u16), u32>) {
+    fn parse_sheet(xml: &[u8], shared_strings: &[String]) -> ParsedSheet {
         let xml_str = String::from_utf8_lossy(xml);
         let mut scanner = XmlScanner::new(xml_str.as_bytes());
         scanner.skip_declaration();

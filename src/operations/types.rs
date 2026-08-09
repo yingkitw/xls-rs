@@ -27,11 +27,7 @@ impl StderrProgress {
 impl ProgressCallback for StderrProgress {
     fn on_progress(&mut self, current: usize, total: Option<usize>, message: &str) {
         if let Some(total) = total {
-            let percent = if total > 0 {
-                (current * 100) / total
-            } else {
-                0
-            };
+            let percent = (current * 100).checked_div(total).unwrap_or(0);
             if percent != self.last_percent {
                 eprintln!("\r{}: {}% ({}/{})", message, percent, current, total);
                 self.last_percent = percent;
@@ -66,7 +62,7 @@ pub enum JoinType {
 }
 
 impl JoinType {
-    pub fn from_str(s: &str) -> Result<Self> {
+    pub fn parse(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
             "inner" => Ok(JoinType::Inner),
             "left" => Ok(JoinType::Left),
@@ -88,7 +84,7 @@ pub enum AggFunc {
 }
 
 impl AggFunc {
-    pub fn from_str(s: &str) -> Result<Self> {
+    pub fn parse(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
             "sum" => Ok(AggFunc::Sum),
             "count" => Ok(AggFunc::Count),

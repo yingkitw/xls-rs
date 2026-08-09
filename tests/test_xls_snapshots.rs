@@ -45,7 +45,7 @@ fn write_artifact(name: &str, build: impl FnOnce(&mut XlsxWriter)) -> PathBuf {
     path
 }
 
-fn validate(path: &PathBuf) {
+fn validate(path: &std::path::Path) {
     let _ = XlsxReader::from_path(path.to_str().unwrap())
         .unwrap_or_else(|e| panic!("native reader failed on {}: {e}", path.display()));
 }

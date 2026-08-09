@@ -222,7 +222,7 @@ fn aes_cbc_decrypt(data: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
     if iv.len() != 16 {
         bail!("AES-CBC requires a 16-byte IV, got {}", iv.len());
     }
-    if data.len() % 16 != 0 {
+    if !data.len().is_multiple_of(16) {
         bail!(
             "Encrypted data length ({}) is not a multiple of 16 (AES block size)",
             data.len()
@@ -275,7 +275,7 @@ fn extract_base64_attr(xml: &str, tag: &str, attr: &str) -> Result<Vec<u8>> {
 /// Minimal base64 decoder (avoids adding a base64 dependency).
 fn base64_decode(input: &str) -> Result<Vec<u8>> {
     let input: String = input.chars().filter(|c| !c.is_whitespace()).collect();
-    if input.len() % 4 != 0 && !input.ends_with('=') {
+    if !input.len().is_multiple_of(4) && !input.ends_with('=') {
         // Allow padding-less base64 with trailing chars
     }
 
@@ -334,7 +334,7 @@ fn base64_decode(input: &str) -> Result<Vec<u8>> {
 /// Encode bytes to base64 string.
 fn base64_encode(data: &[u8]) -> String {
     const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0];
         let b1 = if chunk.len() > 1 { chunk[1] } else { 0 };
@@ -371,8 +371,8 @@ fn aes_cbc_encrypt(data: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
     // Pad to multiple of 16 with zeros (MS-OFFCRYPTO uses zero-padding, not PKCS7)
     let pad_len = (16 - (data.len() % 16)) % 16;
     let mut buf = data.to_vec();
-    if data.len() % 16 != 0 {
-        buf.extend(std::iter::repeat(0u8).take(pad_len));
+    if !data.len().is_multiple_of(16) {
+        buf.extend(std::iter::repeat_n(0u8, pad_len));
     }
     // If data is already a multiple of 16, no extra padding (MS-OFFCRYPTO doesn't add a full block)
     let len = buf.len();
@@ -510,8 +510,8 @@ fn build_ole2_container(stream1: &[u8], stream2: &[u8]) -> Result<Vec<u8>> {
     // - Directory (1 sector, 4 entries max)
     // - Stream 1 data
     // - Stream 2 data
-    let stream1_sectors = (stream1.len() + SECTOR_SIZE - 1) / SECTOR_SIZE;
-    let stream2_sectors = (stream2.len() + SECTOR_SIZE - 1) / SECTOR_SIZE;
+    let stream1_sectors = stream1.len().div_ceil(SECTOR_SIZE);
+    let stream2_sectors = stream2.len().div_ceil(SECTOR_SIZE);
 
     // Layout:
     // Sector 0: FAT

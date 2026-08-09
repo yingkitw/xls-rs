@@ -94,7 +94,7 @@ impl ParquetHandler {
         column_names: Option<&[String]>,
     ) -> Result<()> {
         let num_cols = match column_names {
-            Some(names) if names.is_empty() => {
+            Some([]) => {
                 anyhow::bail!("Column names cannot be empty");
             }
             Some(names) => names.len(),

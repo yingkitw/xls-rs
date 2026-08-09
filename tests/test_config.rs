@@ -24,9 +24,11 @@ fn test_config_default() {
 fn test_config_save_and_load() {
     let path = unique_path("config_save");
 
-    let mut config = Config::default();
-    config.default_format = Some("json".to_string());
-    config.date_format = Some("%Y-%m-%d".to_string());
+    let config = Config {
+        default_format: Some("json".to_string()),
+        date_format: Some("%Y-%m-%d".to_string()),
+        ..Default::default()
+    };
 
     config.save(&path).unwrap();
 

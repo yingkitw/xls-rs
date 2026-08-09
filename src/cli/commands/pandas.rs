@@ -76,7 +76,7 @@ impl PandasCommandHandler {
                 ops.stratified_sample(&data, n, col_idx, seed)?
             }
             "systematic" => ops.systematic_sample(&data, n, seed),
-            "random" | _ => ops.sample(&data, n, seed),
+            _ => ops.sample(&data, n, seed),
         };
 
         self.print_data(&sample_data, format)?;
@@ -144,7 +144,7 @@ impl PandasCommandHandler {
         let corr_matrix = match method {
             "spearman" => ops.spearman_correlation(&data, &col_indices)?,
             "kendall" => ops.kendall_tau_correlation(&data, &col_indices)?,
-            "pearson" | _ => ops.correlation(&data, &col_indices)?,
+            _ => ops.correlation(&data, &col_indices)?,
         };
 
         let label = match method {
@@ -200,7 +200,7 @@ impl PandasCommandHandler {
         validation::validate_column_index(&data, by_idx)?;
 
         // Parse aggregation function
-        let agg_func = AggFunc::from_str(&agg)?;
+        let agg_func = AggFunc::parse(&agg)?;
 
         // For simple groupby, aggregate the first value column (column 1 if exists)
         let value_col = if data[0].len() > 1 { 1 } else { 0 };
@@ -242,7 +242,7 @@ impl PandasCommandHandler {
         validation::validate_column_index(&right_data, right_col)?;
 
         // Parse join type
-        let join_type = JoinType::from_str(&how)?;
+        let join_type = JoinType::parse(&how)?;
 
         let ops = DataOperations::new();
         let joined = ops.join(&left_data, &right_data, left_col, right_col, join_type)?;
@@ -433,7 +433,7 @@ impl PandasCommandHandler {
         let cols_idx = self.find_column_index(&data, &columns)?;
         let vals_idx = self.find_column_index(&data, &values)?;
 
-        let agg_func = AggFunc::from_str(&agg)?;
+        let agg_func = AggFunc::parse(&agg)?;
 
         let ops = DataOperations::new();
         let pivoted = ops.pivot(&data, index_idx, cols_idx, vals_idx, agg_func)?;
@@ -746,6 +746,32 @@ impl PandasCommandHandler {
                     println!("  </tbody>");
                 }
                 println!("</table>");
+            }
+            OutputFormat::Latex => {
+                if data.is_empty() {
+                    println!("\\begin{{tabular}}{{}}\\end{{tabular}}");
+                    return Ok(());
+                }
+
+                let col_count = data.iter().map(|r| r.len()).max().unwrap_or(0);
+                let col_spec = "l".repeat(col_count);
+
+                println!("\\begin{{tabular}}{{{}}}", col_spec);
+                println!("\\hline");
+
+                if let Some(header) = data.first() {
+                    let row = header.join(" & ");
+                    println!("{} \\", row);
+                    println!("\\hline");
+                }
+
+                for row in &data[1..] {
+                    let row = row.join(" & ");
+                    println!("{} \\", row);
+                }
+
+                println!("\\hline");
+                println!("\\end{{tabular}}");
             }
         }
 

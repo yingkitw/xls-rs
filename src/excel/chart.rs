@@ -15,7 +15,7 @@ pub enum DataChartType {
 }
 
 impl DataChartType {
-    pub fn from_str(s: &str) -> Result<Self> {
+    pub fn parse(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
             "bar" => Ok(DataChartType::Bar),
             "column" => Ok(DataChartType::Column),

@@ -23,6 +23,9 @@ pub enum OutputFormat {
 
     /// HTML table format
     Html,
+
+    /// LaTeX table format
+    Latex,
 }
 
 impl OutputFormat {
@@ -34,6 +37,7 @@ impl OutputFormat {
             "jsonl" | "ndjson" => Some(Self::Jsonl),
             "markdown" | "md" => Some(Self::Markdown),
             "html" => Some(Self::Html),
+            "latex" | "tex" => Some(Self::Latex),
             _ => None,
         }
     }
@@ -49,7 +53,7 @@ impl OutputFormat {
                 return Ok(f);
             }
             anyhow::bail!(
-                "Invalid default_format in config: {:?}. Use csv, json, jsonl, markdown, or html.",
+                "Invalid default_format in config: {:?}. Use csv, json, jsonl, markdown, html, or latex.",
                 s
             );
         }
@@ -65,6 +69,7 @@ impl OutputFormat {
             OutputFormat::Jsonl => "jsonl",
             OutputFormat::Markdown => "md",
             OutputFormat::Html => "html",
+            OutputFormat::Latex => "tex",
         }
     }
 
@@ -77,6 +82,7 @@ impl OutputFormat {
             OutputFormat::Jsonl => "application/x-ndjson",
             OutputFormat::Markdown => "text/markdown",
             OutputFormat::Html => "text/html",
+            OutputFormat::Latex => "application/x-tex",
         }
     }
 }
@@ -89,6 +95,7 @@ impl std::fmt::Display for OutputFormat {
             OutputFormat::Jsonl => write!(f, "jsonl"),
             OutputFormat::Markdown => write!(f, "markdown"),
             OutputFormat::Html => write!(f, "html"),
+            OutputFormat::Latex => write!(f, "latex"),
         }
     }
 }

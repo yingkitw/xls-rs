@@ -1,6 +1,6 @@
 # xls-rs
 
-**Version**: 0.1.11 | **Last updated**: 2026-08-08
+**Version**: 0.1.14 | **Last updated**: 2026-08-09
 
 <!-- SEO/GEO: Rust spreadsheet tool, XLSX writer, Excel CLI, CSV converter, MCP server -->
 
@@ -9,7 +9,7 @@
 [![Crates.io](https://img.shields.io/crates/v/xls-rs.svg)](https://crates.io/crates/xls-rs)
 [![Documentation](https://docs.rs/xls-rs/badge.svg)](https://docs.rs/xls-rs)
 [![License](https://img.shields.io/crates/l/xls-rs.svg)](#license)
-[![Rust 1.70+](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 
 ```bash
 cargo install xls-rs
@@ -25,14 +25,15 @@ xls-rs is a command-line tool and embeddable Rust crate for spreadsheet and tabu
 | CLI | `xls-rs` | Shell scripts, CI/CD, ETL, and interactive analysis |
 | Rust library | `xls_rs` | Rust services and custom data pipelines |
 | MCP server type | `XlsRsMcpServer` | AI agents and spreadsheet automation |
-| Optional HTTP API | `ApiServer` with the `api` feature | Embedding spreadsheet endpoints in a Rust application |
 
 ## Why use xls-rs?
 
 - **One Rust toolkit for common spreadsheet formats:** CSV, XLSX, XLS, ODS, Parquet, Avro, and Google Sheets.
 - **Pandas-style operations from the shell:** sort, filter, join, groupby, pivot, melt, describe, correlation, regression, sampling, missing-value handling, and more.
-- **Native XLSX generation:** formulas, styles, charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, validation, print setup, freeze panes, and auto-filter.
+- **Native XLSX generation:** formulas, styles, charts, sparklines, conditional formatting, structured tables, merged cells, hyperlinks, comments, validation, print setup, freeze panes, and auto-filter.
 - **Native XLS (BIFF8) generation:** legacy `.xls` format written from scratch using only `std` — no external dependencies.
+- **Password-protected XLSX decryption:** AES-256-CBC decryption of password-protected `.xlsx` files (MS-OFFCRYPTO Agile Encryption) via the `password` feature.
+- **LaTeX table export:** output tabular data as LaTeX `tabular` environments for reports and publications.
 - **Production-oriented CSV safety:** formula-injection sanitization on write paths and explicit overwrite guards.
 - **Large-file support:** buffered and chunked CSV readers, writers, and streaming commands.
 - **AI integration:** 18 MCP tools, including capability discovery, conversion, filtering, validation, profiling, and Excel authoring.
@@ -58,7 +59,7 @@ xls-rs is a command-line tool and embeddable Rust crate for spreadsheet and tabu
 | Avro (`.avro`) | Yes | Yes | Schema generated from tabular headers |
 | Google Sheets | Yes | Yes | Access token required for read/write/append; API key supports sheet listing |
 
-JSON, JSONL, Markdown, and HTML are available as presentation output formats for read and inspection commands. They are not first-class storage handlers.
+JSON, JSONL, Markdown, HTML, and LaTeX are available as presentation output formats for read and inspection commands. They are not first-class storage handlers.
 
 For operation-level parity across the library, CLI, and MCP surfaces, see [`TODO.md`](TODO.md) and [`src/capability_catalog.rs`](src/capability_catalog.rs).
 
@@ -105,11 +106,23 @@ cargo build --release
 ./target/release/xls-rs --help
 ```
 
-The default build enables file watching and shell completions. To compile every optional surface:
+The default build enables file watching, shell completions, MCP, Parquet, Avro, and Google Sheets support. To compile every optional surface:
 
 ```bash
 cargo build --release --all-features
 ```
+
+Available feature flags:
+
+| Feature | Description |
+|---|---|
+| `watch` | File watch mode (default) |
+| `completions` | Shell completions generation (default) |
+| `mcp` | MCP server type for AI agents (default) |
+| `parquet` | Parquet read/write via Apache Arrow (default) |
+| `avro` | Avro read/write (default) |
+| `gsheets` | Google Sheets API integration (default) |
+| `password` | Password-protected XLSX decryption (AES-256-CBC) |
 
 ## Quick start
 
@@ -120,7 +133,7 @@ xls-rs read --input examples/sales.csv
 xls-rs read --input report.xlsx --sheet Sheet1 --range A1:C20 --format markdown
 ```
 
-`--format` accepts `csv`, `json`, `jsonl`, `markdown`, or `html`.
+`--format` accepts `csv`, `json`, `jsonl`, `markdown`, `html`, or `latex`.
 
 ### Convert CSV to XLSX
 
@@ -209,6 +222,7 @@ The native XLSX writer supports:
 - Styles and styled export presets: `default`, `minimal`, `report`, and `executive`.
 - Column, bar, line, area, pie, doughnut, and scatter charts.
 - Sparklines and conditional formatting.
+- Structured tables (Excel Table objects) with auto-expanding ranges, banded rows, and table styles.
 - Row and column grouping, merged cells, hyperlinks, comments, and data validation.
 - Freeze panes, auto-filter, print areas, margins, orientation, scale, and fit-to-page settings.
 
@@ -251,7 +265,7 @@ The native XLSX writer supports:
 
 - **I/O:** `read`, `write`, `convert`, `sheets`, `read-all`, `write-range`, `append`.
 - **Transforms:** `sort`, `filter`, `replace`, `dedupe`, `transpose`, `select`, `mutate`, `rename`, `drop`, `fillna`, `dropna`, `astype`, `unique`, `clip`, `normalize`, `zscore`.
-- **Analytics:** `head`, `tail`, `sample`, `describe`, `value-counts`, `corr`, `regress`, `info`, `dtypes`, `groupby`, `join`, `concat`, `pivot`, `rolling`, `crosstab`, `melt`, `query`, `parse-date`, `regex-filter`, `regex-replace`, `diff`, `histogram`, `str-distance`.
+- **Analytics:** `head`, `tail`, `sample`, `describe`, `value-counts`, `corr`, `regress`, `info`, `dtypes`, `groupby`, `join`, `concat`, `pivot`, `pivot-longer`, `pivot-wider`, `rolling`, `crosstab`, `melt`, `query`, `parse-date`, `regex-filter`, `regex-replace`, `diff`, `histogram`, `str-distance`.
 - **Advanced:** `formula`, `apply-formula-range`, `chart`, `add-chart`, `add-sparkline`, `conditional-format`, `export-styled`, `validate`, `profile`, `schema`, `to-sql`, `encrypt`, `decrypt`, `batch`, `plugin`, `stream`.
 - **Project and integration:** `examples-generate`, `config-init`, `completions`, `watch`, `gsheets-list`, `gsheets-auth`, `gsheets-set-default`, `serve`.
 
@@ -311,7 +325,8 @@ For large CSV files, use `xls-rs stream` or the `CsvStreamingReader` API. XLSX r
 
 - **MCP hosting:** `xls-rs serve` does not yet launch a transport; embed `XlsRsMcpServer` in an async host.
 - **Legacy XLS writes:** native `.xls` (BIFF8) output is implemented from scratch using only `std`. `.ods` output is not implemented; writer routing may accept `.ods` but emits XLSX content, so write `.xlsx` instead.
-- **Encryption:** `EncryptionAlgorithm::Aes256` currently delegates to the XOR test implementation. Do not use the encryption API for production security.
+- **Password-protected XLSX:** decryption (reading) is supported via the `password` feature using AES-256-CBC (MS-OFFCRYPTO Agile Encryption). Encrypting XLSX files with password protection is not yet supported.
+- **Encryption API:** the `encrypt`/`decrypt` CLI commands use the XOR-based `DataEncryptor` for testing. For real password-protected XLSX decryption, use the `password` feature with the `xlsx_crypto` module.
 - **Excel fidelity:** grid reads do not execute VBA macros or expand pivot tables. Merged ranges usually expose only the top-left value.
 - **Sheet enumeration:** `sheets` and `read-all` currently use the XLSX-specific reader path; XLS sheet enumeration uses the native BIFF8 reader.
 - **Streaming:** CSV supports chunked processing; XLSX does not yet provide a true row-by-row SAX reader.
@@ -354,11 +369,11 @@ The MCP tool implementation is available through `XlsRsMcpServer`, but the `serv
 
 ### Is the encryption feature secure?
 
-No. The current `Aes256` enum path uses the XOR test implementation and must not be used to protect sensitive data.
+The `encrypt`/`decrypt` CLI commands use a XOR-based `DataEncryptor` intended for testing. For real password-protected XLSX decryption, enable the `password` feature, which implements AES-256-CBC decryption following the MS-OFFCRYPTO Agile Encryption specification.
 
 ### What is the minimum supported Rust version?
 
-The current package metadata requires Rust 1.88 or newer. Edition 2024.
+Edition 2024 requires Rust 1.85 or newer.
 
 ## Development
 
@@ -399,6 +414,6 @@ Licensed under the Apache License 2.0. The SPDX license declaration is defined i
 <details>
 <summary>Keywords</summary>
 
-Rust spreadsheet library, Rust XLSX writer, Rust Excel reader, CSV converter, XLSX to Parquet, CSV to Excel, Rust Excel CLI, MCP spreadsheet server, BIFF8 writer, XLS writer Rust, pandas-style operations Rust, Excel without Microsoft Office, Rust data analysis CLI, spreadsheet ETL Rust, conditional formatting Rust, Excel charts Rust, sparklines Rust, Avro converter, ODS reader Rust, Google Sheets API Rust, Rust tabular data toolkit, openpyxl alternative Rust, Calamine alternative, xsv alternative, Polars spreadsheet, xlsxwriter Rust equivalent.
+Rust spreadsheet library, Rust XLSX writer, Rust Excel reader, CSV converter, XLSX to Parquet, CSV to Excel, Rust Excel CLI, MCP spreadsheet server, BIFF8 writer, XLS writer Rust, pandas-style operations Rust, Excel without Microsoft Office, Rust data analysis CLI, spreadsheet ETL Rust, conditional formatting Rust, Excel charts Rust, sparklines Rust, Avro converter, ODS reader Rust, Google Sheets API Rust, Rust tabular data toolkit, openpyxl alternative Rust, Calamine alternative, xsv alternative, Polars spreadsheet, xlsxwriter Rust equivalent, LaTeX table export Rust, structured tables Excel Rust, password-protected XLSX Rust.
 
 </details>

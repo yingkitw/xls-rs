@@ -47,7 +47,7 @@ impl super::profiler::DataProfiler {
             }
         }
 
-        score.max(0.0).min(100.0)
+        score.clamp(0.0, 100.0)
     }
 
     /// Calculate overall quality score
@@ -72,7 +72,7 @@ impl super::profiler::DataProfiler {
             overall_score -= (duplicate_percentage - 5.0) * 0.5;
         }
 
-        overall_score.max(0.0).min(100.0)
+        overall_score.clamp(0.0, 100.0)
     }
 
     /// Generate data quality recommendations

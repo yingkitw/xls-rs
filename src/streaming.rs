@@ -179,11 +179,7 @@ impl StreamingDataReader for CsvStreamingReader {
 
         let column_count = chunk_data.first().map(|r| r.len()).unwrap_or(0);
 
-        let sequence = if chunk_size > 0 {
-            start_row / chunk_size
-        } else {
-            0
-        };
+        let sequence = start_row.checked_div(chunk_size).unwrap_or(0);
 
         Ok(Some(DataChunk {
             sequence,

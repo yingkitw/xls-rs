@@ -366,21 +366,22 @@ impl XlsWriter {
         wb.extend_from_slice(&B::eof());
 
         // 4. Build the CFB container.
-        let mut streams: Vec<CfbStream> = Vec::new();
-        streams.push(CfbStream {
-            name: "Root Entry".to_string(),
-            data: Vec::new(),
-            kind: ObjectType::Root,
-            clsid: [
-                0x21, 0x08, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x46,
-            ],
-        });
-        streams.push(CfbStream::stream("Workbook", wb));
-        streams.push(CfbStream::stream("CompObj", compobj_stream()));
-        // "\x05SummaryInformation" is optional but improves compatibility with
-        // some readers (e.g. older Excel versions).
-        streams.push(CfbStream::stream("\u{5}SummaryInformation", summary_information_stream()));
+        let streams: Vec<CfbStream> = vec![
+            CfbStream {
+                name: "Root Entry".to_string(),
+                data: Vec::new(),
+                kind: ObjectType::Root,
+                clsid: [
+                    0x21, 0x08, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x46,
+                ],
+            },
+            CfbStream::stream("Workbook", wb),
+            CfbStream::stream("CompObj", compobj_stream()),
+            // "\x05SummaryInformation" is optional but improves compatibility with
+            // some readers (e.g. older Excel versions).
+            CfbStream::stream("\u{5}SummaryInformation", summary_information_stream()),
+        ];
         Ok(build_cfb(&streams))
     }
 

@@ -77,11 +77,7 @@ pub fn render_histogram(
     let mut lines = Vec::new();
 
     for (lo, hi, count) in bins {
-        let bar_len = if max_count > 0 {
-            count * width / max_count
-        } else {
-            0
-        };
+        let bar_len = (count * width).checked_div(max_count).unwrap_or(0);
         let bar = "█".repeat(bar_len);
         let label = if show_labels {
             format!(" [{:.2}-{:.2}]", lo, hi)

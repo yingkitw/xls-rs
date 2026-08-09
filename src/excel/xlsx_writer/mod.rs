@@ -289,10 +289,10 @@ impl XlsxWriter {
             .map(|i| self.chart_configs.get(i).and_then(|c| c.as_ref()).is_some())
             .collect();
         let comment_flags: Vec<bool> = self.sheets.iter().map(|s| !s.comments.is_empty()).collect();
-        let table_flags: Vec<bool> = self.sheets.iter().map(|s| !s.tables.is_empty()).collect();
+        let table_counts: Vec<usize> = self.sheets.iter().map(|s| s.tables.len()).collect();
 
         // Add [Content_Types].xml (with chart/comment/table content types if needed)
-        add_content_types_ext(&mut zip, self.sheets.len(), &chart_flags, &comment_flags, self.vba_project.is_some(), &table_flags)?;
+        add_content_types_ext(&mut zip, self.sheets.len(), &chart_flags, &comment_flags, self.vba_project.is_some(), &table_counts)?;
 
         // Add _rels/.rels
         add_rels(&mut zip)?;
@@ -309,12 +309,14 @@ impl XlsxWriter {
         // Add worksheets — assign table rel IDs (global table index)
         let mut table_global_idx = 1usize;
         for (idx, sheet) in self.sheets.iter().enumerate() {
-            let table_rel_id = if !sheet.tables.is_empty() {
-                Some(table_global_idx as u32)
+            let table_rel_ids: Vec<u32> = if !sheet.tables.is_empty() {
+                (table_global_idx..table_global_idx + sheet.tables.len())
+                    .map(|i| i as u32)
+                    .collect()
             } else {
-                None
+                Vec::new()
             };
-            add_worksheet(&mut zip, idx, sheet, &self.options, chart_flags[idx], table_rel_id)?;
+            add_worksheet(&mut zip, idx, sheet, &self.options, chart_flags[idx], &table_rel_ids)?;
             // Advance global table index by the number of tables on this sheet
             table_global_idx += sheet.tables.len();
         }

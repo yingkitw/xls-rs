@@ -253,37 +253,37 @@ fn test_cell_style_custom() {
 
 #[test]
 fn test_chart_type_from_str() {
-    assert_eq!(DataChartType::from_str("bar").unwrap(), DataChartType::Bar);
+    assert_eq!(DataChartType::parse("bar").unwrap(), DataChartType::Bar);
     assert_eq!(
-        DataChartType::from_str("column").unwrap(),
+        DataChartType::parse("column").unwrap(),
         DataChartType::Column
     );
     assert_eq!(
-        DataChartType::from_str("line").unwrap(),
+        DataChartType::parse("line").unwrap(),
         DataChartType::Line
     );
     assert_eq!(
-        DataChartType::from_str("area").unwrap(),
+        DataChartType::parse("area").unwrap(),
         DataChartType::Area
     );
-    assert_eq!(DataChartType::from_str("pie").unwrap(), DataChartType::Pie);
+    assert_eq!(DataChartType::parse("pie").unwrap(), DataChartType::Pie);
     assert_eq!(
-        DataChartType::from_str("scatter").unwrap(),
+        DataChartType::parse("scatter").unwrap(),
         DataChartType::Scatter
     );
     assert_eq!(
-        DataChartType::from_str("doughnut").unwrap(),
+        DataChartType::parse("doughnut").unwrap(),
         DataChartType::Doughnut
     );
     assert_eq!(
-        DataChartType::from_str("donut").unwrap(),
+        DataChartType::parse("donut").unwrap(),
         DataChartType::Doughnut
     );
 }
 
 #[test]
 fn test_chart_type_invalid() {
-    assert!(DataChartType::from_str("invalid").is_err());
+    assert!(DataChartType::parse("invalid").is_err());
 }
 
 #[test]

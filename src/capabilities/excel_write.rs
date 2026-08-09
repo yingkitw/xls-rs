@@ -97,7 +97,7 @@ impl Capability for AddChartCapability {
 
         let chart_type = args["chart_type"]
             .as_str()
-            .and_then(|s| DataChartType::from_str(s).ok())
+            .and_then(|s| DataChartType::parse(s).ok())
             .unwrap_or(DataChartType::Column);
 
         let mut chart_config = ChartConfig {

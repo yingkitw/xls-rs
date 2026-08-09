@@ -21,22 +21,20 @@ pub enum CellValue {
     Empty,
 }
 
-impl CellValue {
-    /// Convert to string representation
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for CellValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CellValue::String(s) => s.clone(),
+            CellValue::String(s) => write!(f, "{}", s),
             CellValue::Number(n) => {
-                // Format numbers as integers when they have no fractional part
                 if n.fract() == 0.0 && n.abs() < 1e15 {
-                    format!("{}", *n as i64)
+                    write!(f, "{}", *n as i64)
                 } else {
-                    format!("{}", n)
+                    write!(f, "{}", n)
                 }
             }
-            CellValue::Bool(b) => if *b { "TRUE".to_string() } else { "FALSE".to_string() },
-            CellValue::Error(e) => format!("#{}", e),
-            CellValue::Empty => String::new(),
+            CellValue::Bool(b) => write!(f, "{}", if *b { "TRUE" } else { "FALSE" }),
+            CellValue::Error(e) => write!(f, "#{}", e),
+            CellValue::Empty => Ok(()),
         }
     }
 }

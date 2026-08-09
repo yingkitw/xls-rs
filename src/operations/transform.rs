@@ -96,7 +96,7 @@ impl DataOperations {
         // Pre-compile column name substitution regexes once (sorted by name length descending)
         let mut indexed_header: Vec<(usize, &String)> =
             header.iter().enumerate().collect();
-        indexed_header.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+        indexed_header.sort_by_key(|b| std::cmp::Reverse(b.1.len()));
 
         let col_regexes: Vec<(usize, regex::Regex)> = indexed_header
             .iter()
@@ -116,14 +116,14 @@ impl DataOperations {
             })
             .collect::<Result<_, _>>()?;
 
-        for row_idx in 1..data.len() {
+        for row in data.iter_mut().skip(1) {
             let value = self.evaluate_row_formula_optimized(
                 formula,
-                &data[row_idx],
+                row,
                 &col_regexes,
                 &letter_regexes,
             )?;
-            data[row_idx].push(value);
+            row.push(value);
         }
 
         Ok(())

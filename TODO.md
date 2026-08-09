@@ -153,7 +153,7 @@
 - [x] **Read existing styles**: Implemented XLSX style reading via `src/excel/xlsx_style_reader.rs` — parses `styles.xml` (fonts, fills, borders, numFmts, cellXfs, alignment) into `XlsxStyleTable`. Integrated into `XlsxReader` with `cell_style(sheet, row, col) -> Option<XlsxCellStyle>` API. 11 unit tests + 7 integration tests (round-trip write→read→verify) pass. Images and charts reading still pending.
 - [x] **`.xlsm` (macro-enabled) read/write**: Preserve VBA macros on copy/edit. `XlsxReader::vba_project()` reads `xl/vbaProject.bin`; `XlsxWriter::set_vba_project()` writes it back with macro-enabled content types. 5 integration tests pass.
 - [x] **Password-protected Excel**: Support reading `.xlsx` encrypted with a password (MS-OFFCRYPTO Agile Encryption). `XlsxReader::from_reader_with_password(reader, password)` and `from_path_with_password(path, password)`. Detects OLE2 containers with `EncryptionInfo`/`EncryptedPackage` streams, derives key via PBKDF2-HMAC-SHA512, decrypts with AES-256-CBC. Behind `password` feature flag. 7 unit tests + 5 integration tests pass.
-- [ ] **Excel structured tables**: Read/write `Table` objects (auto-expanding ranges with headers, total rows, banded rows). openpyxl has full `Table` support.
+- [x] **Excel structured tables**: Read/write `Table` objects (auto-expanding ranges with headers, total rows, banded rows). `XlsxWriter::add_table(Table { name, start_row, start_col, end_row, end_col, column_names, show_banded_rows, show_banded_columns, show_filter_button, show_totals_row, style })`. Generates `xl/tables/tableN.xml` with proper worksheet rels and content types. `XlsxReader::tables(sheet)` returns `&[XlsxTableInfo]` with name, range, column names, and style. Supports multiple tables per sheet, custom styles (`TableStyleInfo`), and auto-generated column names. 5 integration tests pass.
 - [x] **Freeze panes**: Set freeze rows/columns on write (`freeze_header` in `WriteOptions`, generates `<pane ySplit="1" state="frozen"/>`).
 - [x] **Auto-filter**: Write `autoFilter` range so Excel shows dropdown arrows (`auto_filter` in `WriteOptions`).
 - [x] **Row/column grouping (outline)**: Write `outlineLevel` on `<row>` and `<col>` elements for collapsible sections. API: `XlsxWriter::add_row_group(start_row, end_row, level, collapsed)` / `add_col_group(...)`. openpyxl / xlsxwriter support.
@@ -215,7 +215,7 @@ Still open:
 - [ ] **PostgreSQL / MySQL connectors**: Direct database read/write. `csvsql` / `pandas.read_sql` territory.
 - [ ] **PDF export**: Convert tabular data to PDF tables. `libreoffice --headless --convert-to pdf` is the workaround; native Rust would be powerful.
 - [x] **HTML table export**: Basic HTML table output via `--format html` on `read`, `head`, `tail`, `describe`, and other inspect commands. Rich CSS styling still open.
-- [ ] **LaTeX table export**: Academic paper tables. pandas `to_latex`.
+- [x] **LaTeX table export**: Convert tabular data to LaTeX `tabular` environment via `--format latex` on `read`, `head`, `tail`, `describe`, and other inspect commands. Generates `\begin{tabular}{lll}\hline ... \end{tabular}` with header row, data rows, and horizontal rules. Also configurable via `default_format = "latex"` in config. 4 CLI integration tests pass.
 
 ### Interactive & UX (visidata / Tad / xsv Gaps)
 

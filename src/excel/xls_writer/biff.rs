@@ -1086,7 +1086,7 @@ pub fn tab_id(sheet_count: u16) -> Vec<u8> {
     let mut out = Vec::new();
     let mut rec = Record::new(RecordId::TabId);
     for i in 0..sheet_count {
-        rec = rec.u16(i as u16 + 1);
+        rec = rec.u16(i + 1);
     }
     rec.finish(&mut out).unwrap();
     out

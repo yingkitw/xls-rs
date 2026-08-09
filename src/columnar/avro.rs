@@ -76,7 +76,7 @@ impl AvroHandler {
         field_names: Option<&[String]>,
     ) -> Result<()> {
         let num_cols = match field_names {
-            Some(names) if names.is_empty() => {
+            Some([]) => {
                 anyhow::bail!("Field names cannot be empty");
             }
             Some(names) => names.len(),

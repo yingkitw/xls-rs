@@ -139,7 +139,7 @@ pub fn handle_add_chart(
     let converter = Converter::new();
     let data = converter.read_any_data(&input, None)?;
 
-    let chart_type_parsed = DataChartType::from_str(&chart_type)?;
+    let chart_type_parsed = DataChartType::parse(&chart_type)?;
 
     let mut chart_config = ChartConfig {
         chart_type: chart_type_parsed,

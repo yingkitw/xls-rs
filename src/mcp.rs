@@ -170,7 +170,7 @@ pub struct ReadExcelRequest {
     pub sheet: Option<String>,
     #[schemars(description = "Cell range in A1 notation (e.g., A1:B10)")]
     pub range: Option<String>,
-    #[schemars(description = "Output format: csv, json, jsonl, markdown (default: json)")]
+    #[schemars(description = "Output format: csv, json, jsonl, markdown, html, latex (default: json)")]
     pub format: Option<String>,
 }
 
@@ -589,6 +589,38 @@ impl XlsRsMcpServer {
                             lines.push(sep);
                         }
                     }
+                    lines.join("\n")
+                } else {
+                    result.to_string()
+                }
+            }
+            Some("latex") => {
+                if let Some(rows) = data {
+                    let str_rows: Vec<Vec<String>> = rows
+                        .iter()
+                        .filter_map(|r| r.as_array())
+                        .map(|cols| {
+                            cols.iter()
+                                .map(|v| v.as_str().unwrap_or_default().to_string())
+                                .collect()
+                        })
+                        .collect();
+                    if str_rows.is_empty() {
+                        return String::from("\\begin{tabular}{}\\end{tabular}");
+                    }
+                    let col_count = str_rows.iter().map(|r| r.len()).max().unwrap_or(0);
+                    let col_spec = "l".repeat(col_count);
+                    let mut lines = Vec::new();
+                    lines.push(format!("\\begin{{tabular}}{{{}}}", col_spec));
+                    lines.push(String::from("\\hline"));
+                    for (ri, row) in str_rows.iter().enumerate() {
+                        lines.push(format!("{} \\", row.join(" & ")));
+                        if ri == 0 {
+                            lines.push(String::from("\\hline"));
+                        }
+                    }
+                    lines.push(String::from("\\hline"));
+                    lines.push(String::from("\\end{tabular}"));
                     lines.join("\n")
                 } else {
                     result.to_string()

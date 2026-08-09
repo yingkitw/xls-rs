@@ -46,8 +46,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         for (i, (name, cat, price, qty)) in products.iter().enumerate() {
             let mut row = RowData::new();
-            row.add_string(*name);
-            row.add_string(*cat);
+            row.add_string(name);
+            row.add_string(cat);
             row.add_number(*price);
             row.add_number(*qty);
             let row_num = i + 2;
@@ -100,8 +100,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for (id, name, dept, salary) in employees {
             let mut row = RowData::new();
             row.add_number(*id);
-            row.add_string(*name);
-            row.add_string(*dept);
+            row.add_string(name);
+            row.add_string(dept);
             row.add_number(*salary);
             w.add_row(row);
         }
@@ -149,7 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         for (i, (item, budgeted, actual)) in budget.iter().enumerate() {
             let mut row = RowData::new();
-            row.add_string(*item);
+            row.add_string(item);
             row.add_number(*budgeted);
             row.add_number(*actual);
             let row_num = i + 2;
@@ -203,8 +203,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         for (code, name, price) in items {
             let mut row = RowData::new();
-            row.add_string(*code);
-            row.add_string(*name);
+            row.add_string(code);
+            row.add_string(name);
             row.add_number(*price);
             w.add_row(row);
         }
@@ -212,7 +212,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let queries = ["W", "G", "X"];
         for (i, q) in queries.iter().enumerate() {
             let mut row = RowData::new();
-            row.add_string(*q);
+            row.add_string(q);
             let row_num = i + 6;
             row.add_formula(format!("VLOOKUP(A{},A2:C5,2,FALSE)", row_num));
             row.add_formula(format!("VLOOKUP(A{},A2:C5,3,FALSE)", row_num));

@@ -233,7 +233,7 @@ impl DataOperations {
         }
 
         let mut result: Vec<(&str, usize)> = counts.into_iter().collect();
-        result.sort_by(|a, b| b.1.cmp(&a.1));
+        result.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         let mut output = vec![vec!["value".to_string(), "count".to_string()]];
         for (val, count) in result {

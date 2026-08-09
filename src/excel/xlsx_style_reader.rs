@@ -272,15 +272,12 @@ impl XlsxStyleTable {
         }
 
         // <cellXfs> (skip <cellStyleXfs> which comes before it)
-        let save = scanner.pos;
         if scanner.find_open_tag("cellXfs").is_some() {
             let xfs_start = scanner.pos;
             if !scanner.is_self_closing(xfs_start) {
                 scanner.skip_open_tag();
                 loop {
-                    let s2 = scanner.pos;
                     if scanner.find_open_tag("xf").is_none() {
-                        scanner.pos = s2;
                         break;
                     }
                     let xf_start = scanner.pos;
@@ -311,8 +308,6 @@ impl XlsxStyleTable {
             } else {
                 scanner.skip_open_tag();
             }
-        } else {
-            scanner.pos = save;
         }
 
         table
@@ -345,10 +340,10 @@ impl XlsxStyleTable {
             }
         }
 
-        if let Some(fl) = fill {
-            if let Some(c) = &fl.color {
-                style.fill_color = Some(strip_alpha(c));
-            }
+        if let Some(fl) = fill
+            && let Some(c) = &fl.color
+        {
+            style.fill_color = Some(strip_alpha(c));
         }
 
         if let Some(b) = border {
@@ -364,12 +359,12 @@ impl XlsxStyleTable {
             }
         }
 
-        if let Some(code) = &num_fmt_code {
-            if code != "General" {
-                style.number_format = Some(code.clone());
-                if is_date_format(code) {
-                    style.date = Some(true);
-                }
+        if let Some(code) = &num_fmt_code
+            && code != "General"
+        {
+            style.number_format = Some(code.clone());
+            if is_date_format(code) {
+                style.date = Some(true);
             }
         }
 
@@ -415,10 +410,10 @@ fn parse_font(scanner: &mut XmlScanner) -> FontInfo {
 
     loop {
         let save = scanner.pos;
-        if let Some(end) = end_pos {
-            if scanner.pos >= end {
-                break;
-            }
+        if let Some(end) = end_pos
+            && scanner.pos >= end
+        {
+            break;
         }
         match scanner.find_any_open_tag() {
             None => {
@@ -426,11 +421,11 @@ fn parse_font(scanner: &mut XmlScanner) -> FontInfo {
                 break;
             }
             Some((tag_name, tag_start)) => {
-                if let Some(end) = end_pos {
-                    if tag_start >= end {
-                        scanner.pos = save;
-                        break;
-                    }
+                if let Some(end) = end_pos
+                    && tag_start >= end
+                {
+                    scanner.pos = save;
+                    break;
                 }
                 let (attrs, _) = scanner.parse_attributes(tag_start + tag_name.len());
                 match tag_name.as_str() {
@@ -470,10 +465,10 @@ fn parse_fill(scanner: &mut XmlScanner) -> FillInfo {
 
     loop {
         let save = scanner.pos;
-        if let Some(end) = end_pos {
-            if scanner.pos >= end {
-                break;
-            }
+        if let Some(end) = end_pos
+            && scanner.pos >= end
+        {
+            break;
         }
         match scanner.find_any_open_tag() {
             None => {
@@ -481,13 +476,13 @@ fn parse_fill(scanner: &mut XmlScanner) -> FillInfo {
                 break;
             }
             Some((tag_name, tag_start)) => {
-                if let Some(end) = end_pos {
-                    if tag_start >= end {
-                        scanner.pos = save;
-                        break;
-                    }
+                if let Some(end) = end_pos
+                    && tag_start >= end
+                {
+                    scanner.pos = save;
+                    break;
                 }
-                let (attrs, _) = scanner.parse_attributes(tag_start + tag_name.len());
+                let _ = scanner.parse_attributes(tag_start + tag_name.len());
                 match tag_name.as_str() {
                     "patternFill" => {
                         let is_self_closing = scanner.is_self_closing(tag_start);
@@ -496,25 +491,25 @@ fn parse_fill(scanner: &mut XmlScanner) -> FillInfo {
                             let pf_end = scanner.find_close_tag("patternFill", scanner.pos);
                             loop {
                                 let save2 = scanner.pos;
-                                if let Some(end) = pf_end {
-                                    if scanner.pos >= end {
-                                        break;
-                                    }
+                                if let Some(end) = pf_end
+                                    && scanner.pos >= end
+                                {
+                                    break;
                                 }
                                 match scanner.find_any_open_tag() {
                                     None => { scanner.pos = save2; break; }
                                     Some((sub_name, sub_start)) => {
-                                        if let Some(end) = pf_end {
-                                            if sub_start >= end {
-                                                scanner.pos = save2;
-                                                break;
-                                            }
+                                        if let Some(end) = pf_end
+                                            && sub_start >= end
+                                        {
+                                            scanner.pos = save2;
+                                            break;
                                         }
                                         let (sub_attrs, _) = scanner.parse_attributes(sub_start + sub_name.len());
-                                        if sub_name == "fgColor" {
-                                            if let Some(rgb) = sub_attrs.get("rgb") {
-                                                info.color = Some(rgb.clone());
-                                            }
+                                        if sub_name == "fgColor"
+                                            && let Some(rgb) = sub_attrs.get("rgb")
+                                        {
+                                            info.color = Some(rgb.clone());
                                         }
                                         scanner.skip_open_tag();
                                     }
@@ -537,10 +532,10 @@ fn parse_border(scanner: &mut XmlScanner) -> BorderInfo {
 
     loop {
         let save = scanner.pos;
-        if let Some(end) = end_pos {
-            if scanner.pos >= end {
-                break;
-            }
+        if let Some(end) = end_pos
+            && scanner.pos >= end
+        {
+            break;
         }
         match scanner.find_any_open_tag() {
             None => {
@@ -548,11 +543,11 @@ fn parse_border(scanner: &mut XmlScanner) -> BorderInfo {
                 break;
             }
             Some((tag_name, tag_start)) => {
-                if let Some(end) = end_pos {
-                    if tag_start >= end {
-                        scanner.pos = save;
-                        break;
-                    }
+                if let Some(end) = end_pos
+                    && tag_start >= end
+                {
+                    scanner.pos = save;
+                    break;
                 }
                 let (attrs, _) = scanner.parse_attributes(tag_start + tag_name.len());
                 let is_self_closing = scanner.is_self_closing(tag_start);
@@ -577,26 +572,26 @@ fn parse_border(scanner: &mut XmlScanner) -> BorderInfo {
                         let side_end = scanner.find_close_tag(&tag_name, scanner.pos);
                         loop {
                             let save2 = scanner.pos;
-                            if let Some(end) = side_end {
-                                if scanner.pos >= end {
-                                    break;
-                                }
+                            if let Some(end) = side_end
+                                && scanner.pos >= end
+                            {
+                                break;
                             }
                             match scanner.find_any_open_tag() {
                                 None => { scanner.pos = save2; break; }
                                 Some((sub_name, sub_start)) => {
-                                    if let Some(end) = side_end {
-                                        if sub_start >= end {
-                                            scanner.pos = save2;
-                                            break;
-                                        }
+                                    if let Some(end) = side_end
+                                        && sub_start >= end
+                                    {
+                                        scanner.pos = save2;
+                                        break;
                                     }
                                     let (sub_attrs, _) = scanner.parse_attributes(sub_start + sub_name.len());
-                                    if sub_name == "color" {
-                                        if let Some(rgb) = sub_attrs.get("rgb") {
+                                        if sub_name == "color"
+                                            && let Some(rgb) = sub_attrs.get("rgb")
+                                        {
                                             side.color = Some(rgb.clone());
                                         }
-                                    }
                                     scanner.skip_open_tag();
                                 }
                             }
@@ -616,10 +611,10 @@ fn parse_alignment(scanner: &mut XmlScanner) -> AlignmentInfo {
 
     loop {
         let save = scanner.pos;
-        if let Some(end) = end_pos {
-            if scanner.pos >= end {
-                break;
-            }
+        if let Some(end) = end_pos
+            && scanner.pos >= end
+        {
+            break;
         }
         match scanner.find_any_open_tag() {
             None => {
@@ -627,11 +622,11 @@ fn parse_alignment(scanner: &mut XmlScanner) -> AlignmentInfo {
                 break;
             }
             Some((tag_name, tag_start)) => {
-                if let Some(end) = end_pos {
-                    if tag_start >= end {
-                        scanner.pos = save;
-                        break;
-                    }
+                if let Some(end) = end_pos
+                    && tag_start >= end
+                {
+                    scanner.pos = save;
+                    break;
                 }
                 if tag_name == "alignment" {
                     let (attrs, _) = scanner.parse_attributes(tag_start + tag_name.len());

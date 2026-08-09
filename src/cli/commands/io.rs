@@ -58,6 +58,7 @@ impl IoCommandHandler {
             OutputFormat::Jsonl => self.print_jsonl(&data)?,
             OutputFormat::Markdown => self.print_markdown(&data),
             OutputFormat::Html => self.print_html(&data),
+            OutputFormat::Latex => self.print_latex(&data),
         }
 
         Ok(())
@@ -518,5 +519,35 @@ impl IoCommandHandler {
         }
 
         println!("</table>");
+    }
+
+    /// Print data as a LaTeX table
+    fn print_latex(&self, data: &[Vec<String>]) {
+        if data.is_empty() {
+            println!("\\begin{{tabular}}{{}}\\end{{tabular}}");
+            return;
+        }
+
+        let col_count = data.iter().map(|r| r.len()).max().unwrap_or(0);
+        let col_spec = "l".repeat(col_count);
+
+        println!("\\begin{{tabular}}{{{}}}", col_spec);
+        println!("\\hline");
+
+        // Header
+        if let Some(header) = data.first() {
+            let row = header.join(" & ");
+            println!("{} \\", row);
+            println!("\\hline");
+        }
+
+        // Data rows
+        for row in &data[1..] {
+            let row = row.join(" & ");
+            println!("{} \\", row);
+        }
+
+        println!("\\hline");
+        println!("\\end{{tabular}}");
     }
 }

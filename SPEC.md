@@ -42,7 +42,7 @@ All three surfaces delegate to the same underlying operations registered in `Cap
 ### MCP (`XlsRsMcpServer`)
 
 - Each tool delegates to `CapabilityRegistry::execute` with the same name used by the CLI capability catalog.
-- `read_excel` supports `format` option (`csv`, `jsonl`, `markdown`, `json`, `html`).
+- `read_excel` supports `format` option (`csv`, `jsonl`, `markdown`, `json`, `html`, `latex`).
 - `capabilities` tool returns the runtime catalog of operations and formats.
 - Error responses include structured `error.data` with stable `code`, `file`, `sheet`, `range`, and `cell` fields.
 
