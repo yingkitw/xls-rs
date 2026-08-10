@@ -562,47 +562,6 @@ impl XlsxReader {
         Self::from_archive(&mut archive)
     }
 
-    /// Read a password-protected XLSX file from any Read+Seek source.
-    ///
-    /// Requires the `password` feature.
-    #[cfg(feature = "password")]
-    pub fn from_reader_with_password<R: std::io::Read + std::io::Seek>(
-        reader: R,
-        password: &str,
-    ) -> Result<Self> {
-        use super::xlsx_crypto;
-
-        // Read all bytes into memory
-        let mut buf = Vec::new();
-        let mut reader = reader;
-        reader.read_to_end(&mut buf)
-            .context("Failed to read encrypted XLSX data")?;
-
-        if xlsx_crypto::is_encrypted_xlsx(&buf) {
-            let zip_bytes = xlsx_crypto::decrypt_xlsx(&buf, password)?;
-            let cursor = std::io::Cursor::new(zip_bytes);
-            let mut archive = ZipArchive::new(cursor)
-                .context("Failed to open decrypted XLSX archive")?;
-            Self::from_archive(&mut archive)
-        } else {
-            // Not encrypted — try as normal ZIP
-            let cursor = std::io::Cursor::new(buf);
-            let mut archive = ZipArchive::new(cursor)
-                .context("Failed to open XLSX archive")?;
-            Self::from_archive(&mut archive)
-        }
-    }
-
-    /// Read a password-protected XLSX file from a path.
-    ///
-    /// Requires the `password` feature.
-    #[cfg(feature = "password")]
-    pub fn from_path_with_password(path: &str, password: &str) -> Result<Self> {
-        let file = std::fs::File::open(path)
-            .with_context(|| format!("Failed to open XLSX file: {}", path))?;
-        Self::from_reader_with_password(file, password)
-    }
-
     fn from_archive<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>) -> Result<Self> {
         // Read shared strings
         let shared_strings = Self::read_shared_strings(archive)?;
