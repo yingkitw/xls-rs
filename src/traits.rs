@@ -3,7 +3,7 @@
 //! This module provides trait-based interfaces for better testability,
 //! maintainability, and separation of concerns.
 
-use crate::csv_handler::CellRange;
+use crate::excel::reader::CellRange;
 use anyhow::Result;
 
 /// Trait for reading data from files

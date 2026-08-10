@@ -221,7 +221,7 @@ pub fn handle_apply_formula_range(
     range_str: String,
     sheet: Option<String>,
 ) -> Result<()> {
-    use xls_rs::csv_handler::CellRange;
+    use xls_rs::excel::reader::CellRange;
     use xls_rs::formula::FormulaEvaluator;
 
     let cell_range = CellRange::parse(&range_str)?;

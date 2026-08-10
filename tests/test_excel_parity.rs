@@ -5,29 +5,33 @@
 
 use std::process::Command;
 use xls_rs::helpers::filter_by_range;
-use xls_rs::CellRange;
+use xls_rs::excel::reader::CellRange;
 
 #[test]
 fn test_excel_write_styled_parity() {
     let dir = tempfile::tempdir().unwrap();
-    let csv_input = dir.path().join("input.csv");
+    let xlsx_input = dir.path().join("input.xlsx");
     let xlsx_output = dir.path().join("output.xlsx");
 
-    // Create test CSV
-    std::fs::write(
-        &csv_input,
-        "Name,Value\nAlice,100\nBob,200\nCharlie,300\n",
-    )
-    .unwrap();
+    // Create test XLSX
+    let data = vec![
+        vec!["Name".to_string(), "Value".to_string()],
+        vec!["Alice".to_string(), "100".to_string()],
+        vec!["Bob".to_string(), "200".to_string()],
+        vec!["Charlie".to_string(), "300".to_string()],
+    ];
+    let converter = xls_rs::Converter::new();
+    converter
+        .write_any_data(xlsx_input.to_string_lossy().as_ref(), &data, None)
+        .unwrap();
 
     // Library write styled
     let handler = xls_rs::ExcelHandler::new();
-    let converter = xls_rs::Converter::new();
-    let data = converter.read_any_data(csv_input.to_string_lossy().as_ref(), None).unwrap();
+    let read_data = converter.read_any_data(xlsx_input.to_string_lossy().as_ref(), None).unwrap();
     handler
         .write_styled(
             xlsx_output.to_string_lossy().as_ref(),
-            &data,
+            &read_data,
             &xls_rs::WriteOptions::default(),
         )
         .unwrap();
@@ -40,7 +44,7 @@ fn test_excel_write_styled_parity() {
             "--quiet",
             "export-styled",
             "--input",
-            csv_input.to_string_lossy().as_ref(),
+            xlsx_input.to_string_lossy().as_ref(),
             "--output",
             cli_output.to_string_lossy().as_ref(),
             "--style",
@@ -112,7 +116,7 @@ fn test_excel_read_range_parity() {
 
     // Library read range
     let handler = xls_rs::ExcelHandler::new();
-    let range = xls_rs::CellRange::parse("A1:B2").unwrap();
+    let range = xls_rs::excel::reader::CellRange::parse("A1:B2").unwrap();
     let library_data = handler
         .read_range(xlsx_input.to_string_lossy().as_ref(), &range, None)
         .unwrap();

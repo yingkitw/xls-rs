@@ -1,14 +1,7 @@
-//! Handler registry for unified file format handling (DRY, KISS, SOC)
+//! Handler registry for unified file format handling
 
-use crate::csv_handler::CsvHandler;
 use crate::excel::ExcelHandler;
 use crate::format_detector::DefaultFormatDetector;
-#[cfg(feature = "parquet")]
-use crate::columnar::ParquetHandler;
-#[cfg(feature = "avro")]
-use crate::columnar::AvroHandler;
-#[cfg(feature = "gsheets")]
-use crate::google_sheets::GoogleSheetsHandler;
 use crate::traits::FormatDetector;
 use crate::traits::{DataReader, DataWriteOptions, DataWriter, FileHandler};
 use anyhow::Result;
@@ -31,63 +24,35 @@ impl HandlerRegistry {
         }
     }
 
-    /// Get a handler for reading a file based on its format
     pub fn get_reader(&self, path: &str) -> Result<Box<dyn DataReader>> {
         let format = self.format_detector.detect_format(path)?;
-
         match format.as_str() {
-            "csv" => Ok(Box::new(CsvHandler::new())),
-            "xlsx" | "xls" | "ods" => Ok(Box::new(ExcelHandler::new())),
-            #[cfg(feature = "parquet")]
-            "parquet" => Ok(Box::new(ParquetHandler::new())),
-            #[cfg(feature = "avro")]
-            "avro" => Ok(Box::new(AvroHandler::new())),
-            #[cfg(feature = "gsheets")]
-            "gsheet" => Ok(Box::new(GoogleSheetsHandler::new())),
-            _ => anyhow::bail!("Unsupported format: {format}"),
+            "xlsx" => Ok(Box::new(ExcelHandler::new())),
+            _ => anyhow::bail!("Unsupported format: {format}. Only XLSX is supported."),
         }
     }
 
-    /// Get a handler for writing a file based on its format
     pub fn get_writer(&self, path: &str) -> Result<Box<dyn DataWriter>> {
         let format = self.format_detector.detect_format(path)?;
-
         match format.as_str() {
-            "csv" => Ok(Box::new(CsvHandler::new())),
-            "xlsx" | "xls" | "ods" => Ok(Box::new(ExcelHandler::new())),
-            #[cfg(feature = "parquet")]
-            "parquet" => Ok(Box::new(ParquetHandler::new())),
-            #[cfg(feature = "avro")]
-            "avro" => Ok(Box::new(AvroHandler::new())),
-            #[cfg(feature = "gsheets")]
-            "gsheet" => Ok(Box::new(GoogleSheetsHandler::new())),
-            _ => anyhow::bail!("Unsupported format: {format}"),
+            "xlsx" => Ok(Box::new(ExcelHandler::new())),
+            _ => anyhow::bail!("Unsupported format: {format}. Only XLSX is supported."),
         }
     }
 
-    /// Get a file handler (both read and write)
     pub fn get_handler(&self, path: &str) -> Result<Box<dyn FileHandler>> {
         let format = self.format_detector.detect_format(path)?;
-
         match format.as_str() {
-            "csv" => Ok(Box::new(CsvHandler::new())),
-            #[cfg(feature = "parquet")]
-            "parquet" => Ok(Box::new(ParquetHandler::new())),
-            #[cfg(feature = "avro")]
-            "avro" => Ok(Box::new(AvroHandler::new())),
-            #[cfg(feature = "gsheets")]
-            "gsheet" => Ok(Box::new(GoogleSheetsHandler::new())),
-            _ => anyhow::bail!("Unsupported format: {format}"),
+            "xlsx" => Ok(Box::new(ExcelHandler::new())),
+            _ => anyhow::bail!("Unsupported format: {format}. Only XLSX is supported."),
         }
     }
 
-    /// Read data from any supported format
     pub fn read(&self, path: &str) -> Result<Vec<Vec<String>>> {
         let reader = self.get_reader(path)?;
         reader.read(path)
     }
 
-    /// Write data to any supported format
     pub fn write(&self, path: &str, data: &[Vec<String>], options: DataWriteOptions) -> Result<()> {
         let writer = self.get_writer(path)?;
         writer.write(path, data, options)

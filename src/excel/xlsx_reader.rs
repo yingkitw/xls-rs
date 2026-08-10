@@ -507,7 +507,7 @@ pub(crate) fn xml_unescape(s: &str) -> String {
 }
 
 /// Parse a cell reference like "A1" into (row, col) 0-based indices.
-fn parse_cell_ref(ref_str: &str) -> (u32, u16) {
+pub(crate) fn parse_cell_ref(ref_str: &str) -> (u32, u16) {
     let mut col_str = String::new();
     let mut row_str = String::new();
     for ch in ref_str.chars() {

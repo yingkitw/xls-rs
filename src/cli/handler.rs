@@ -316,50 +316,7 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 .advanced
                 .handle_chart(input, output, chart_type, title, x_column, y_column),
 
-            Commands::Encrypt {
-                input,
-                output,
-                algorithm,
-                key_file,
-            } => self
-                .advanced
-                .handle_encrypt(input, output, algorithm, key_file),
-
-            Commands::Decrypt {
-                input,
-                output,
-                key_file,
-            } => self.advanced.handle_decrypt(input, output, key_file),
-
-            Commands::Batch {
-                inputs,
-                output_dir,
-                operation,
-                args,
-            } => self
-                .advanced
-                .handle_batch(inputs, output_dir, operation, args),
-
-            Commands::Plugin {
-                function,
-                input,
-                output,
-                args,
-            } => self.advanced.handle_plugin(function, input, output, args),
-
-            Commands::Stream {
-                input,
-                output,
-                chunk_size,
-            } => self.advanced.handle_stream(input, output, chunk_size),
-
-            #[cfg(feature = "completions")]
-            Commands::Completions { shell } => self.advanced.handle_completions(shell),
-
             Commands::ExamplesGenerate => self.advanced.handle_examples_generate(),
-
-            #[cfg(feature = "watch")]
-            Commands::Watch { input, command } => self.advanced.handle_watch(input, command),
 
             Commands::ConfigInit => self.advanced.handle_config_init(),
 
@@ -416,16 +373,6 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
             } => self
                 .advanced
                 .handle_apply_formula_range(input, output, formula, range, sheet),
-
-            // Google Sheets commands
-            #[cfg(feature = "gsheets")]
-            Commands::GSheetsList { spreadsheet } => self.io.handle_gsheets_list(spreadsheet),
-            #[cfg(feature = "gsheets")]
-            Commands::GSheetsAuth => self.io.handle_gsheets_auth(),
-            #[cfg(feature = "gsheets")]
-            Commands::GSheetsSetDefault { spreadsheet } => {
-                self.io.handle_gsheets_set_default(spreadsheet)
-            }
 
             Commands::Clip {
                 input,

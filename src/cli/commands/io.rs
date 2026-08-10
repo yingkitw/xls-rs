@@ -7,13 +7,11 @@ use xls_rs::{
     config::Config,
     converter::Converter,
     excel::ExcelHandler,
+    excel::reader::CellRange,
     formula::FormulaEvaluator,
     handler_registry::HandlerRegistry,
     helpers::filter_by_range,
-    CellRange,
 };
-#[cfg(feature = "gsheets")]
-use xls_rs::google_sheets::GoogleSheetsHandler;
 use anyhow::{Context, Result};
 
 /// I/O command handler
@@ -53,7 +51,7 @@ impl IoCommandHandler {
 
         // Output in requested format
         match format {
-            OutputFormat::Csv => self.print_csv(&data),
+            OutputFormat::Csv => self.print_csv(&data)?,
             OutputFormat::Json => self.print_json(&data)?,
             OutputFormat::Jsonl => self.print_jsonl(&data)?,
             OutputFormat::Markdown => self.print_markdown(&data),
@@ -148,15 +146,26 @@ impl IoCommandHandler {
 
     /// Handle the serve command
     ///
-    /// Starts the MCP server for model context protocol.
+    /// Starts the MCP server over stdio transport for model context protocol.
     #[cfg(feature = "mcp")]
     pub fn handle_serve(&self) -> Result<()> {
-        // MCP server requires async runtime
-        // For now, provide instructions
-        println!("MCP server requires running with tokio async runtime.");
-        println!("Please use the MCP integration directly or run with appropriate runtime.");
-        println!("The xls-rs library provides XlsRsMcpServer for MCP protocol support.");
-        Ok(())
+        use rmcp::{ServiceExt, transport::stdio};
+        use xls_rs::XlsRsMcpServer;
+
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+
+        runtime.block_on(async {
+            let service = XlsRsMcpServer::new();
+            let server = service
+                .serve(stdio())
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to start MCP server: {e}"))?;
+            server.waiting().await
+                .map_err(|e| anyhow::anyhow!("MCP server error: {e}"))?;
+            Ok(())
+        })
     }
 
     /// Handle the sheets command
@@ -396,10 +405,22 @@ impl IoCommandHandler {
     }
 
     /// Print data as CSV
-    fn print_csv(&self, data: &[Vec<String>]) {
+    fn print_csv(&self, data: &[Vec<String>]) -> Result<()> {
+        use std::io::Write;
+        let stdout = std::io::stdout();
+        let mut writer = stdout.lock();
         for row in data {
-            println!("{}", row.join(","));
+            let escaped: Vec<String> = row.iter().map(|cell| {
+                if cell.contains(',') || cell.contains('"') || cell.contains('\n') {
+                    format!("\"{}\"", cell.replace('"', "\"\""))
+                } else {
+                    cell.clone()
+                }
+            }).collect();
+            writeln!(writer, "{}", escaped.join(","))?;
         }
+        writer.flush().context("Failed to flush stdout")?;
+        Ok(())
     }
 
     /// Print data as JSON

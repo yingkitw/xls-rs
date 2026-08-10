@@ -1,10 +1,8 @@
 //! Formula evaluator
 
 use super::types::{CellRange, FormulaResult};
-use crate::csv_handler::sanitize_csv_row;
 use crate::excel::ExcelHandler;
 use anyhow::{Context, Result};
-use csv::{ReaderBuilder, WriterBuilder};
 use std::cell::Cell;
 
 use crate::excel::xlsx_reader::XlsxReader as NativeXlsxReader;
@@ -88,7 +86,7 @@ impl FormulaEvaluator {
         input: &str,
         output: &str,
         formula: &str,
-        target_range: &crate::csv_handler::CellRange,
+        target_range: &crate::excel::reader::CellRange,
         sheet_name: Option<&str>,
     ) -> Result<usize> {
         let workbook = NativeXlsxReader::from_path(input)
@@ -141,71 +139,8 @@ impl FormulaEvaluator {
         Ok(cells_affected)
     }
 
-    pub fn apply_to_csv(&self, input: &str, output: &str, formula: &str, cell: &str) -> Result<()> {
-        let mut reader = ReaderBuilder::new()
-            .has_headers(false)
-            .flexible(true)
-            .from_path(input)
-            .with_context(|| format!("Failed to open CSV file: {}", input))?;
-
-        let mut records: Vec<Vec<String>> = Vec::new();
-        for result in reader.records() {
-            let record = result?;
-            records.push(record.iter().map(|s| s.to_string()).collect());
-        }
-
-        let (row, col) = self.parse_cell_reference(cell)?;
-        let value = self.evaluate_formula_full(formula, &records)?;
-
-        while records.len() <= row as usize {
-            records.push(Vec::new());
-        }
-
-        let max_cols = records
-            .iter()
-            .map(|r| r.len())
-            .max()
-            .unwrap_or(0)
-            .max((col as usize) + 1);
-
-        for record in &mut records {
-            while record.len() < max_cols {
-                record.push(String::new());
-            }
-        }
-
-        while records[row as usize].len() <= col as usize {
-            records[row as usize].push(String::new());
-        }
-
-        records[row as usize][col as usize] = value.to_string();
-
-        // Check output format based on extension
-        if output.ends_with(".xlsx") {
-            use crate::excel::xlsx_writer::XlsxWriter;
-            let mut writer = XlsxWriter::new();
-            writer.add_sheet("Sheet1")?;
-            writer.add_data(&records);
-
-            let file = std::fs::File::create(output)
-                .with_context(|| format!("Failed to create XLSX file: {}", output))?;
-            let mut buf_writer = std::io::BufWriter::new(file);
-            writer.save(&mut buf_writer)?;
-        } else {
-            let mut writer = WriterBuilder::new()
-                .has_headers(false)
-                .flexible(true)
-                .from_path(output)
-                .with_context(|| format!("Failed to create CSV file: {}", output))?;
-
-            for record in records {
-                let safe = sanitize_csv_row(&record);
-                writer.write_record(&safe)?;
-            }
-            writer.flush()?;
-        }
-
-        Ok(())
+    pub fn apply_to_csv(&self, _input: &str, _output: &str, _formula: &str, _cell: &str) -> Result<()> {
+        anyhow::bail!("CSV support has been removed. Use apply_to_range for XLSX files.")
     }
 
     pub(crate) fn parse_cell_reference(&self, cell: &str) -> Result<(u32, u16)> {
@@ -243,7 +178,7 @@ impl FormulaEvaluator {
         Ok(idx as u16)
     }
 
-    pub(crate) fn evaluate_formula_full(
+    pub fn evaluate_formula_full(
         &self,
         formula: &str,
         data: &[Vec<String>],

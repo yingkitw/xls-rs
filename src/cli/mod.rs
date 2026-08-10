@@ -665,80 +665,8 @@ pub enum Commands {
         y_column: Option<String>,
     },
 
-    /// Encrypt file
-    Encrypt {
-        #[arg(short, long)]
-        input: String,
-        #[arg(short, long)]
-        output: String,
-        #[arg(short, long)]
-        algorithm: String,
-        #[arg(short, long)]
-        key_file: Option<String>,
-    },
-
-    /// Decrypt file
-    Decrypt {
-        #[arg(short, long)]
-        input: String,
-        #[arg(short, long)]
-        output: String,
-        #[arg(short, long)]
-        key_file: Option<String>,
-    },
-
-    /// Batch process multiple files
-    Batch {
-        #[arg(short, long)]
-        inputs: String,
-        #[arg(short, long)]
-        output_dir: String,
-        #[arg(short, long)]
-        operation: String,
-        #[arg(short, long)]
-        args: Vec<String>,
-    },
-
-    /// Run plugin function
-    Plugin {
-        #[arg(short, long)]
-        function: String,
-        #[arg(short, long)]
-        input: String,
-        #[arg(short, long)]
-        output: String,
-        #[arg(short, long)]
-        args: Vec<String>,
-    },
-
-    /// Stream process large file
-    Stream {
-        #[arg(short, long)]
-        input: String,
-        #[arg(short, long)]
-        output: String,
-        #[arg(long, default_value_t = 1000)]
-        chunk_size: usize,
-    },
-
-    /// Generate shell completions
-    #[cfg(feature = "completions")]
-    Completions {
-        #[arg(short, long)]
-        shell: String,
-    },
-
     /// Generate deterministic example files under ./examples
     ExamplesGenerate,
-
-    /// Watch file and re-run command on change
-    #[cfg(feature = "watch")]
-    Watch {
-        #[arg(short, long)]
-        input: String,
-        #[arg(short, long)]
-        command: String,
-    },
 
     /// Initialize config file
     ConfigInit,
@@ -811,24 +739,6 @@ pub enum Commands {
         range: String,
         #[arg(short, long)]
         sheet: Option<String>,
-    },
-
-    /// List sheets in Google Sheets
-    #[cfg(feature = "gsheets")]
-    GSheetsList {
-        #[arg(short, long)]
-        spreadsheet: String,
-    },
-
-    /// Authorize Google Sheets access
-    #[cfg(feature = "gsheets")]
-    GSheetsAuth,
-
-    /// Set default Google Sheets spreadsheet
-    #[cfg(feature = "gsheets")]
-    GSheetsSetDefault {
-        #[arg(short, long)]
-        spreadsheet: String,
     },
 }
 

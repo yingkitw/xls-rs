@@ -66,8 +66,8 @@ xls-rs is a practical toolkit, not a complete Excel engine or analytics platform
 
 - **Formula evaluation**: practical subset (arithmetic, comparisons, ~25 common functions). Not a full Excel calculation engine.
 - **No lazy evaluation**: operations are eager. No query planning or predicate pushdown.
-- **XLSX streaming**: CSV supports chunked processing; XLSX reads materialize the whole sheet.
-- **MCP hosting**: `xls-rs serve` does not yet launch a transport. Embed `XlsRsMcpServer` in an async host.
+- **XLSX streaming**: `XlsxStreamingReader` provides row-by-row parsing. CSV supports chunked processing. Full-materialization `XlsxReader` still available for random access.
+- **MCP hosting**: `xls-rs serve` launches a stdio transport. For custom transports (SSE, HTTP), embed `XlsRsMcpServer` in an async host.
 - **ODS write**: not implemented. Convert to XLSX instead.
 - **Surface parity**: advanced library analytics (anomaly, time-series, geospatial, text analysis) are not all exposed through CLI or MCP.
 

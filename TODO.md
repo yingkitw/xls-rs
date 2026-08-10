@@ -95,12 +95,12 @@ All items below are done and tested. See [`MEMORY.md`](MEMORY.md) for patterns a
 
 Focus: close the most impactful gaps for existing users.
 
-- [ ] **MCP transport hosting**: `xls-rs serve` should launch a stdio or SSE transport so the MCP server works out of the box without custom async host code.
-- [ ] **True streaming XLSX read**: Row-by-row SAX-style parsing via `quick-xml` so large XLSX files don't require full materialization.
-- [ ] **CSV index**: Build a lightweight row-offset index so `head`/`tail`/random access on huge CSVs is O(1) instead of O(n).
-- [ ] **Piping ergonomics**: Better stdin/stdout support so `cat data.csv | xls-rs sort --column 2 | xls-rs head -n 5` works seamlessly.
-- [ ] **Pre-built binaries**: GitHub Actions release builds for macOS (universal), Linux (x86_64, aarch64), Windows. Homebrew formula.
-- [ ] **Expose advanced analytics through CLI**: Anomaly detection, time-series resampling, and text analysis are library-only — surface key ones as CLI subcommands.
+- [x] **MCP transport hosting**: `xls-rs serve` now launches a stdio transport via tokio + rmcp. Works out of the box with any MCP-compatible client. Test in `tests/test_mcp_serve.rs`.
+- [x] **True streaming XLSX read**: Row-by-row parsing via `XlsxStreamingReader` with buffered ZIP entry reader. Yields `Vec<XlsxCellValue>` per row without full materialization. Test in `tests/test_xlsx_streaming.rs`.
+- [x] **CSV index**: Row-offset index (`CsvIndex`) with `.idx` sidecar persistence. `tail` uses O(1) seek; CLI `csv-index` subcommand for build/query/info. Tests in `tests/test_csv_index.rs`.
+- [x] **Piping ergonomics**: `--quiet` suppresses text labels and switches labeled commands (value-counts, unique, dtypes, corr) to CSV output. `print_csv` uses proper csv::Writer with quoting. 11 tests in `tests/test_piping.rs` covering stdin→stdout, chained pipes, values with commas, and 3-stage sort→filter→head.
+- [~] **Pre-built binaries**: Skipped — no GitHub Actions CI per user preference.
+- [x] **Expose advanced analytics through CLI**: `anomaly-detect` subcommand (zscore, modified-zscore, iqr, percentile) and `resample` subcommand (hourly/daily/weekly/monthly/quarterly/yearly with sum/mean/median/min/max/first/last/count). Both support stdin/stdout piping. Tests in `tests/test_cli_analytics.rs`.
 
 ## Roadmap — medium-term (v0.3–0.4)
 

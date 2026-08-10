@@ -11,24 +11,28 @@ fn xls_rs_exe() -> &'static str {
 }
 
 #[test]
-fn test_library_and_cli_can_read_csv() {
-    // Arrange: create a temp CSV
+fn test_library_and_cli_can_read_xlsx() {
     let dir = tempfile::tempdir().unwrap();
-    let input = dir.path().join("sales.csv");
-    std::fs::write(
-        &input,
-        "Product,Category,Price\nLaptop,Electronics,1200\nMouse,Electronics,25\n",
-    )
-    .unwrap();
+    let input = dir.path().join("sales.xlsx");
+
+    // Create XLSX via library
+    let data = vec![
+        vec!["Product".to_string(), "Category".to_string(), "Price".to_string()],
+        vec!["Laptop".to_string(), "Electronics".to_string(), "1200".to_string()],
+        vec!["Mouse".to_string(), "Electronics".to_string(), "25".to_string()],
+    ];
+    let converter = xls_rs::Converter::new();
+    converter
+        .write_any_data(input.to_string_lossy().as_ref(), &data, None)
+        .unwrap();
 
     // Library read
-    let converter = xls_rs::Converter::new();
-    let data = converter
+    let read_data = converter
         .read_any_data(input.to_string_lossy().as_ref(), None)
         .unwrap();
-    assert_eq!(data[0][0], "Product");
+    assert_eq!(read_data[0][0], "Product");
 
-    // CLI read (use the compiled test binary path)
+    // CLI read
     let out = Command::new(xls_rs_exe())
         .args([
             "--quiet",
@@ -56,7 +60,6 @@ fn test_library_and_cli_can_read_csv() {
 #[test]
 fn test_cli_write_range_mode_preserve() {
     let dir = tempfile::tempdir().unwrap();
-    let input = dir.path().join("patch.csv");
     let output = dir.path().join("output.xlsx");
 
     // Create baseline XLSX via library
@@ -69,8 +72,16 @@ fn test_cli_write_range_mode_preserve() {
         .write(output.to_string_lossy().as_ref(), &baseline, Default::default())
         .unwrap();
 
-    // Create patch CSV
-    std::fs::write(&input, "X\n99\n").unwrap();
+    // Create patch XLSX
+    let patch_path = dir.path().join("patch.xlsx");
+    let patch_data = vec![
+        vec!["X".to_string()],
+        vec!["99".to_string()],
+    ];
+    let converter = xls_rs::Converter::new();
+    converter
+        .write_any_data(patch_path.to_string_lossy().as_ref(), &patch_data, None)
+        .unwrap();
 
     // CLI write-range --mode preserve at B2 (row 1, col 1)
     let out = Command::new(xls_rs_exe())
@@ -79,7 +90,7 @@ fn test_cli_write_range_mode_preserve() {
             "--overwrite",
             "write-range",
             "--input",
-            input.to_string_lossy().as_ref(),
+            patch_path.to_string_lossy().as_ref(),
             "--output",
             output.to_string_lossy().as_ref(),
             "--start",

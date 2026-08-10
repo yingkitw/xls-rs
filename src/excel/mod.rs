@@ -1,20 +1,16 @@
-//! Excel file handling module
+//! Excel XLSX file handling module
 
 mod cell_typer;
 pub mod chart;
 pub mod feature_detector;
-mod reader;
+pub mod reader;
 pub mod types;
 mod writer;
-pub mod xls_writer;
-pub mod xls_reader;
 pub mod xlsx_writer;
 pub mod xlsx_reader;
+pub mod xlsx_streaming_reader;
 pub mod xlsx_style_reader;
-pub mod ods_reader;
 pub mod template;
-#[cfg(feature = "password")]
-pub mod xlsx_crypto;
 
 // Public API exports - unused internally but part of library interface
 #[allow(unused_imports)]
@@ -25,7 +21,6 @@ pub use reader::ExcelHandler;
 pub use writer::WriteMode;
 #[allow(unused_imports)]
 pub use types::{CellStyle, WriteOptions};
-pub use xls_writer::{RowData as XlsRowData, SheetData as XlsSheetData, XlsWriter};
 pub use xlsx_writer::{
     CellComment, CellData, ColGroup, ConditionalFormat, ConditionalRule, DataValidation,
     Hyperlink, MergeCell, Operator, PageMargins, PageOrientation, PrintSetup, RowData, RowGroup,
@@ -34,4 +29,6 @@ pub use xlsx_writer::{
     style_registry::{SharedStrings, StyleRegistry},
 };
 pub use template::{PlaceholderInfo, TemplateData, TemplateFiller, TemplateReader};
+pub use xlsx_reader::{XlsxCellValue, XlsxReader, XlsxSheetData, XlsxTableInfo};
+pub use xlsx_streaming_reader::{RowIterator as XlsxRowIterator, XlsxStreamingReader};
 pub use xlsx_style_reader::XlsxStyleTable;

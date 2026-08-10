@@ -60,6 +60,13 @@ Institutional knowledge and pattern library for xls-rs — **the pure-Rust sprea
 - **SST (Shared String Table)**: String values > 0 characters to reduce file size
 - **BIFF version differences**: BIFF8 (Excel 97-2003) supports Unicode, earlier versions use codepages
 
+### XLSX Streaming Reader
+- **`XlsxStreamingReader`**: Row-by-row XLSX parsing without full materialization. Reads shared strings + styles upfront, then streams sheet XML via `BufReader` on the ZIP entry.
+- **Row extraction**: `RowIterator` reads chunks into an internal buffer, searches for `<row>...</row>` or `<row/>` elements, drains consumed bytes, and parses each row with `XmlScanner`.
+- **Lifetime pattern**: `RowIterator<'a>` borrows `&'a [String]` (shared strings) from `XlsxStreamingReader`. The `ZipFile` inside the iterator borrows the `ZipArchive` owned by the reader.
+- **Cell parsing**: Reuses `parse_cell_ref` (now `pub(crate)`) and `XmlScanner` from `xlsx_reader.rs`. Same cell type handling as full reader.
+- **Testing**: Compare streaming output against `XlsxReader` full materialization to verify parity. See `tests/test_xlsx_streaming.rs`.
+
 ### ODS Reader Conventions
 - **OpenDocument XML**: ZIP container with `content.xml`, `styles.xml`, `meta.xml`
 - **Cell storage**: `<table:table-cell>` elements with `office:value-type` attribute
@@ -201,6 +208,8 @@ Institutional knowledge and pattern library for xls-rs — **the pure-Rust sprea
 - **Error responses**: Structured `error.data` with `code`, `file`, `sheet`, `range`, `cell` fields
 - **Capability catalog**: Runtime catalog of available tools returned by `capabilities` tool
 - **Request enrichment**: `mcp_enrichment.rs` adds context to errors (input/output paths, sheet, range)
+- **Stdio transport**: `xls-rs serve` creates a tokio multi-threaded runtime and calls `XlsRsMcpServer::new().serve(stdio()).await`. The `tokio` dependency is gated behind the `mcp` feature. Pattern: `tokio::runtime::Builder::new_multi_thread().enable_all().build()` then `runtime.block_on(async { ... })` since `main()` is sync.
+- **End-to-end testing**: Spawn the CLI binary as a child process, send JSON-RPC initialize over stdin, read response from stdout with timeout. See `tests/test_mcp_serve.rs`.
 
 ### Config Loading and Option Override Patterns
 - **Config discovery**: `.xls-rs.toml` → `~/.xls-rs.toml` → `$XDG_CONFIG_HOME/xls-rs/config.toml`
@@ -243,6 +252,26 @@ Institutional knowledge and pattern library for xls-rs — **the pure-Rust sprea
 - **Test discovery**: Run `cargo test --all-features` to include all feature-flagged tests
 - **Skip patterns**: Use `#[cfg(not(feature = "parquet"))]` to skip tests when feature disabled
 - **Feature matrix**: Document which tests require which features in test comments
+
+### CSV Index Patterns (`tests/test_csv_index.rs`)
+- **CRLF handling**: `CsvIndex::build` must treat `\r\n` as a single record boundary, not two. Use `prev_was_cr` flag: when `\n` follows `\r`, skip the offset push (the `\r` already set `at_record_start`). Standalone `\r` (old Mac) and standalone `\n` (Unix) each work as single boundaries.
+- **Index file format**: Magic `XLSRSIDX` (8 bytes) + version (4 LE) + file_size (8 LE) + count (8 LE) + offsets (count × 8 LE). Version field allows future format changes.
+- **Stale index detection**: `load_or_build` compares CSV mtime vs `.idx` mtime and file_size match. If CSV is newer or size differs, rebuilds automatically.
+- **Test pattern for stale index**: Use `tempfile::tempdir()` + manual `fs::File` (not `NamedTempFile` which deletes on drop). Write initial rows, build index, append rows, verify rebuild.
+- **Fallback pattern**: `streaming_ops::tail` tries `CsvIndex::load_or_build` first, falls back to sequential `VecDeque` scan on any error. This ensures correctness even if indexing fails.
+
+### Piping Ergonomics Patterns (`tests/test_piping.rs`)
+- **`--quiet` dual-mode output**: Commands with text labels (value-counts, unique, dtypes, corr) check `crate::cli::runtime::get().quiet`. When quiet, suppress label headers and switch to CSV format (e.g., `value,count` instead of `  value: count`). This enables clean pipe composition.
+- **Proper CSV writer for stdout**: `print_csv` and `print_data(Csv)` must use `csv::WriterBuilder` with `has_headers(false)` and `flexible(true)` writing to `std::io::stdout()`. Naive `row.join(",")` breaks on values containing commas, quotes, or newlines.
+- **Stdin/stdout convention**: `-` as input/output path means stdin/stdout. `Converter::read_any` and `write_any` handle this. `ensure_safe_input` and `ensure_can_write` skip validation for `-`.
+- **Log messages to stderr**: `crate::cli::runtime::log()` writes to stderr, keeping stdout clean for data. This is critical for pipe compatibility.
+- **Test pattern**: Use `Command::new(xls_rs_exe())` with `Stdio::piped()` for stdin/stdout/stderr. Write input to stdin, close it, then `wait_with_output()`. For multi-stage chains, feed previous stage's stdout as next stage's stdin.
+
+### CLI Analytics Patterns (`tests/test_cli_analytics.rs`)
+- **Anomaly detection CLI**: `anomaly-detect` subcommand wraps `AnomalyDetector` with 4 methods (zscore, modified-zscore, iqr, percentile). Outputs CSV with `row,column,value,score,reason` header. Uses `--quiet` to suppress summary on stderr.
+- **Resample CLI**: `resample` subcommand wraps `TimeSeriesProcessor::resample`. Takes `--date-column`, `--value-column`, `--interval`, `--agg`, optional `--date-format`. Outputs resampled time-series as CSV with date,value columns. Supports stdin/stdout piping.
+- **Short option conflicts**: When adding CLI subcommands, check for short option collisions. `input` uses `-i`, so `interval` must use `-l` (or another non-conflicting short). clap panics at startup on duplicate short options.
+- **Analytics handler pattern**: New analytics handlers live in `src/cli/commands/advanced/analytics.rs`, re-exported via `advanced/mod.rs`, dispatched through `AdvancedCommandHandler` methods, and wired in `handler.rs` match arms.
 
 ## Common Pitfalls and Anti-Patterns
 

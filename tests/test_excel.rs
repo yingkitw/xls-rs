@@ -147,7 +147,7 @@ fn test_excel_read_range() {
     handler.write_from_csv(&csv_path, &excel_path, None).unwrap();
 
     // Read a specific range
-    let range = xls_rs::CellRange::parse("A1:B3").unwrap();
+    let range = xls_rs::excel::reader::CellRange::parse("A1:B3").unwrap();
     let data = handler.read_range(&excel_path, &range, None).unwrap();
 
     assert_eq!(data.len(), 3); // 3 rows (header + 2 data rows)

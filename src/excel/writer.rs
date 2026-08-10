@@ -4,7 +4,6 @@ use std::io::BufWriter;
 
 use super::reader::ExcelHandler;
 use super::types::WriteOptions;
-use super::xls_writer::{RowData as XlsRowData, XlsWriter};
 use super::xlsx_writer::{CellData, RowData, XlsxWriter};
 use super::xlsx_reader::XlsxReader as NativeXlsxReader;
 use crate::traits::{DataWriteOptions, DataWriter};
@@ -28,20 +27,18 @@ impl ExcelHandler {
         excel_path: &str,
         sheet_name: Option<&str>,
     ) -> Result<()> {
-        let mut reader = csv::ReaderBuilder::new()
-            .has_headers(false)
-            .from_path(csv_path)
-            .with_context(|| format!("Failed to open CSV file: {csv_path}"))?;
+        // Read the temp CSV file with a minimal CSV parser
+        let csv_content = std::fs::read_to_string(csv_path)
+            .with_context(|| format!("Failed to read temp file: {csv_path}"))?;
 
         let mut writer = XlsxWriter::new();
         let name = sheet_name.unwrap_or("Sheet1");
         writer.add_sheet(name)?;
 
-        for result in reader.records() {
-            let record = result?;
+        for line in csv_content.lines() {
             let mut row = RowData::new();
-            for field in record.iter() {
-                super::add_cell_to_row(&mut row, field);
+            for field in parse_csv_line(line) {
+                super::add_cell_to_row(&mut row, &field);
             }
             writer.add_row(row);
         }
@@ -411,70 +408,6 @@ impl DataWriter for ExcelHandler {
     }
 }
 
-impl ExcelHandler {
-    /// Write data to an XLS (legacy BIFF8) file using the from-scratch
-    /// `XlsWriter`. No `zip` or other external dependencies are
-    /// used for the write path.
-    pub fn write_xls(&self, path: &str, data: &[Vec<String>], sheet_name: Option<&str>) -> Result<()> {
-        let mut writer = XlsWriter::new();
-        let name = sheet_name.unwrap_or("Sheet1");
-        writer.add_sheet(name)?;
-        writer.add_data(data);
-        for (col_idx, w) in auto_widths(data).into_iter().enumerate() {
-            writer.set_column_width(col_idx, w);
-        }
-        writer.save(path)?;
-        Ok(())
-    }
-
-    /// Write a 2D grid to an XLS file at the given offset (0-based).
-    pub fn write_xls_range(
-        &self,
-        path: &str,
-        data: &[Vec<String>],
-        start_row: u32,
-        start_col: u16,
-        sheet_name: Option<&str>,
-    ) -> Result<()> {
-        let mut writer = XlsWriter::new();
-        let name = sheet_name.unwrap_or("Sheet1");
-        writer.add_sheet(name)?;
-        for _ in 0..start_row {
-            writer.add_row(XlsRowData::new());
-        }
-        for row in data {
-            let mut r = XlsRowData::new();
-            for _ in 0..start_col {
-                r.add_empty();
-            }
-            for cell in row {
-                classify_xls_cell(&mut r, cell);
-            }
-            writer.add_row(r);
-        }
-        writer.save(path)?;
-        Ok(())
-    }
-}
-
-fn classify_xls_cell(row: &mut XlsRowData, cell: &str) {
-    if cell.is_empty() {
-        row.add_empty();
-    } else if let Some(stripped) = cell.strip_prefix('=') {
-        row.add_formula(stripped);
-    } else if let Ok(n) = cell.parse::<f64>() {
-        if n.is_finite() {
-            row.add_number(n);
-            return;
-        }
-        row.add_string(cell);
-    } else if matches!(cell.to_ascii_uppercase().as_str(), "TRUE" | "FALSE") {
-        row.add_bool(cell.eq_ignore_ascii_case("TRUE"));
-    } else {
-        row.add_string(cell);
-    }
-}
-
 fn auto_widths(data: &[Vec<String>]) -> Vec<f64> {
     let ncols = data.first().map(|r| r.len()).unwrap_or(0);
     (0..ncols)
@@ -487,4 +420,34 @@ fn auto_widths(data: &[Vec<String>]) -> Vec<f64> {
             (max_width + 2) as f64
         })
         .collect()
+}
+
+fn parse_csv_line(line: &str) -> Vec<String> {
+    let mut fields = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut chars = line.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if in_quotes {
+            if ch == '"' {
+                if chars.peek() == Some(&'"') {
+                    current.push('"');
+                    chars.next();
+                } else {
+                    in_quotes = false;
+                }
+            } else {
+                current.push(ch);
+            }
+        } else if ch == '"' {
+            in_quotes = true;
+        } else if ch == ',' {
+            fields.push(std::mem::take(&mut current));
+        } else {
+            current.push(ch);
+        }
+    }
+    fields.push(current);
+    fields
 }

@@ -1,16 +1,10 @@
-use crate::csv_handler::{sanitize_csv_row, CsvHandler};
 use crate::excel::ExcelHandler;
 use crate::format_detector::DefaultFormatDetector;
-use crate::handler_registry::HandlerRegistry;
-use crate::traits::{DataWriteOptions, FormatDetector};
+use crate::traits::FormatDetector;
 use anyhow::{Context, Result};
-use csv::{ReaderBuilder, WriterBuilder};
-use std::io::Cursor;
 
 pub struct Converter {
-    registry: HandlerRegistry,
     excel_handler: ExcelHandler,
-    csv_handler: CsvHandler,
     format_detector: DefaultFormatDetector,
 }
 
@@ -23,15 +17,17 @@ impl Default for Converter {
 impl Converter {
     pub fn new() -> Self {
         Self {
-            registry: HandlerRegistry::new(),
             excel_handler: ExcelHandler::new(),
-            csv_handler: CsvHandler::new(),
             format_detector: DefaultFormatDetector,
         }
     }
 
     pub fn read_any_data(&self, path: &str, sheet_name: Option<&str>) -> Result<Vec<Vec<String>>> {
-        self.read_any(path, sheet_name)
+        let format = self.format_detector.detect_format(path)?;
+        match format.as_str() {
+            "xlsx" => self.excel_handler.read_sheet_data(path, sheet_name),
+            _ => anyhow::bail!("Unsupported format: {}. Only XLSX is supported.", format),
+        }
     }
 
     pub fn write_any_data(
@@ -40,170 +36,56 @@ impl Converter {
         data: &[Vec<String>],
         sheet_name: Option<&str>,
     ) -> Result<()> {
-        self.write_any(path, data, sheet_name)
-    }
-
-    /// Convert between any supported formats
-    /// Supported: csv, xlsx, xls, ods, parquet, avro
-    pub fn convert(&self, input: &str, output: &str, sheet_name: Option<&str>) -> Result<()> {
-        // Validate input format is supported
-        let input_format = self.format_detector.detect_format(input)?;
-        if !self.format_detector.is_supported(&input_format) {
-            anyhow::bail!("Unsupported input format: {}", input_format);
-        }
-
-        // Output "-" means stdout (CSV)
-        if output != "-" {
-            let output_format = self.format_detector.detect_format(output)?;
-            if !self.format_detector.is_supported(&output_format) {
-                anyhow::bail!("Unsupported output format: {}", output_format);
-            }
-        }
-
-        // Read input data
-        let data = self.read_any(input, sheet_name)?;
-
-        // Write to output format
-        self.write_any(output, &data, sheet_name)?;
-
-        Ok(())
-    }
-
-    /// Read data from any supported format
-    fn read_any(&self, path: &str, sheet_name: Option<&str>) -> Result<Vec<Vec<String>>> {
-        // Stdin support: "-" reads CSV from stdin
-        if path == "-" {
-            let mut input = String::new();
-            std::io::Read::read_to_string(&mut std::io::stdin(), &mut input)
-                .context("Failed to read from stdin")?;
-            return Ok(self.parse_csv_data(&input));
-        }
-
         let format = self.format_detector.detect_format(path)?;
-
         match format.as_str() {
-            "ods" => self.excel_handler.read_ods_data(path, sheet_name),
-            "xlsx" | "xls" => self.excel_handler.read_sheet_data(path, sheet_name),
-            #[cfg(feature = "parquet")]
-            "parquet" => {
-                use crate::columnar::ParquetHandler;
-                let handler = ParquetHandler::new();
-                handler.read_with_headers(path)
-            }
-            #[cfg(feature = "avro")]
-            "avro" => {
-                use crate::columnar::AvroHandler;
-                let handler = AvroHandler::new();
-                handler.read_with_headers(path)
-            }
-            _ => self.registry.read(path),
-        }
-    }
-
-    /// Write data to any supported format
-    fn write_any(&self, path: &str, data: &[Vec<String>], sheet_name: Option<&str>) -> Result<()> {
-        // Stdout support: "-" writes CSV to stdout
-        if path == "-" {
-            let mut writer = WriterBuilder::new()
-                .has_headers(false)
-                .flexible(true)
-                .from_writer(std::io::stdout());
-            for record in data {
-                let safe = sanitize_csv_row(record);
-                writer.write_record(&safe)?;
-            }
-            writer.flush().context("Failed to flush stdout")?;
-            return Ok(());
-        }
-
-        let format = self.format_detector.detect_format(path)?;
-
-        match format.as_str() {
-            "xls" => {
-                // Use the from-scratch XlsWriter (no zip, no external dependencies).
-                self.excel_handler.write_xls(path, data, sheet_name)
-            }
             "xlsx" => {
-                // Use a named temp file that auto-deletes on drop, even on panic.
                 let temp = tempfile::NamedTempFile::new()
                     .context("Failed to create temp file for XLSX conversion")?;
                 let temp_path = temp.path().to_str()
                     .ok_or_else(|| anyhow::anyhow!("Temp file path is not valid UTF-8"))?
                     .to_string();
 
-                // Write to temp CSV (sanitized like other CSV write paths)
-                self.csv_handler
-                    .write_records_safe(&temp_path, data.to_vec())
-                    .with_context(|| format!("Failed to write temp CSV file: {}", temp_path))?;
+                // Write data to temp CSV for the Excel handler to consume
+                {
+                    use std::io::Write;
+                    let mut f = std::fs::File::create(&temp_path)
+                        .with_context(|| format!("Failed to create temp file: {}", temp_path))?;
+                    for row in data {
+                        let escaped: Vec<String> = row.iter().map(|cell| {
+                            if cell.contains(',') || cell.contains('"') || cell.contains('\n') {
+                                format!("\"{}\"", cell.replace('"', "\"\""))
+                            } else {
+                                cell.clone()
+                            }
+                        }).collect();
+                        writeln!(f, "{}", escaped.join(","))?;
+                    }
+                    f.flush()?;
+                }
 
-                // Convert to Excel
                 let result = self.excel_handler
                     .write_from_csv(&temp_path, path, sheet_name)
-                    .context(format!("Failed to convert CSV to Excel: {}", path));
-                // `temp` is dropped here, automatically deleting the temp file
+                    .context(format!("Failed to write XLSX: {}", path));
                 drop(temp);
                 result
             }
-            #[cfg(all(feature = "parquet", feature = "avro"))]
-            "parquet" | "avro" => {
-                let options = DataWriteOptions {
-                    sheet_name: sheet_name.map(|s| s.to_string()),
-                    include_headers: true,
-                    ..Default::default()
-                };
-                self.registry.write(path, data, options)
-            }
-            #[cfg(all(feature = "parquet", not(feature = "avro")))]
-            "parquet" => {
-                let options = DataWriteOptions {
-                    sheet_name: sheet_name.map(|s| s.to_string()),
-                    include_headers: true,
-                    ..Default::default()
-                };
-                self.registry.write(path, data, options)
-            }
-            #[cfg(all(feature = "avro", not(feature = "parquet")))]
-            "avro" => {
-                let options = DataWriteOptions {
-                    sheet_name: sheet_name.map(|s| s.to_string()),
-                    include_headers: true,
-                    ..Default::default()
-                };
-                self.registry.write(path, data, options)
-            }
-            _ => {
-                // Use registry for other formats
-                let options = DataWriteOptions {
-                    sheet_name: sheet_name.map(|s| s.to_string()),
-                    ..Default::default()
-                };
-                self.registry.write(path, data, options)
-            }
+            _ => anyhow::bail!("Unsupported format: {}. Only XLSX is supported.", format),
         }
     }
 
-    fn parse_csv_data(&self, data: &str) -> Vec<Vec<String>> {
-        let cursor = Cursor::new(data);
-        let mut reader = ReaderBuilder::new()
-            .has_headers(false)
-            .flexible(true)
-            .from_reader(cursor);
-
-        let mut result = Vec::with_capacity(128); // Pre-allocate for performance
-
-        for record in reader.records() {
-            match record {
-                Ok(r) => {
-                    let row: Vec<String> = r.iter().map(|s| s.to_string()).collect();
-                    result.push(row);
-                }
-                Err(_) => {
-                    // Skip malformed rows
-                    continue;
-                }
-            }
+    /// Convert between supported formats (XLSX only)
+    pub fn convert(&self, input: &str, output: &str, sheet_name: Option<&str>) -> Result<()> {
+        let input_format = self.format_detector.detect_format(input)?;
+        if input_format != "xlsx" {
+            anyhow::bail!("Unsupported input format: {}. Only XLSX is supported.", input_format);
+        }
+        let output_format = self.format_detector.detect_format(output)?;
+        if output_format != "xlsx" {
+            anyhow::bail!("Unsupported output format: {}. Only XLSX is supported.", output_format);
         }
 
-        result
+        let data = self.read_any_data(input, sheet_name)?;
+        self.write_any_data(output, &data, sheet_name)?;
+        Ok(())
     }
 }

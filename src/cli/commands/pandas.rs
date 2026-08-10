@@ -113,10 +113,17 @@ impl PandasCommandHandler {
         let ops = DataOperations::new();
         let counts = ops.value_counts(&data, col_idx);
 
-        println!("Value counts for column '{column}':");
+        let quiet = crate::cli::runtime::get().quiet;
+        if !quiet {
+            println!("Value counts for column '{column}':");
+        }
         for row in &counts[1..] {
             if row.len() >= 2 {
-                println!("  {}: {}", row[0], row[1]);
+                if quiet {
+                    println!("{},{}", row[0], row[1]);
+                } else {
+                    println!("  {}: {}", row[0], row[1]);
+                }
             }
         }
 
@@ -147,17 +154,24 @@ impl PandasCommandHandler {
             _ => ops.correlation(&data, &col_indices)?,
         };
 
-        let label = match method {
-            "spearman" => "Spearman Rank Correlation",
-            "kendall" => "Kendall Tau-b Correlation",
-            _ => "Pearson Correlation",
-        };
-        println!("{} Matrix:", label);
+        let quiet = crate::cli::runtime::get().quiet;
+        if !quiet {
+            let label = match method {
+                "spearman" => "Spearman Rank Correlation",
+                "kendall" => "Kendall Tau-b Correlation",
+                _ => "Pearson Correlation",
+            };
+            println!("{} Matrix:", label);
+        }
         for row in &corr_matrix {
-            for val in row {
-                print!("{val} ");
+            if quiet {
+                println!("{}", row.join(","));
+            } else {
+                for val in row {
+                    print!("{val} ");
+                }
+                println!();
             }
-            println!();
         }
 
         Ok(())
@@ -263,19 +277,26 @@ impl PandasCommandHandler {
 
         // Parse input files (glob pattern or comma-separated)
         let input_files: Vec<String> = if inputs.contains('*') {
-            // Use glob
-            glob::glob(&inputs)?
-                .filter_map(|entry| match entry {
-                    Ok(path) => Some(path),
-                    Err(e) => {
-                        crate::cli::runtime::log(format!(
-                            "Warning: glob error for pattern '{inputs}': {e}"
-                        ));
-                        None
-                    }
+            // Simple glob: handle patterns like /path/*.xlsx
+            let dir = std::path::Path::new(&inputs)
+                .parent()
+                .unwrap_or(std::path::Path::new("."));
+            let pattern = std::path::Path::new(&inputs)
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let prefix = pattern.strip_prefix('*').unwrap_or(&pattern);
+            std::fs::read_dir(dir)?
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| {
+                    entry
+                        .file_name()
+                        .to_str()
+                        .map(|name| name.ends_with(prefix))
+                        .unwrap_or(false)
                 })
-                .filter(|entry| entry.is_file())
-                .map(|entry| entry.to_string_lossy().to_string())
+                .filter(|entry| entry.path().is_file())
+                .map(|entry| entry.path().to_string_lossy().to_string())
                 .collect()
         } else {
             inputs.split(',').map(|s| s.trim().to_string()).collect()
@@ -318,10 +339,17 @@ impl PandasCommandHandler {
         let ops = DataOperations::new();
         let unique = ops.unique(&data, col_idx);
 
-        println!("Unique values in column '{column}':");
+        let quiet = crate::cli::runtime::get().quiet;
+        if !quiet {
+            println!("Unique values in column '{column}':");
+        }
         for row in &unique[1..] {
             if let Some(val) = row.first() {
-                println!("  {val}");
+                if quiet {
+                    println!("{val}");
+                } else {
+                    println!("  {val}");
+                }
             }
         }
 
@@ -380,7 +408,10 @@ impl PandasCommandHandler {
         let data = converter.read_any_data(&input, None)?;
 
         if let Some(header) = data.first() {
-            println!("Column Types:");
+            let quiet = crate::cli::runtime::get().quiet;
+            if !quiet {
+                println!("Column Types:");
+            }
             for (i, col) in header.iter().enumerate() {
                 // Detect type
                 let mut has_numbers = false;
@@ -407,7 +438,11 @@ impl PandasCommandHandler {
                     "empty"
                 };
 
-                println!("  {}: {}", col, dtype);
+                if quiet {
+                    println!("{},{}", col, dtype);
+                } else {
+                    println!("  {}: {}", col, dtype);
+                }
             }
         }
 
@@ -640,9 +675,20 @@ impl PandasCommandHandler {
     fn print_data(&self, data: &[Vec<String>], format: OutputFormat) -> Result<()> {
         match format {
             OutputFormat::Csv => {
+                use std::io::Write;
+                let stdout = std::io::stdout();
+                let mut writer = stdout.lock();
                 for row in data {
-                    println!("{}", row.join(","));
+                    let escaped: Vec<String> = row.iter().map(|cell| {
+                        if cell.contains(',') || cell.contains('"') || cell.contains('\n') {
+                            format!("\"{}\"", cell.replace('"', "\"\""))
+                        } else {
+                            cell.clone()
+                        }
+                    }).collect();
+                    writeln!(writer, "{}", escaped.join(","))?;
                 }
+                writer.flush()?;
             }
             OutputFormat::Jsonl => {
                 if data.is_empty() {

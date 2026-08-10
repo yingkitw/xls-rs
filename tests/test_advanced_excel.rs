@@ -9,7 +9,6 @@ use xls_rs::{
     CellStyle, ChartConfig, ConditionalFormat, ConditionalRule, DataChartType, ExcelHandler,
     RowData, Sparkline, SparklineGroup, SparklineType, StreamingXlsxWriter, XlsxWriter,
     WriteOptions,
-    sanitize_csv_value, sanitize_csv_row, CsvHandler,
 };
 use std::fs;
 use std::path::Path;
@@ -464,90 +463,6 @@ fn test_xlsx_writer_sparkline_with_markers() {
     fs::remove_file(&output_path).ok();
 }
 
-// ============ CSV Injection Protection Tests ============
-
-#[test]
-fn test_sanitize_csv_value_formula_injection() {
-    assert_eq!(sanitize_csv_value("=CMD()"), "'=CMD()");
-    assert_eq!(sanitize_csv_value("+CMD()"), "'+CMD()");
-    assert_eq!(sanitize_csv_value("-CMD()"), "'-CMD()");
-    assert_eq!(sanitize_csv_value("@SUM(A1)"), "'@SUM(A1)");
-}
-
-#[test]
-fn test_sanitize_csv_value_safe_values() {
-    assert_eq!(sanitize_csv_value("Hello"), "Hello");
-    assert_eq!(sanitize_csv_value("123"), "123");
-    assert_eq!(sanitize_csv_value(""), "");
-    assert_eq!(sanitize_csv_value("Normal text"), "Normal text");
-}
-
-#[test]
-fn test_sanitize_csv_value_tab_newline() {
-    assert_eq!(sanitize_csv_value("\tdata"), "'\tdata");
-    assert_eq!(sanitize_csv_value("\rdata"), "'\rdata");
-    assert_eq!(sanitize_csv_value("\ndata"), "'\ndata");
-}
-
-#[test]
-fn test_sanitize_csv_row() {
-    let row = vec![
-        "Name".to_string(),
-        "=HYPERLINK(\"evil\")".to_string(),
-        "100".to_string(),
-    ];
-    let sanitized = sanitize_csv_row(&row);
-    assert_eq!(sanitized[0], "Name");
-    assert_eq!(sanitized[1], "'=HYPERLINK(\"evil\")");
-    assert_eq!(sanitized[2], "100");
-}
-
-#[test]
-fn test_csv_write_records_safe() {
-    let handler = CsvHandler;
-    let output_path = unique_path("csv_safe", "csv");
-
-    let records = vec![
-        vec!["Name".to_string(), "Formula".to_string()],
-        vec!["Alice".to_string(), "=1+1".to_string()],
-        vec!["Bob".to_string(), "+cmd".to_string()],
-    ];
-
-    handler.write_records_safe(&output_path, records).unwrap();
-    assert!(Path::new(&output_path).exists());
-
-    // Read back and verify sanitization
-    let content = fs::read_to_string(&output_path).unwrap();
-    assert!(content.contains("'=1+1"));
-    assert!(content.contains("'+cmd"));
-    assert!(!content.contains(",=1+1")); // Should be sanitized
-
-    fs::remove_file(&output_path).ok();
-}
-
-#[test]
-fn test_csv_append_records_safe() {
-    let handler = CsvHandler;
-    let output_path = unique_path("csv_append_safe", "csv");
-
-    // Write initial data
-    handler.write_records(&output_path, vec![
-        vec!["Header".to_string()],
-    ]).unwrap();
-
-    // Append with injection protection
-    handler.append_records_safe(&output_path, &[
-        vec!["=EVIL()".to_string()],
-        vec!["Safe".to_string()],
-    ]).unwrap();
-
-    let content = fs::read_to_string(&output_path).unwrap();
-    assert!(content.contains("'=EVIL()"));
-    assert!(content.contains("Safe"));
-
-    fs::remove_file(&output_path).ok();
-}
-
 // ============ Combined Features Test ============
 
 #[test]
@@ -854,35 +769,6 @@ fn test_conditional_format_on_empty_sheet() {
     assert!(Path::new(&output_path).exists());
 
     fs::remove_file(&output_path).ok();
-}
-
-#[test]
-fn test_csv_sanitize_negative_numbers() {
-    // Negative numbers start with '-' which is a dangerous char
-    let result = sanitize_csv_value("-42");
-    assert_eq!(result, "'-42");
-
-    // Positive numbers are safe
-    assert_eq!(sanitize_csv_value("42"), "42");
-}
-
-#[test]
-fn test_csv_sanitize_mixed_row_comprehensive() {
-    let row = vec![
-        "Safe".to_string(),
-        "=HYPERLINK(\"http://evil.com\")".to_string(),
-        "+1234567890".to_string(),
-        "@import".to_string(),
-        "100".to_string(),
-        "".to_string(),
-    ];
-    let sanitized = sanitize_csv_row(&row);
-    assert_eq!(sanitized[0], "Safe");
-    assert!(sanitized[1].starts_with("'="));
-    assert!(sanitized[2].starts_with("'+"));
-    assert!(sanitized[3].starts_with("'@"));
-    assert_eq!(sanitized[4], "100");
-    assert_eq!(sanitized[5], "");
 }
 
 // ============ Export Styled Preset Tests ============

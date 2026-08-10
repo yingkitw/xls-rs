@@ -1,6 +1,6 @@
 //! Helper functions for common operations (DRY principle)
 
-use crate::csv_handler::CellRange;
+use crate::excel::reader::CellRange;
 use anyhow::{Context, Result};
 
 /// Filter data by cell range (used by multiple handlers)
@@ -161,7 +161,7 @@ pub fn validate_column_index(data: &[Vec<String>], col: usize) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::filter_by_range;
-    use crate::csv_handler::CellRange;
+    use crate::excel::reader::CellRange;
 
     #[test]
     fn filter_by_range_a1_b2() {
