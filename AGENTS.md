@@ -1,8 +1,8 @@
 # Agent Development Loop
 
-**Version**: 0.1.14 | **Last updated**: 2026-08-09 | **License**: Apache-2.0
+**Version**: 0.1.14 | **Last updated**: 2026-08-10 | **License**: Apache-2.0
 
-This document defines the continuous improvement cycle for the **xls-rs** crate — a pure-Rust spreadsheet CLI, library, and MCP server for reading, writing, converting, and analyzing XLSX, XLS, CSV, ODS, Parquet, and Avro files.
+This document defines the continuous improvement cycle for the **xls-rs** crate — **the pure-Rust spreadsheet toolkit**. Three pillars: format mastery (XLSX, XLS, CSV, ODS, Parquet, Avro), format conversion, and three surfaces (CLI, library, MCP) from one codebase.
 
 ## Project Structure
 

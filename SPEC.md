@@ -1,26 +1,34 @@
 # SPEC
 
-**Version**: 0.1.11 | **Last updated**: 2026-08-08 | **License**: Apache-2.0
+**Version**: 0.1.14 | **Last updated**: 2026-08-10 | **License**: Apache-2.0
 
 ## Project
 
-`xls-rs` provides three capability surfaces built from the same core:
+`xls-rs` is **the pure-Rust spreadsheet toolkit**. Three pillars:
 
-- **Library** (`xls_rs` crate): Rust APIs for programmatic use.
-- **CLI** (`xls-rs` binary): Human-friendly command-line interface.
-- **MCP Server** (`XlsRsMcpServer`): Tool-based automation via the Model Context Protocol.
+1. **Format mastery** — Native read/write for XLSX, XLS (BIFF8 from scratch), CSV, Parquet, Avro. Read ODS. Google Sheets via API v4.
+2. **Format conversion** — Bridge between spreadsheet and columnar formats.
+3. **Three surfaces** — CLI, library, and MCP server from one codebase.
 
-All three surfaces delegate to the same underlying operations registered in `CapabilityRegistry`, ensuring identical behavior, errors, and defaults everywhere.
+All three surfaces delegate to the same operations registered in `CapabilityRegistry`, ensuring identical behavior, errors, and defaults everywhere.
+
+## Design principles
+
+- **Pure Rust, no external runtime** — No Excel, Python, JVM, or LibreOffice dependency.
+- **Honest scope** — Practical formula subset, not a full Excel calc engine. Eager operations, not a lazy query engine. Spreadsheet-first, not a pandas replacement.
+- **Production safety** — Formula-injection sanitization, overwrite guards, path validation, memory caps.
+- **Surgical changes** — Touch only what needs changing. Match existing patterns. No speculative abstractions.
 
 ## Primary use cases
 
-- Convert between formats (CSV ↔ Excel ↔ Parquet ↔ Avro).
+- Convert between formats (CSV ↔ XLSX ↔ Parquet ↔ Avro).
 - Read specific sheets/ranges from Excel files.
 - Apply formula evaluation and transformations.
-- Batch/process large files (streaming-oriented operations where possible).
+- Author styled XLSX with charts, conditional formatting, structured tables.
 - In-place Excel edits: apply formulas to ranges, write ranges with expand/preserve/overwrite semantics.
-- Read/write Google Sheets via API v4 when authenticated.
-- Expose the same capabilities to AI agents via the MCP server (`XlsRsMcpServer`).
+- Batch/process large CSV files (streaming).
+- Read/write Google Sheets via API v4.
+- Expose spreadsheet capabilities to AI agents via MCP.
 
 ## Capability surfaces
 
@@ -52,11 +60,22 @@ All three surfaces delegate to the same underlying operations registered in `Cap
 - CLI prints human-friendly messages; MCP embeds the same code in JSON-RPC `error.data`.
 - `mcp_error_data` enriches errors with request context (input/output paths, sheet, range, cell) and heuristics parsed from the error text.
 
+## Scope boundaries
+
+xls-rs is a practical toolkit, not a complete Excel engine or analytics platform:
+
+- **Formula evaluation**: practical subset (arithmetic, comparisons, ~25 common functions). Not a full Excel calculation engine.
+- **No lazy evaluation**: operations are eager. No query planning or predicate pushdown.
+- **XLSX streaming**: CSV supports chunked processing; XLSX reads materialize the whole sheet.
+- **MCP hosting**: `xls-rs serve` does not yet launch a transport. Embed `XlsRsMcpServer` in an async host.
+- **ODS write**: not implemented. Convert to XLSX instead.
+- **Surface parity**: advanced library analytics (anomaly, time-series, geospatial, text analysis) are not all exposed through CLI or MCP.
+
 ## Non-functional requirements
 
 - **Rust edition**: 2024
-- **Minimum supported Rust version**: 1.70+ (see `Cargo.toml`)
+- **Minimum supported Rust version**: 1.85+ (edition 2024)
 - **Quality gates**: `cargo build` and `cargo test` must pass. See [`MEMORY.md`](MEMORY.md#testing-patterns) for testing conventions.
-- **Cross-platform**: should work on macOS/Linux/Windows (where dependencies allow).
-- **Safety**: CSV formula-injection sanitization on all write paths; overwrite guards; path traversal prevention. See [`MEMORY.md`](MEMORY.md#security-considerations) for security patterns.
+- **Cross-platform**: macOS, Linux, Windows (where dependencies allow).
+- **Safety**: CSV formula-injection sanitization on all write paths; overwrite guards; path traversal prevention; memory caps for malicious files. See [`MEMORY.md`](MEMORY.md#security-considerations) for security patterns.
 

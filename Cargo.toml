@@ -1,6 +1,6 @@
 [package]
 name = "xls-rs"
-version = "0.1.14"
+version = "0.1.15"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/yingkitw/xls-rs"
@@ -15,7 +15,7 @@ categories = [
     "encoding",
     "api-bindings",
 ]
-description = "Pure-Rust spreadsheet CLI, library, and MCP server for reading, writing, converting, and analyzing XLSX, XLS, CSV, ODS, Parquet, and Avro files. Native XLSX/XLS writers with charts, styles, conditional formatting, sparklines, structured tables, and formulas. Pandas-style data operations, LaTeX export, and password-protected XLSX decryption. No Microsoft Excel, Python, or JVM dependency."
+description = "The pure-Rust spreadsheet toolkit. Read, write, and convert XLSX, XLS, CSV, ODS, Parquet, and Avro from CLI, library, or MCP server. Native XLSX/XLS writers with charts, styles, conditional formatting, and formulas. No Microsoft Excel, Python, or JVM dependency."
 exclude = [
     ".claude/**",
     ".windsurf/**",

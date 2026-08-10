@@ -1,6 +1,8 @@
 # MEMORY
 
-Institutional knowledge and pattern library for xls-rs development.
+Institutional knowledge and pattern library for xls-rs — **the pure-Rust spreadsheet toolkit**.
+
+**Version**: 0.1.14 | **Last updated**: 2026-08-10
 
 ## Core Types & Handler Patterns
 
@@ -328,25 +330,11 @@ Institutional knowledge and pattern library for xls-rs development.
 - **Range validation**: Check that cell references and ranges are within valid bounds
 - **Type validation**: Validate that values match expected types before operations
 
-## Version History and Breaking Changes
+## Version History
 
-### Major Versions
-- **Version 0.1.0**: Initial release with basic CSV/XLSX read/write
-- **Version 0.2.0**: Added Parquet/Avro support, pandas-style operations
-- **Version 0.3.0**: Added XLS (BIFF8) read/write, Google Sheets integration
-- **Version 0.4.0**: Added MCP server, streaming support, data profiling
-- **Version 0.5.0**: Added template-based generation, advanced analytics
-
-### Breaking Changes
-- **Error type changes**: `XlsRsError` replaced with `XlsError` in version 0.2.0
-- **API reorganization**: `ExcelHandler` methods reorganized in version 0.3.0
-- **Feature flags**: Parquet and Avro moved to optional features in version 0.2.0
-- **CLI argument changes**: `--input` and `--output` flags standardized in version 0.4.0
-
-### Deprecation Notices
-- **Direct `write_records`**: Use `write_records_safe` for CSV writes to prevent formula injection
-- **Legacy format detection**: Extension-based detection is preferred; content-based detection may be deprecated
-- **Manual style creation**: Use style presets (`default`, `minimal`, `report`, `executive`) instead
+- **0.1.x**: Initial release series. CSV/XLSX read/write, Parquet/Avro, XLS (BIFF8) read/write from scratch, Google Sheets, MCP server, streaming, data profiling, template generation, password-protected XLSX decryption, style reading, `.xlsm` support, structured tables, LaTeX/HTML export, advanced analytics (correlation, regression, anomaly detection, sampling).
+- **Breaking changes**: `XlsRsError` → `XlsError`; `ExcelHandler` methods reorganized; Parquet/Avro moved to optional features; `--input`/`--output` standardized.
+- **Deprecation notices**: Use `write_records_safe` instead of `write_records` for CSV writes. Use style presets instead of manual style creation.
 
 ## Glossary of Technical Terms
 

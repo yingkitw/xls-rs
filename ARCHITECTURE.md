@@ -1,21 +1,32 @@
 # ARCHITECTURE
 
-**Version**: 0.1.11 | **Last updated**: 2026-08-08 | **License**: Apache-2.0
+**Version**: 0.1.14 | **Last updated**: 2026-08-10 | **License**: Apache-2.0
 
 ## Table of Contents
 - [High level](#high-level)
+- [Design decisions](#design-decisions)
 - [Key modules](#key-modules)
 - [Data flow](#data-flow)
 - [Testing layout](#testing-layout)
 
 ## High level
 
-This repository builds:
+xls-rs is **the pure-Rust spreadsheet toolkit**. It builds three surfaces from one codebase:
 
 - **CLI binary**: `xls-rs` (`src/main.rs`, clap definitions in `src/cli/`)
 - **Library crate**: `xls_rs` (`src/lib.rs`)
+- **MCP server**: `XlsRsMcpServer` (`src/mcp.rs`)
 
-The CLI delegates command execution to domain handlers under `src/cli/commands/` and uses the library modules for actual implementations. MCP tools use the same library entry points through `CapabilityRegistry::execute`.
+The CLI delegates command execution to domain handlers under `src/cli/commands/` and uses the library modules for actual implementations. MCP tools use the same library entry points through `CapabilityRegistry::execute`. All three surfaces share identical behavior, errors, and defaults.
+
+## Design decisions
+
+- **XLS (BIFF8) writer in pure `std`**: The legacy `.xls` format is implemented from scratch without `zip` or any external format crate. This is a unique differentiator — no other Rust crate writes BIFF8.
+- **Three-surface architecture**: CLI, library, and MCP all delegate to `CapabilityRegistry`. No hidden behavior in CLI; no separate logic in MCP. One codebase, consistent semantics.
+- **Eager operations**: All data operations are eager (no lazy evaluation, no query planning). This keeps the codebase simple and predictable. Lazy evaluation is a potential long-term goal, not a current design.
+- **Memory safety caps**: `src/limits.rs` enforces hard caps on dense grids, ODS repeats, ZIP/CSV sizes, join/melt output, formula depth, and string-distance length. This mitigates malicious file attacks.
+- **CSV formula-injection sanitization**: All write paths sanitize CSV output to prevent formula injection (`=`, `+`, `-`, `@` prefixes). Low-level `write_records` remains for explicit/test use.
+- **Feature flags for optional formats**: Parquet, Avro, Google Sheets, password decryption, MCP, watch, and completions are behind feature flags. Default build enables all except `password`.
 
 ## Key modules
 
