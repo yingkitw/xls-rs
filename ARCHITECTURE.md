@@ -1,6 +1,6 @@
 # ARCHITECTURE
 
-**Version**: 0.1.14 | **Last updated**: 2026-08-10 | **License**: Apache-2.0
+**Version**: 0.1.16 | **Last updated**: 2026-08-15 | **License**: Apache-2.0
 
 ## Table of Contents
 - [High level](#high-level)
@@ -11,109 +11,79 @@
 
 ## High level
 
-xls-rs is **the pure-Rust spreadsheet toolkit**. It builds three surfaces from one codebase:
+xls-rs is **the pure-Rust XLSX toolkit**. It provides two surfaces from one codebase:
 
 - **CLI binary**: `xls-rs` (`src/main.rs`, clap definitions in `src/cli/`)
 - **Library crate**: `xls_rs` (`src/lib.rs`)
-- **MCP server**: `XlsRsMcpServer` (`src/mcp.rs`)
 
-The CLI delegates command execution to domain handlers under `src/cli/commands/` and uses the library modules for actual implementations. MCP tools use the same library entry points through `CapabilityRegistry::execute`. All three surfaces share identical behavior, errors, and defaults.
+The CLI delegates command execution to domain handlers under `src/cli/commands/` and uses library modules for the underlying spreadsheet and data operations. Both surfaces share identical behavior, error codes, and defaults.
 
 ## Design decisions
 
-- **XLS (BIFF8) writer in pure `std`**: The legacy `.xls` format is implemented from scratch without `zip` or any external format crate. This is a unique differentiator — no other Rust crate writes BIFF8.
-- **Three-surface architecture**: CLI, library, and MCP all delegate to `CapabilityRegistry`. No hidden behavior in CLI; no separate logic in MCP. One codebase, consistent semantics.
-- **Eager operations**: All data operations are eager (no lazy evaluation, no query planning). This keeps the codebase simple and predictable. Lazy evaluation is a potential long-term goal, not a current design.
-- **Memory safety caps**: `src/limits.rs` enforces hard caps on dense grids, ODS repeats, ZIP/CSV sizes, join/melt output, formula depth, and string-distance length. This mitigates malicious file attacks.
-- **CSV formula-injection sanitization**: All write paths sanitize CSV output to prevent formula injection (`=`, `+`, `-`, `@` prefixes). Low-level `write_records` remains for explicit/test use.
-- **Feature flags for optional formats**: Parquet, Avro, Google Sheets, password decryption, MCP, watch, and completions are behind feature flags. Default build enables all except `password`.
+- **Native XLSX Reader & Writer in pure Rust**: Full OOXML (ZIP + XML) reader and writer without heavy runtime dependencies.
+- **Rich XLSX Authoring**: Styles, charts, conditional formatting, sparklines, structured tables, merged cells, hyperlinks, comments, print setup, freeze panes, auto-filter.
+- **Eager operations**: All data operations are eager (no lazy query planning). This keeps the codebase simple, lean, and predictable.
+- **Memory safety caps**: `src/limits.rs` enforces hard caps on cell counts, range dimensions, formula depth, and string distance lengths to prevent resource exhaustion attacks.
+- **Modular XML Generation**: `src/excel/xlsx_writer/` splits XML generation into dedicated submodules (`xml_gen.rs`, `style_registry.rs`, `chart_xml.rs`, `cond_fmt_xml.rs`, `sparkline_xml.rs`, `streaming.rs`).
 
 ## Key modules
 
-### I/O Layer
+### Excel Layer (`src/excel/`)
 
-- `src/csv_handler.rs`: CSV read/write with formula-injection sanitization (`sanitize_csv_row` / `write_records_safe`).
-- `src/excel/`: Excel read (native readers for `.xlsx`, `.xls`, and `.ods`) + write (`XlsxWriter`, `StreamingXlsxWriter`, `XlsWriter`). `XlsxStreamingReader` provides row-by-row XLSX parsing via buffered ZIP entry reading. Includes `WriteMode` (Expand/Preserve/Overwrite). Writer supports charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping (outline), freeze panes, and auto-filter. XLSX writer is modular: `xml_gen.rs` (worksheet/styles XML), `style_registry.rs` (cell style registry), `cond_fmt_xml.rs` (conditional formatting XML), `sparkline_xml.rs` (sparkline XML), `chart_xml.rs` (chart XML), `types.rs` (data types), `streaming.rs` (streaming writer). **XLS (BIFF8) write path is implemented from scratch in `src/excel/xls_writer/`** — see below.
-- `src/columnar/`: Parquet (`arrow` / `parquet`) and Avro (`apache-avro`) handlers.
-- `src/google_sheets.rs`: Google Sheets API v4 client for read/write/append/list; uses `ureq` for HTTP.
-- `src/converter.rs`: `Converter` — format-agnostic entry point that routes to the correct handler by extension.
-- `src/handler_registry.rs`: Maps file extensions to `DataReader` / `DataWriter` implementations.
+- `src/excel/xlsx_reader.rs`: `NativeXlsxReader` — reads sheets, cells, dimensions, shared strings, and tables.
+- `src/excel/xlsx_streaming_reader.rs`: `XlsxStreamingReader` — streaming row-by-row XML parser for large files.
+- `src/excel/xlsx_writer/`: Modular writer generating valid OOXML spreadsheets with styles, charts, sparklines, tables, conditional formats, and streaming support.
+- `src/excel/xlsx_style_reader.rs`: Parses and inspects cell styles and number formats.
+- `src/excel/reader.rs` / `src/excel/writer.rs`: `ExcelHandler` high-level entry points.
+- `src/excel/cell_typer.rs`: Fast cell type classification.
+- `src/excel/chart.rs`: Chart definitions and configuration.
+- `src/excel/template/`: Template processing with `{{placeholder}}` token replacement.
 
-### Operations Layer
+### Operations Layer (`src/operations/`)
 
-- `src/operations/`: pandas-style operations — sort, filter, join, concat, groupby, pivot, melt, rolling, crosstab, transpose, select, dedupe, sample, clip, normalize, zscore, fillna, dropna, rename, drop, mutate, astype, unique, value-counts, corr (Pearson & Spearman), describe (with percentiles, skewness, kurtosis), simple linear regression (`regress`), head, tail, info, dtypes.
-- `src/formula/`: Excel formula parsing and evaluation (`FormulaEvaluator`).
-- `src/validation.rs`: Data validation rules engine (`DataValidator`).
-- `src/profiling.rs` / `src/profiling_handler.rs`: Column profiles and data-quality reports.
-- `src/anomaly.rs`: Statistical outlier detection — Z-score, Modified Z-score (MAD-based), IQR, and percentile methods.
-- `src/quality.rs`: Quality issue reporting.
-- `src/text_analysis.rs` / `src/text_analysis_handler.rs`: Keyword, language, and sentiment analysis.
-- `src/timeseries.rs`: Temporal resampling, rolling aggregates, trend detection.
-- `src/geospatial.rs`: Coordinate parsing and distance/bearing calculations.
+- `src/operations/core.rs`: Filtering, column selection, sorting, renaming, type casting, deduplication.
+- `src/operations/pandas.rs`: GroupBy, joins (inner/left), pivot (wider/longer), melt, crosstab, transpose.
+- `src/operations/stats.rs`: Descriptive statistics (mean, median, variance, std dev, min, max, percentiles, skewness, kurtosis), correlation (Pearson, Spearman, Kendall Tau), simple linear regression, z-score.
+- `src/operations/transform.rs`: Fillna, dropna, string operations, numeric operations, sampling.
 
-### Capabilities Layer
+### Formula & Profiling Layer
 
-- `src/capabilities/`: Individual capability implementations (`SortCapability`, `ReadExcelCapability`, `ApplyFormulaCapability`, `ConvertCapability`, `FilterCapability`, etc.).
-- `src/capability_catalog.rs`: Static catalog of operations + formats; used for parity tracking between library / CLI / MCP.
-- `src/capabilities/registry.rs`: `CapabilityRegistry` — runtime registry that MCP tools and CLI handlers call into.
+- `src/formula/`: Parser (`parser.rs`), evaluator (`evaluator.rs`), and spreadsheet functions (`functions.rs`).
+- `src/profiling/`: Column profiling, statistical summaries, data quality scores.
+- `src/quality.rs`: Data quality issue checks and accuracy scoring.
+- `src/validation.rs`: Data validation rule definitions and schema evaluation.
 
-### Streaming Layer
+### Support & CLI Layer
 
-- `src/streaming.rs`: Core streaming traits (`StreamingDataReader`, `StreamingDataWriter`) + `CsvStreamingReader` for chunked CSV I/O.
-- `src/streaming_ops.rs`: Schema inference (`infer_schema`), `head`, `tail`, `get_info` without loading entire datasets.
-
-### Server Layer
-
-- `src/mcp.rs`: `XlsRsMcpServer` — MCP tool definitions and routing to `CapabilityRegistry`.
-- `src/mcp_enrichment.rs`: Builds structured `error.data` with request context and stable error codes.
-- `src/api.rs`: Optional HTTP API server (`--features api`) with `POST /api/read`.
-
-### Support Layer
-
-- `src/error.rs` / `src/error_traits.rs`: `XlsRsError`, `ErrorKind`, stable error codes, and trait-based error categorization.
-- `src/config.rs`: TOML config discovery and typed `Config` struct (includes `google_sheets.access_token`, `default_format`, etc.).
-- `src/common/`: Shared utilities — format detection, validation helpers, string utilities, collection helpers.
-- `src/helpers.rs`: Grid slicing (`filter_by_range`), cell-reference parsing, safe numeric parsing.
-- `src/limits.rs`: Hard caps for dense-grid materialization, ODS repeats, ZIP/CSV slurps, join/melt output, formula depth/range size, string-distance length, and profiler sampling — mitigates spreadsheet zip/memory bombs.
-- `src/types.rs`: Core types (`CellValue`, `DataSet`, `DataRow`, `DataType`).
-- `src/traits.rs`: Shared traits (`DataReader`, `DataWriter`, `FileHandler`, `DataOperator`, etc.).
-- `src/lineage.rs`: Transformation lineage tracking.
-- `src/encryption.rs`: File-level encryption/decryption.
-- `src/workflow.rs`: `WorkflowExecutor` for config-driven multi-step pipelines.
-- `src/plugins.rs`: Plugin registry for user-defined functions.
-
-### XLS (legacy BIFF8) writer — from scratch
-
-`src/excel/xls_writer/` implements the legacy `.xls` format using only `std`:
-
-- `cfb.rs` — OLE2 / Compound File Binary writer (v3, 512-byte sectors, mini-stream for streams < 4096 bytes, balanced directory tree, FAT / mini-FAT / DIFAT chains).
-- `biff.rs` — BIFF8 record encoder (BOF, CodePage, Window1, Font, XF, DateMode, BoundSheet, UseSelfs, Country, SST, Window2, BOF sheet, Dimensions, Window2, Row, cells, EOF).
-- `ptg.rs` — Basic Excel formula encoder (cell references, ranges, integer / float / boolean literals, arithmetic, comparisons, ~25 common functions).
-- `mod.rs` — `XlsWriter`, `XlsRowData`, `XlsSheetData` (mirrors the `XlsxWriter` API).
-
-The output is valid OLE2 / CFB + BIFF8. Round-tripped through our native `XlsReader` in the integration tests under `tests/test_xls_writer.rs`.
+- `src/cli/`: Clap CLI parser, runtime execution context, output formatting (table, CSV, JSON, Markdown, HTML, LaTeX), and command handlers (`src/cli/commands/`).
+- `src/error.rs` / `src/error_traits.rs`: Typed `XlsError` / `ErrorKind` hierarchy with stable error codes.
+- `src/config.rs`: TOML config loader (`.xls-rs.toml`).
+- `src/limits.rs`: Safety limits and memory caps.
+- `src/types.rs`: Core types (`Cell`, `Row`, `Sheet`, `Workbook`, `CellValue`).
+- `src/traits.rs`: Core traits (`DataReader`, `DataWriter`, `DataOperator`, `CellRangeProvider`).
 
 ## Data flow
 
 ```
-CLI command ──→ DefaultCommandHandler ──→ CapabilityRegistry::execute
-                                            │
-MCP tool    ──→ XlsRsMcpServer ────────────┤
-                                            │
-Library API ──→ direct call ────────────────┘
-                                            ↓
-                                SortCapability / ReadExcelCapability / etc.
-                                            ↓
-                                ExcelHandler / Converter / DataOperations
-                                            ↓
-                                native readers / csv / parquet / avro / ureq
-                                            ↓ (XLS write only)
-                                XlsWriter (src/excel/xls_writer/) — std only
+CLI command (xls-rs <subcommand>)
+     │
+     ▼
+src/cli/handler.rs (CommandHandler)
+     │
+     ▼
+src/cli/commands/ (io, pandas, transform, advanced)
+     │
+     ▼
+xls-rs core library (ExcelHandler, DataOperations, FormulaEvaluator)
+     │
+     ▼
+Native XLSX Reader / Writer / Streaming Engine
 ```
 
 ## Testing layout
 
-- `tests/`: integration tests (34 test files, 676 tests covering all major features)
-- `tests/common/mod.rs`: shared paths + example fixture creation for tests
-- `benches/performance.rs`: Criterion benchmarks for read/write/convert hot paths
+- `tests/`: Integration tests covering Excel reading/writing, formula parsing/evaluation, parity, streaming, styles, tables, templates, and operations.
+- `tests/common/mod.rs`: Shared test fixture helpers.
+- `src/`: Unit tests inline in respective modules.
+
 

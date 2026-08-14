@@ -703,8 +703,10 @@ mod tests {
     #[test]
     fn xlsx_cell_style_is_empty_detects_unset() {
         assert!(XlsxCellStyle::default().is_empty());
-        let mut s = XlsxCellStyle::default();
-        s.bold = Some(true);
+        let s = XlsxCellStyle {
+            bold: Some(true),
+            ..Default::default()
+        };
         assert!(!s.is_empty());
     }
 

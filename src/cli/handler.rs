@@ -72,9 +72,6 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 sheet,
             } => self.io.handle_formula(input, output, formula, cell, sheet),
 
-            #[cfg(feature = "mcp")]
-            Commands::Serve => self.io.handle_serve(),
-
             Commands::Sheets { input } => self.io.handle_sheets(input),
 
             Commands::ReadAll { input, format } => {

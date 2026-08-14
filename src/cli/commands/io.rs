@@ -4,7 +4,6 @@
 
 use crate::cli::OutputFormat;
 use xls_rs::{
-    config::Config,
     converter::Converter,
     excel::ExcelHandler,
     excel::reader::CellRange,
@@ -144,30 +143,6 @@ impl IoCommandHandler {
         Ok(())
     }
 
-    /// Handle the serve command
-    ///
-    /// Starts the MCP server over stdio transport for model context protocol.
-    #[cfg(feature = "mcp")]
-    pub fn handle_serve(&self) -> Result<()> {
-        use rmcp::{ServiceExt, transport::stdio};
-        use xls_rs::XlsRsMcpServer;
-
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()?;
-
-        runtime.block_on(async {
-            let service = XlsRsMcpServer::new();
-            let server = service
-                .serve(stdio())
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to start MCP server: {e}"))?;
-            server.waiting().await
-                .map_err(|e| anyhow::anyhow!("MCP server error: {e}"))?;
-            Ok(())
-        })
-    }
-
     /// Handle the sheets command
     ///
     /// Lists all sheets in an Excel file.
@@ -265,115 +240,6 @@ impl IoCommandHandler {
         writer.append(&target, &data)?;
 
         println!("Successfully appended {} rows to {}", data.len(), target);
-        Ok(())
-    }
-
-    /// Handle the GSheetsList command
-    #[cfg(feature = "gsheets")]
-    pub fn handle_gsheets_list(&self, spreadsheet: String) -> Result<()> {
-        let config_path = crate::cli::runtime::get()
-            .config_path
-            .clone()
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|p| p.join(".xls-rs.toml"))
-                    .unwrap_or_else(|| ".xls-rs.toml".into())
-            });
-
-        let config = if config_path.exists() {
-            Config::load_from(&config_path.to_string_lossy())?
-        } else {
-            Config::default()
-        };
-
-        let handler = GoogleSheetsHandler::with_config(config);
-        let titles = handler.list_sheet_titles(&spreadsheet)?;
-        for title in titles {
-            println!("{title}");
-        }
-
-        Ok(())
-    }
-
-    /// Handle the GSheetsAuth command
-    #[cfg(feature = "gsheets")]
-    pub fn handle_gsheets_auth(&self) -> Result<()> {
-        let config_path = crate::cli::runtime::get()
-            .config_path
-            .clone()
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|p| p.join(".xls-rs.toml"))
-                    .unwrap_or_else(|| ".xls-rs.toml".into())
-            });
-        
-        let config = if config_path.exists() {
-            Config::load_from(&config_path.to_string_lossy())?
-        } else {
-            Config::default()
-        };
-        
-        crate::cli::runtime::log("Google Sheets Authentication Setup");
-        crate::cli::runtime::log("=================================");
-        crate::cli::runtime::log("");
-        crate::cli::runtime::log("To authenticate with Google Sheets, you have several options:");
-        crate::cli::runtime::log("");
-        crate::cli::runtime::log("1. Service Account (Recommended for server applications):");
-        crate::cli::runtime::log("   - Create a service account at https://console.cloud.google.com/");
-        crate::cli::runtime::log("   - Download the JSON key file");
-        crate::cli::runtime::log("   - Add this to your config file:");
-        crate::cli::runtime::log("     [google_sheets]");
-        crate::cli::runtime::log("     service_account_file = \"/path/to/service-account.json\"");
-        crate::cli::runtime::log("");
-        crate::cli::runtime::log("2. OAuth2 Flow (Recommended for personal use):");
-        crate::cli::runtime::log("   - Create OAuth2 credentials at Google Cloud Console");
-        crate::cli::runtime::log("   - Download the client secrets JSON file");
-        crate::cli::runtime::log("   - Add this to your config file:");
-        crate::cli::runtime::log("     [google_sheets]");
-        crate::cli::runtime::log("     client_secrets_file = \"/path/to/client-secrets.json\"");
-        crate::cli::runtime::log("     token_file = \"/path/to/token.json\"");
-        crate::cli::runtime::log("");
-        crate::cli::runtime::log("3. API Key (Read-only access to public sheets):");
-        crate::cli::runtime::log("   - Create an API key at Google Cloud Console");
-        crate::cli::runtime::log("   - Add this to your config file:");
-        crate::cli::runtime::log("     [google_sheets]");
-        crate::cli::runtime::log("     api_key = \"your-api-key\"");
-        crate::cli::runtime::log("");
-        crate::cli::runtime::log(format!("Current config file: {}", config_path.display()));
-        
-        if config.google_sheets.service_account_file.is_none() 
-            && config.google_sheets.client_secrets_file.is_none() 
-            && config.google_sheets.api_key.is_none() {
-            crate::cli::runtime::log("No Google Sheets credentials configured.");
-        }
-        
-        Ok(())
-    }
-
-    /// Handle the GSheetsSetDefault command
-    #[cfg(feature = "gsheets")]
-    pub fn handle_gsheets_set_default(&self, spreadsheet: String) -> Result<()> {
-        let config_path = crate::cli::runtime::get()
-            .config_path
-            .clone()
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|p| p.join(".xls-rs.toml"))
-                    .unwrap_or_else(|| ".xls-rs.toml".into())
-            });
-        
-        let mut config = if config_path.exists() {
-            Config::load_from(&config_path.to_string_lossy())?
-        } else {
-            Config::default()
-        };
-        
-        config.google_sheets.default_spreadsheet_id = Some(spreadsheet.clone());
-        config.save(&config_path.to_string_lossy())?;
-        
-        crate::cli::runtime::log(format!("Set default Google Sheets to: {}", spreadsheet));
-        crate::cli::runtime::log(format!("Config updated at: {}", config_path.display()));
-        
         Ok(())
     }
 

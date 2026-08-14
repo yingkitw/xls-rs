@@ -131,6 +131,7 @@ pub trait CellRangeProvider: Send + Sync {
     fn to_cell_reference(&self, row: usize, col: usize) -> String;
 
     /// Convert cell reference to row/column indices (e.g., "A1" -> (0, 0))
+    #[allow(clippy::wrong_self_convention)]
     fn from_cell_reference(&self, cell: &str) -> Result<(usize, usize)>;
 }
 

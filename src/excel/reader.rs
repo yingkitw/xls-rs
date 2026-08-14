@@ -41,12 +41,12 @@ impl ExcelMetadataCache {
 
     fn get(&self, path: &str) -> Option<ExcelMetadata> {
         let cache = self.cache.read().ok()?;
-        if let Some(metadata) = cache.get(path) {
-            if let Ok(current_modified) = std::fs::metadata(path).and_then(|m| m.modified())
-                && let Some(cached_modified) = metadata.modified_time
-                    && current_modified == cached_modified {
-                        return Some(metadata.clone());
-                    }
+        if let Some(metadata) = cache.get(path)
+            && let Ok(current_modified) = std::fs::metadata(path).and_then(|m| m.modified())
+            && let Some(cached_modified) = metadata.modified_time
+            && current_modified == cached_modified
+        {
+            return Some(metadata.clone());
         }
         None
     }
@@ -211,8 +211,8 @@ impl ExcelHandler {
         let sheet = workbook.get_sheet_by_name(&sheet_name)
             .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
 
-        let estimated_rows = (range.end_row.saturating_sub(range.start_row) + 1) as usize;
-        let estimated_cols = (range.end_col.saturating_sub(range.start_col) + 1) as usize;
+        let estimated_rows = range.end_row.saturating_sub(range.start_row) + 1;
+        let estimated_cols = range.end_col.saturating_sub(range.start_col) + 1;
         let mut result = Vec::with_capacity(estimated_rows.min(DEFAULT_ESTIMATED_ROWS));
 
         for row_idx in range.start_row..=range.end_row {
@@ -248,11 +248,11 @@ impl ExcelHandler {
 
     pub fn read_auto(&self, path: &str, sheet_or_range: Option<&str>) -> Result<Vec<Vec<String>>> {
         if path.to_lowercase().ends_with(".xlsx") {
-            if let Some(range_str) = sheet_or_range {
-                if range_str.contains(':') {
-                    let cell_range = CellRange::parse(range_str)?;
-                    return self.read_range(path, &cell_range, None);
-                }
+            if let Some(range_str) = sheet_or_range
+                && range_str.contains(':')
+            {
+                let cell_range = CellRange::parse(range_str)?;
+                return self.read_range(path, &cell_range, None);
             }
             return self.read_sheet_data(path, sheet_or_range);
         }

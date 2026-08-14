@@ -1,6 +1,6 @@
 # TODO
 
-**Version**: 0.1.14 | **Last updated**: 2026-08-10 | **License**: Apache-2.0
+**Version**: 0.1.16 | **Last updated**: 2026-08-15 | **License**: Apache-2.0
 
 ## Table of Contents
 - [Vision](#vision)
@@ -12,36 +12,26 @@
 
 ## Vision
 
-xls-rs is **the pure-Rust spreadsheet toolkit**. Three pillars:
-
-1. **Format mastery** — Best-in-class native read/write for XLSX, XLS, CSV. Read ODS. Read/write Parquet, Avro. Google Sheets via API.
-2. **Format conversion** — The simplest way to bridge spreadsheet and columnar formats from the shell or Rust.
-3. **Three surfaces** — CLI, library, and MCP server from one codebase with consistent semantics.
+xls-rs is **the pure-Rust XLSX toolkit**. Read, write, and manipulate Excel XLSX files with charts, styles, conditional formatting, and formula evaluation — from the shell or from Rust. No Microsoft Excel, Python, or JVM required.
 
 **Design principles:**
 
 - **Pure Rust, no external runtime** — No Excel, Python, JVM, or LibreOffice dependency.
 - **Honest scope** — Practical formula subset, not a full Excel calc engine. Eager operations, not a lazy query engine. Spreadsheet-first, not a pandas replacement.
-- **Production safety** — Formula-injection sanitization, overwrite guards, path validation, memory caps.
+- **Production safety** — Overwrite guards, path validation, memory caps.
 - **Surgical changes** — Touch only what needs changing. Match existing patterns. No speculative abstractions.
 
 ## Completed work
 
-All items below are done and tested. See [`MEMORY.md`](MEMORY.md) for patterns and conventions.
+All items below are done and tested.
 
 ### Core format support
-- Native XLS (BIFF8) read + write from scratch in pure `std` — `src/excel/xls_writer/`, `src/excel/xls_reader/`
 - Native XLSX read + write with charts, sparklines, conditional formatting, structured tables, merged cells, hyperlinks, comments, data validation, print setup, freeze panes, auto-filter, row/column grouping
-- CSV read/write with formula-injection sanitization
-- ODS read (no write — convert to XLSX instead)
-- Parquet read/write (Apache Arrow)
-- Avro read/write
-- Google Sheets read/write/append/list via API v4
-- Password-protected XLSX decryption (AES-256-CBC, MS-OFFCRYPTO Agile Encryption) via `password` feature
+- Streaming XLSX reader (`xlsx_streaming_reader.rs`) and streaming writer (`xlsx_writer/streaming.rs`)
 - XLSX style reading (`xlsx_style_reader.rs`) with round-trip write→read→verify
-- `.xlsm` macro-enabled read/write (VBA project preservation)
 - Template-based generation with `{{placeholder}}` cells
-- LaTeX and HTML table export
+- LaTeX, Markdown, JSON, JSONL, and HTML table export formats
+
 
 ### Data operations
 - Inspection: head, tail, sample, describe, info, dtypes, value-counts, unique

@@ -293,16 +293,15 @@ impl<'a> RowIterator<'a> {
                 // Try to find the end of the row element
                 // Check for self-closing <row ... />
                 let after_tag = row_start + 4;
-                if let Some(close_pos) = find_subslice_from(&self.buffer, b"/>", after_tag) {
-                    if let Some(gt_pos) = find_subslice_from(&self.buffer, b">", after_tag) {
-                        if close_pos < gt_pos {
-                            // Self-closing — empty row
-                            let row_end = close_pos + 2;
-                            let row_xml = self.buffer[row_start..row_end].to_vec();
-                            self.buffer.drain(..row_end);
-                            return Some(row_xml);
-                        }
-                    }
+                if let Some(close_pos) = find_subslice_from(&self.buffer, b"/>", after_tag)
+                    && let Some(gt_pos) = find_subslice_from(&self.buffer, b">", after_tag)
+                    && close_pos < gt_pos
+                {
+                    // Self-closing — empty row
+                    let row_end = close_pos + 2;
+                    let row_xml = self.buffer[row_start..row_end].to_vec();
+                    self.buffer.drain(..row_end);
+                    return Some(row_xml);
                 }
 
                 // Look for </row>

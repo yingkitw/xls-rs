@@ -99,10 +99,6 @@ pub enum Commands {
         sheet: Option<String>,
     },
 
-    /// Start MCP server
-    #[cfg(feature = "mcp")]
-    Serve,
-
     /// Sort data by column
     Sort {
         #[arg(short, long, default_value = "-")]

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xls-rs - Pure-Rust XLSX Toolkit Documentation</title>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #38bdf8;
+            --accent-hover: #0ea5e9;
+            --border: #334155;
+            --card-bg: #1e293b;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 3rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.025em;
+        }
+
+        .tagline {
+            font-size: 1.125rem;
+            color: var(--accent);
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .card h2 {
+            font-size: 1.25rem;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .card p {
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+        }
+
+        code, pre {
+            font-family: var(--font-mono);
+        }
+
+        pre {
+            background: #090d16;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            margin: 1rem 0;
+            color: #e2e8f0;
+            font-size: 0.9rem;
+        }
+
+        footer {
+            margin-top: 4rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>xls-rs</h1>
+            <div class="tagline">The pure-Rust XLSX toolkit</div>
+            <p>Fast, memory-efficient, pure-Rust spreadsheet library and CLI for reading, writing, and analyzing XLSX files. No Microsoft Excel, Python, or JVM runtime dependencies.</p>
+        </header>
+
+        <main>
+            <section>
+                <h2>Quick Overview</h2>
+                <pre><code># Install or build from source
+cargo build --release
+
+# Read and inspect spreadsheets
+xls-rs read data.xlsx
+xls-rs info data.xlsx
+xls-rs sheets data.xlsx
+
+# Run pandas-style transformations
+xls-rs head data.xlsx -n 10
+xls-rs filter -i data.xlsx -w "Price > 100"
+xls-rs groupby -i data.xlsx -g Category -a sum -c Sales</code></pre>
+            </section>
+
+            <div class="grid">
+                <div class="card">
+                    <h2>Specification</h2>
+                    <p>Core CLI subcommands, file format support, schema validation, and error contract.</p>
+                    <a href="../SPEC.md">View SPEC.md &rarr;</a>
+                </div>
+
+                <div class="card">
+                    <h2>Architecture</h2>
+                    <p>Modular domain layout, formula engine, streaming reader/writer, and zero-copy parsing.</p>
+                    <a href="../ARCHITECTURE.md">View ARCHITECTURE.md &rarr;</a>
+                </div>
+
+                <div class="card">
+                    <h2>Validation &amp; Parity</h2>
+                    <p>Comprehensive XLSX/XLS format validation benchmarks and parity tests against Excel specifications.</p>
+                    <a href="XLS_VALIDATION_SUMMARY.md">View Validation Summary &rarr;</a>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 xls-rs contributors. Released under the Apache-2.0 license.</p>
+        </footer>
+    </div>
+</body>
+</html>

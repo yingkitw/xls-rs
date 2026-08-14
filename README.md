@@ -1,6 +1,6 @@
 # xls-rs
 
-**Version**: 0.1.15 | **Last updated**: 2026-08-10
+**Version**: 0.1.16 | **Last updated**: 2026-08-15
 
 **The pure-Rust XLSX toolkit.** Read, write, and manipulate Excel XLSX files with charts, styles, conditional formatting, and formula evaluation — from the shell or from Rust. No Microsoft Excel, Python, or JVM required.
 

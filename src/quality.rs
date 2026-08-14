@@ -78,7 +78,7 @@ impl QualityReportGenerator {
         let mut issues = Vec::new();
         let mut accuracy_score: f64 = 100.0;
 
-        for (col_idx, col_profile) in profile.columns.iter().enumerate() {
+        for col_profile in &profile.columns {
             if col_profile.null_percentage > 50.0 {
                 issues.push(QualityIssue {
                     severity: IssueSeverity::High,

@@ -10,32 +10,6 @@ use xls_rs::{
     },
 };
 use anyhow::{Context, Result};
-#[cfg(feature = "completions")]
-use clap::CommandFactory;
-#[cfg(feature = "completions")]
-use clap_complete::{generate, Shell};
-use std::io;
-
-/// Handle the completions command
-///
-/// Generates shell completion scripts.
-#[cfg(feature = "completions")]
-pub fn handle_completions(shell: String) -> Result<()> {
-    let mut cmd = crate::cli::Cli::command();
-
-    let shell_type = match shell.to_lowercase().as_str() {
-        "bash" => Shell::Bash,
-        "zsh" => Shell::Zsh,
-        "fish" => Shell::Fish,
-        "powershell" => Shell::PowerShell,
-        "elvish" => Shell::Elvish,
-        _ => anyhow::bail!("Unsupported shell: {}", shell),
-    };
-
-    generate(shell_type, &mut cmd, "xls-rs", &mut io::stdout());
-
-    Ok(())
-}
 
 /// Handle the config_init command
 ///
@@ -183,6 +157,7 @@ pub fn handle_add_sparkline(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_conditional_format(
     output: String,
     range: String,

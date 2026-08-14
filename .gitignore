@@ -1,11 +1,17 @@
 target/
 *.bak
 .DS_Store
+**/.DS_Store
 AGENTS.md
 MEMORY.md
 
-# Converter temp artifacts
+# Output & temp artifacts
+output/
+test_*.csv
+*.tmp.*
 *.tmp.xlsx
 
 # Generated under examples/ by `xls-rs examples-generate` (not tracked as source)
 examples/*.xlsx
+examples/test_rt_*
+

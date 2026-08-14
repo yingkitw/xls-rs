@@ -91,6 +91,7 @@ impl AdvancedCommandHandler {
         advanced::handle_add_sparkline(output, data_range, sparkline_cell, sheet)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn handle_conditional_format(
         &self,
         output: String,
