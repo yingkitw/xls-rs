@@ -25,15 +25,15 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 - **Eager operations**: All data operations are eager (no lazy query planning). This keeps the codebase simple, lean, and predictable.
 - **Memory safety caps**: `src/limits.rs` enforces hard caps on cell counts, range dimensions, formula depth, and string distance lengths to prevent resource exhaustion attacks.
 - **Parallel sheet parsing**: `XlsxReader::from_archive` reads ZIP entries sequentially (the zip reader needs `&mut`), buffers each sheet's XML, then parses sheets in parallel with rayon. Guarded by memory/count thresholds in `src/limits.rs`; sequential fallback keeps peak memory bounded for huge workbooks.
-- **Modular XML Generation**: `src/excel/xlsx_writer/` splits XML generation into dedicated submodules (`xml_gen.rs`, `style_registry.rs`, `chart_xml.rs`, `cond_fmt_xml.rs`, `sparkline_xml.rs`, `streaming.rs`).
+- **Modular XML Generation**: `src/excel/xlsx_writer/` splits XML generation into dedicated submodules (`xml_gen.rs`, `style_registry.rs`, `chart_xml.rs`, `cond_fmt_xml.rs`, `sparkline_xml.rs`, `image_xml.rs`, `streaming.rs`).
 
 ## Key modules
 
 ### Excel Layer (`src/excel/`)
 
-- `src/excel/xlsx_reader.rs`: `XlsxReader` — reads sheets, cells, dimensions, shared strings, and tables.
+- `src/excel/xlsx_reader.rs`: `XlsxReader` — reads sheets, cells, dimensions, shared strings, tables, images, sheet protection, and document properties.
 - `src/excel/xlsx_streaming_reader.rs`: `XlsxStreamingReader` — streaming row-by-row XML parser for large files.
-- `src/excel/xlsx_writer/`: Modular writer generating valid OOXML spreadsheets with styles, charts, sparklines, tables, conditional formats, and streaming support.
+- `src/excel/xlsx_writer/`: Modular writer generating valid OOXML spreadsheets with styles, charts, sparklines, tables, conditional formats, images, rich text, protection, document properties, and streaming support.
 - `src/excel/xlsx_style_reader.rs`: Parses and inspects cell styles and number formats.
 - `src/excel/reader.rs` / `src/excel/writer.rs`: `ExcelHandler` high-level entry points.
 - `src/excel/cell_typer.rs`: Fast cell type classification.

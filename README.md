@@ -26,13 +26,13 @@ xls-rs is a pure-Rust XLSX toolkit with two surfaces built from one codebase:
 **Core capabilities:**
 
 1. **XLSX read and write** — Native OOXML (ZIP + XML) reader and writer. No external format crates.
-2. **Rich Excel authoring** — Formulas, styles, charts, sparklines, conditional formatting, structured tables, merged cells, hyperlinks, comments, data validation, print setup, freeze panes, auto-filter, row/column grouping.
+2. **Rich Excel authoring** — Formulas, styles, charts, sparklines, conditional formatting, structured tables, merged cells, hyperlinks, comments, data validation, print setup, freeze panes, auto-filter, row/column grouping, images, rich text, protection, and document properties.
 3. **Practical data operations** — Sort, filter, join, groupby, pivot, describe, correlate, and profile tabular data.
 
 ## Why use xls-rs?
 
 - **Pure Rust XLSX reader and writer** — No dependencies on Excel, Python, or JVM.
-- **Rich XLSX authoring** — Formulas, styles, charts, sparklines, conditional formatting, structured tables, merged cells, hyperlinks, comments, data validation, print setup, freeze panes, auto-filter, row/column grouping.
+- **Rich XLSX authoring** — Formulas, styles, charts, sparklines, conditional formatting, structured tables, merged cells, hyperlinks, comments, data validation, print setup, freeze panes, auto-filter, row/column grouping, image embedding, rich text, worksheet/workbook protection, and document properties.
 - **Production safety** — Overwrite guards, path traversal prevention, memory caps for malicious files.
 - **CLI + library** — Same codebase, consistent behavior.
 
@@ -114,6 +114,10 @@ fn main() -> anyhow::Result<()> {
 | Join, groupby, pivot, melt, rolling | Yes | Yes |
 | Statistics, correlation, regression | Yes | Yes |
 | XLSX styles, charts, sparklines, cond. formatting | Yes | Yes |
+| Image embedding (PNG/JPEG/GIF/BMP) | Yes | — |
+| Rich text (multi-run formatted strings) | Yes | — |
+| Worksheet/workbook protection | Yes | — |
+| Document properties (core.xml) | Yes | — |
 | Validation and data-quality profiling | Yes | Yes |
 | Formula evaluation | Yes | Yes |
 
@@ -138,6 +142,10 @@ The native XLSX writer supports:
 - Structured tables (Excel Table objects) with auto-expanding ranges, banded rows, and table styles.
 - Row and column grouping, merged cells, hyperlinks, comments, and data validation.
 - Freeze panes, auto-filter, print areas, margins, orientation, scale, and fit-to-page settings.
+- Image embedding (PNG, JPEG, GIF, BMP) with auto-detected or explicit EMU dimensions.
+- Rich text with per-run bold, italic, underline, font size, font name, and color.
+- Worksheet and workbook protection with optional password hashing.
+- Document properties (title, creator, subject, keywords, created/modified, etc.).
 
 ### How it compares
 
@@ -147,6 +155,10 @@ The native XLSX writer supports:
 | XLSX read | Yes | Yes | Yes | No |
 | XLSX write | Yes | No | Yes | Yes |
 | Charts/styles | Yes | No | Yes | Yes |
+| Images | Yes | Yes | Yes | Yes |
+| Rich text | Yes | Yes | Yes | Yes |
+| Protection | Yes | No | Yes | Yes |
+| Doc properties | Yes | No | Yes | Yes |
 | Data operations | Yes | No | No | No |
 | CLI | Yes | No | No | No |
 | External deps | None | None | None | None |

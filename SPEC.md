@@ -27,7 +27,7 @@
 
 - Core types: `ExcelHandler`, `Converter`, `XlsxReader`, `XlsxWriter`.
 - Operations: `DataOperations` (sort, filter, join, concat, groupby, pivot, describe with percentiles/skewness/kurtosis, correlation (Pearson/Spearman), simple linear regression, etc.), `DataValidator`, `DataProfiler`.
-- Excel-specific: `XlsxWriter`, `StreamingXlsxWriter`, `WriteMode`, charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping, freeze panes, auto-filter. XLSX writer XML generation is modular (`xml_gen.rs` with focused helpers for worksheet sections and styles, `style_registry.rs`, `cond_fmt_xml.rs`, `sparkline_xml.rs`, `chart_xml.rs`).
+- Excel-specific: `XlsxWriter`, `StreamingXlsxWriter`, `WriteMode`, charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping, freeze panes, auto-filter, image embedding (PNG/JPEG/GIF/BMP), rich text (multi-run formatted strings), worksheet/workbook protection, document properties (docProps/core.xml). XLSX writer XML generation is modular (`xml_gen.rs` with focused helpers for worksheet sections and styles, `style_registry.rs`, `cond_fmt_xml.rs`, `sparkline_xml.rs`, `chart_xml.rs`, `image_xml.rs`).
 - Formula: `FormulaEvaluator` for in-memory evaluation of Excel expressions — arithmetic, comparisons, ~35 common functions (including `IF`/`AND`/`OR`/`NOT`/`IFERROR`, text and lookup functions), and workbook defined names via `with_defined_names`.
 
 ### CLI (`xls-rs`)
