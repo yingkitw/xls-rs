@@ -8,8 +8,14 @@
 /// and substitutions required to transform `a` into `b`.
 pub fn levenshtein(a: &str, b: &str) -> usize {
     // Cap length to bound O(|a|×|b|) DP memory on pathological inputs.
-    let a: Vec<char> = a.chars().take(crate::limits::MAX_STRING_DISTANCE_CHARS).collect();
-    let b: Vec<char> = b.chars().take(crate::limits::MAX_STRING_DISTANCE_CHARS).collect();
+    let a: Vec<char> = a
+        .chars()
+        .take(crate::limits::MAX_STRING_DISTANCE_CHARS)
+        .collect();
+    let b: Vec<char> = b
+        .chars()
+        .take(crate::limits::MAX_STRING_DISTANCE_CHARS)
+        .collect();
     let (m, n) = (a.len(), b.len());
 
     if m == 0 {
@@ -26,9 +32,7 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
         curr[0] = i;
         for j in 1..=n {
             let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
-            curr[j] = (prev[j] + 1)
-                .min(curr[j - 1] + 1)
-                .min(prev[j - 1] + cost);
+            curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
         }
         std::mem::swap(&mut prev, &mut curr);
     }
@@ -38,8 +42,14 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
 
 /// Jaro similarity score between two strings (0.0 = no similarity, 1.0 = identical).
 pub fn jaro(a: &str, b: &str) -> f64 {
-    let a: Vec<char> = a.chars().take(crate::limits::MAX_STRING_DISTANCE_CHARS).collect();
-    let b: Vec<char> = b.chars().take(crate::limits::MAX_STRING_DISTANCE_CHARS).collect();
+    let a: Vec<char> = a
+        .chars()
+        .take(crate::limits::MAX_STRING_DISTANCE_CHARS)
+        .collect();
+    let b: Vec<char> = b
+        .chars()
+        .take(crate::limits::MAX_STRING_DISTANCE_CHARS)
+        .collect();
     let (m, n) = (a.len(), b.len());
 
     if m == 0 && n == 0 {
@@ -114,8 +124,14 @@ pub fn jaro_winkler(a: &str, b: &str) -> f64 {
 ///
 /// Returns `None` if the strings have different lengths.
 pub fn hamming(a: &str, b: &str) -> Option<usize> {
-    let a: Vec<char> = a.chars().take(crate::limits::MAX_STRING_DISTANCE_CHARS).collect();
-    let b: Vec<char> = b.chars().take(crate::limits::MAX_STRING_DISTANCE_CHARS).collect();
+    let a: Vec<char> = a
+        .chars()
+        .take(crate::limits::MAX_STRING_DISTANCE_CHARS)
+        .collect();
+    let b: Vec<char> = b
+        .chars()
+        .take(crate::limits::MAX_STRING_DISTANCE_CHARS)
+        .collect();
     if a.len() != b.len() {
         return None;
     }

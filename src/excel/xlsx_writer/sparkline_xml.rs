@@ -45,10 +45,7 @@ impl Default for SparklineGroup {
 
 /// Generate sparkline XML as an extLst element to append inside `<worksheet>`.
 /// This uses the x14 extension namespace required by Excel for sparklines.
-pub fn generate_sparkline_ext_xml(
-    groups: &[SparklineGroup],
-    sheet_name: &str,
-) -> String {
+pub fn generate_sparkline_ext_xml(groups: &[SparklineGroup], sheet_name: &str) -> String {
     if groups.is_empty() {
         return String::new();
     }
@@ -56,7 +53,9 @@ pub fn generate_sparkline_ext_xml(
     let mut xml = String::with_capacity(1024);
     xml.push_str(r#"<extLst>"#);
     xml.push_str(r#"<ext xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" uri="{05C60535-1F16-4fd2-B633-F4F36F0B64E0}">"#);
-    xml.push_str(r#"<x14:sparklineGroups xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">"#);
+    xml.push_str(
+        r#"<x14:sparklineGroups xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">"#,
+    );
 
     for group in groups {
         let type_str = match group.sparkline_type {
@@ -66,10 +65,7 @@ pub fn generate_sparkline_ext_xml(
         };
 
         xml.push_str(&format!(r#"<x14:sparklineGroup type="{}">"#, type_str));
-        xml.push_str(&format!(
-            r#"<x14:colorSeries rgb="FF{}"/>"#,
-            group.color
-        ));
+        xml.push_str(&format!(r#"<x14:colorSeries rgb="FF{}"/>"#, group.color));
 
         if group.show_markers && group.sparkline_type == SparklineType::Line {
             xml.push_str(r#"<x14:colorMarkers rgb="FFD00000"/>"#);

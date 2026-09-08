@@ -2,8 +2,8 @@
 //!
 //! Generates INSERT statements from tabular data.
 
-use xls_rs::converter::Converter;
 use anyhow::Result;
+use xls_rs::converter::Converter;
 
 /// Escape a string value for SQL (single quotes doubled)
 fn escape_sql_string(s: &str) -> String {
@@ -82,7 +82,11 @@ pub fn handle_to_sql(
 
     if let Some(output_path) = &output {
         std::fs::write(output_path, &sql)?;
-        println!("SQL saved to {} ({} statements)", output_path, statements.len());
+        println!(
+            "SQL saved to {} ({} statements)",
+            output_path,
+            statements.len()
+        );
     } else {
         println!("{}", sql);
     }

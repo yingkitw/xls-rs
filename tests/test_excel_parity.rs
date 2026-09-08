@@ -4,8 +4,8 @@
 //! across the library API, CLI commands, and MCP tools.
 
 use std::process::Command;
-use xls_rs::helpers::filter_by_range;
 use xls_rs::excel::reader::CellRange;
+use xls_rs::helpers::filter_by_range;
 
 #[test]
 fn test_excel_write_styled_parity() {
@@ -27,7 +27,9 @@ fn test_excel_write_styled_parity() {
 
     // Library write styled
     let handler = xls_rs::ExcelHandler::new();
-    let read_data = converter.read_any_data(xlsx_input.to_string_lossy().as_ref(), None).unwrap();
+    let read_data = converter
+        .read_any_data(xlsx_input.to_string_lossy().as_ref(), None)
+        .unwrap();
     handler
         .write_styled(
             xlsx_output.to_string_lossy().as_ref(),
@@ -77,7 +79,9 @@ fn test_excel_list_sheets_parity() {
         .unwrap();
 
     // Library list sheets
-    let library_sheets = handler.list_sheets(xlsx_input.to_string_lossy().as_ref()).unwrap();
+    let library_sheets = handler
+        .list_sheets(xlsx_input.to_string_lossy().as_ref())
+        .unwrap();
     assert_eq!(library_sheets.len(), 1);
     assert_eq!(library_sheets[0], "Sheet1");
 
@@ -141,7 +145,11 @@ fn test_excel_read_range_parity() {
         .output()
         .unwrap();
 
-    assert!(out.status.success(), "CLI read with range failed: {:?}", out);
+    assert!(
+        out.status.success(),
+        "CLI read with range failed: {:?}",
+        out
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("A1,B1"));
     assert!(stdout.contains("A2,B2"));
@@ -193,7 +201,11 @@ fn test_read_range_normalized_parity_cli_vs_library() {
         .output()
         .unwrap();
 
-    assert!(out.status.success(), "CLI read with range failed: {:?}", out);
+    assert!(
+        out.status.success(),
+        "CLI read with range failed: {:?}",
+        out
+    );
     let cli_csv = String::from_utf8_lossy(&out.stdout).to_string();
     assert_eq!(lib_csv.trim_end(), cli_csv.trim_end());
 }
@@ -205,7 +217,11 @@ fn test_excel_cell_typing_consistency() {
 
     // Test data with mixed types
     let data = vec![
-        vec!["Number".to_string(), "Text".to_string(), "Empty".to_string()],
+        vec![
+            "Number".to_string(),
+            "Text".to_string(),
+            "Empty".to_string(),
+        ],
         vec!["123.45".to_string(), "hello".to_string(), "".to_string()],
         vec!["42".to_string(), "world".to_string(), "".to_string()],
     ];
@@ -250,13 +266,7 @@ fn test_excel_write_range_expand_mode() {
 
     // Write with expand mode (default) - start at row 0, column 0 for simplicity
     handler
-        .write_range(
-            xlsx_output.to_string_lossy().as_ref(),
-            &data,
-            0,
-            0,
-            None,
-        )
+        .write_range(xlsx_output.to_string_lossy().as_ref(), &data, 0, 0, None)
         .unwrap();
 
     // Read back and verify

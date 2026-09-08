@@ -1,6 +1,6 @@
 # xls-rs
 
-**Version**: 0.1.16 | **Last updated**: 2026-08-15
+**Version**: 0.1.16 | **Last updated**: 2026-09-08
 
 **The pure-Rust XLSX toolkit.** Read, write, and manipulate Excel XLSX files with charts, styles, conditional formatting, and formula evaluation — from the shell or from Rust. No Microsoft Excel, Python, or JVM required.
 
@@ -186,7 +186,7 @@ Run `xls-rs config-init` to generate a configuration file. The CLI checks the fi
 
 xls-rs is a practical toolkit, not a complete Excel engine. Key boundaries:
 
-- **Formula evaluation:** practical subset (arithmetic, comparisons, ~25 common functions). Not a full Excel calculation engine.
+- **Formula evaluation:** practical subset (arithmetic, comparisons, ~35 common functions, named ranges, IF/AND/OR/NOT/IFERROR logic). Not a full Excel calculation engine.
 - **XLSX only:** no CSV, XLS, ODS, Parquet, Avro, or Google Sheets support.
 - **Excel fidelity:** no VBA macro execution, no pivot table expansion, merged ranges expose only top-left value.
 - **No lazy evaluation:** operations are eager. No query planning or predicate pushdown.

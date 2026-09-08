@@ -1,5 +1,7 @@
 # XLS Generation and Validation Summary
 
+> **ARCHIVED (2026-09-08)**: This document describes the XLS (BIFF8) writer that was **removed** in v0.1.16 when the project refocused as a pure XLSX toolkit. The test names referenced below no longer exist (the current `tests/test_xls_snapshots.rs` exercises the XLSX writer). Kept for historical reference only — consult git history for the removed implementation.
+
 **Version**: 0.1.11 | **Last updated**: 2026-08-08 | **License**: Apache-2.0
 
 ## Status: ✅ XLS Generation is Working Correctly

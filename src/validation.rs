@@ -131,33 +131,35 @@ impl DataValidator {
 
             for (col_idx, cell_value) in row.iter().enumerate() {
                 if let Some(column_name) = header.get(col_idx)
-                    && let Some(rules) = self.config.rules.get(column_name) {
-                        for rule in rules {
-                            match self.validate_value(cell_value, rule) {
-                                Ok(()) => {} // Valid
-                                Err(e) => {
-                                    let error = ValidationError {
-                                        row: row_idx,
-                                        column: column_name.clone(),
-                                        value: cell_value.clone(),
-                                        rule: format!("{:?}", rule),
-                                        message: e.to_string(),
-                                    };
-                                    errors.push(error);
-                                    row_valid = false;
+                    && let Some(rules) = self.config.rules.get(column_name)
+                {
+                    for rule in rules {
+                        match self.validate_value(cell_value, rule) {
+                            Ok(()) => {} // Valid
+                            Err(e) => {
+                                let error = ValidationError {
+                                    row: row_idx,
+                                    column: column_name.clone(),
+                                    value: cell_value.clone(),
+                                    rule: format!("{:?}", rule),
+                                    message: e.to_string(),
+                                };
+                                errors.push(error);
+                                row_valid = false;
 
-                                    if self.config.stop_on_first_error {
-                                        break;
-                                    }
+                                if self.config.stop_on_first_error {
+                                    break;
+                                }
 
-                                    if let Some(max) = self.config.max_errors
-                                        && errors.len() >= max {
-                                            break;
-                                        }
+                                if let Some(max) = self.config.max_errors
+                                    && errors.len() >= max
+                                {
+                                    break;
                                 }
                             }
                         }
                     }
+                }
             }
 
             if row_valid {
@@ -169,9 +171,10 @@ impl DataValidator {
             }
 
             if let Some(max) = self.config.max_errors
-                && errors.len() >= max {
-                    break;
-                }
+                && errors.len() >= max
+            {
+                break;
+            }
         }
 
         let total_rows = data.len() - 1; // Exclude header
@@ -217,21 +220,23 @@ impl DataValidator {
             ValidationRule::Range { min, max } => {
                 if let Some(num) = string::to_number(value) {
                     if let Some(min_val) = min
-                        && num < *min_val {
-                            return Err(anyhow::anyhow!(
-                                "Value {} is below minimum {}",
-                                num,
-                                min_val
-                            ));
-                        }
+                        && num < *min_val
+                    {
+                        return Err(anyhow::anyhow!(
+                            "Value {} is below minimum {}",
+                            num,
+                            min_val
+                        ));
+                    }
                     if let Some(max_val) = max
-                        && num > *max_val {
-                            return Err(anyhow::anyhow!(
-                                "Value {} is above maximum {}",
-                                num,
-                                max_val
-                            ));
-                        }
+                        && num > *max_val
+                    {
+                        return Err(anyhow::anyhow!(
+                            "Value {} is above maximum {}",
+                            num,
+                            max_val
+                        ));
+                    }
                 } else {
                     return Err(anyhow::anyhow!("Value is not numeric"));
                 }
@@ -248,21 +253,23 @@ impl DataValidator {
             ValidationRule::Length { min, max } => {
                 let len = value.len();
                 if let Some(min_len) = min
-                    && len < *min_len {
-                        return Err(anyhow::anyhow!(
-                            "Length {} is below minimum {}",
-                            len,
-                            min_len
-                        ));
-                    }
+                    && len < *min_len
+                {
+                    return Err(anyhow::anyhow!(
+                        "Length {} is below minimum {}",
+                        len,
+                        min_len
+                    ));
+                }
                 if let Some(max_len) = max
-                    && len > *max_len {
-                        return Err(anyhow::anyhow!(
-                            "Length {} is above maximum {}",
-                            len,
-                            max_len
-                        ));
-                    }
+                    && len > *max_len
+                {
+                    return Err(anyhow::anyhow!(
+                        "Length {} is above maximum {}",
+                        len,
+                        max_len
+                    ));
+                }
             }
             ValidationRule::Email => {
                 let email_regex = crate::regex_cache::email_regex();

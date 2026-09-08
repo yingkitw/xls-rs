@@ -61,13 +61,15 @@ pub fn parse_safe_f64(value: &str, min: Option<f64>, max: Option<f64>) -> Result
 
     // Check bounds
     if let Some(min_val) = min
-        && num < min_val {
-            anyhow::bail!("Value {} is below minimum {}", num, min_val);
-        }
+        && num < min_val
+    {
+        anyhow::bail!("Value {} is below minimum {}", num, min_val);
+    }
     if let Some(max_val) = max
-        && num > max_val {
-            anyhow::bail!("Value {} exceeds maximum {}", num, max_val);
-        }
+        && num > max_val
+    {
+        anyhow::bail!("Value {} exceeds maximum {}", num, max_val);
+    }
 
     Ok(num)
 }
@@ -83,13 +85,15 @@ pub fn parse_safe_i64(value: &str, min: Option<i64>, max: Option<i64>) -> Result
 
     // Check bounds
     if let Some(min_val) = min
-        && num < min_val {
-            anyhow::bail!("Value {} is below minimum {}", num, min_val);
-        }
+        && num < min_val
+    {
+        anyhow::bail!("Value {} is below minimum {}", num, min_val);
+    }
     if let Some(max_val) = max
-        && num > max_val {
-            anyhow::bail!("Value {} exceeds maximum {}", num, max_val);
-        }
+        && num > max_val
+    {
+        anyhow::bail!("Value {} exceeds maximum {}", num, max_val);
+    }
 
     Ok(num)
 }
@@ -111,9 +115,10 @@ pub fn parse_safe_usize(value: &str, max: Option<usize>) -> Result<usize> {
 
     // Check bounds
     if let Some(max_val) = max
-        && num > max_val {
-            anyhow::bail!("Index {} exceeds maximum {}", num, max_val);
-        }
+        && num > max_val
+    {
+        anyhow::bail!("Index {} exceeds maximum {}", num, max_val);
+    }
 
     Ok(num)
 }
@@ -135,14 +140,23 @@ pub fn with_cell_context<T>(result: Result<T>, row: usize, col: usize) -> Result
 /// Add file, row, and column context to an error
 ///
 /// Wraps an error with complete location information for better debugging
-pub fn with_full_context<T>(result: Result<T>, file_path: &str, row: usize, col: usize) -> Result<T> {
+pub fn with_full_context<T>(
+    result: Result<T>,
+    file_path: &str,
+    row: usize,
+    col: usize,
+) -> Result<T> {
     result.with_context(|| format!("Error in '{}' at row {}, column {}", file_path, row, col))
 }
 
 /// Validate row index is within bounds
 pub fn validate_row_index(data: &[Vec<String>], row: usize) -> Result<()> {
     if row >= data.len() {
-        anyhow::bail!("Row index {} out of bounds (data has {} rows)", row, data.len());
+        anyhow::bail!(
+            "Row index {} out of bounds (data has {} rows)",
+            row,
+            data.len()
+        );
     }
     Ok(())
 }
@@ -153,7 +167,11 @@ pub fn validate_column_index(data: &[Vec<String>], col: usize) -> Result<()> {
         anyhow::bail!("Cannot validate column index: data is empty");
     }
     if col >= data[0].len() {
-        anyhow::bail!("Column index {} out of bounds (row has {} columns)", col, data[0].len());
+        anyhow::bail!(
+            "Column index {} out of bounds (row has {} columns)",
+            col,
+            data[0].len()
+        );
     }
     Ok(())
 }
@@ -189,4 +207,3 @@ mod tests {
         assert_eq!(out, vec![vec!["y".to_string()]]);
     }
 }
-

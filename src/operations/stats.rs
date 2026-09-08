@@ -15,7 +15,9 @@ impl DataOperations {
         let num_cols = header.len();
 
         let data_rows = data.len().saturating_sub(1);
-        let mut columns: Vec<Vec<f64>> = (0..num_cols).map(|_| Vec::with_capacity(data_rows)).collect();
+        let mut columns: Vec<Vec<f64>> = (0..num_cols)
+            .map(|_| Vec::with_capacity(data_rows))
+            .collect();
         for row in data.iter().skip(1) {
             for (idx, val) in row.iter().enumerate() {
                 if let Ok(num) = val.parse::<f64>() {
@@ -37,8 +39,8 @@ impl DataOperations {
             .collect();
 
         let stat_names = [
-            "count", "mean", "std", "min", "10%", "25%", "50%", "75%", "90%", "95%", "99%",
-            "max", "skewness", "kurtosis",
+            "count", "mean", "std", "min", "10%", "25%", "50%", "75%", "90%", "95%", "99%", "max",
+            "skewness", "kurtosis",
         ];
         for &name in &stat_names {
             let mut row = vec![name.to_string()];
@@ -65,7 +67,9 @@ impl DataOperations {
 
         // Extract numeric values per column
         let data_rows = data.len().saturating_sub(1);
-        let mut col_data: Vec<Vec<f64>> = (0..columns.len()).map(|_| Vec::with_capacity(data_rows)).collect();
+        let mut col_data: Vec<Vec<f64>> = (0..columns.len())
+            .map(|_| Vec::with_capacity(data_rows))
+            .collect();
         for row in data.iter().skip(1) {
             for (i, &col_idx) in columns.iter().enumerate() {
                 if let Some(val) = row.get(col_idx).and_then(|v| v.parse::<f64>().ok()) {
@@ -117,7 +121,9 @@ impl DataOperations {
         let header = &data[0];
 
         let data_rows = data.len().saturating_sub(1);
-        let mut col_data: Vec<Vec<f64>> = (0..columns.len()).map(|_| Vec::with_capacity(data_rows)).collect();
+        let mut col_data: Vec<Vec<f64>> = (0..columns.len())
+            .map(|_| Vec::with_capacity(data_rows))
+            .collect();
         for row in data.iter().skip(1) {
             for (i, &col_idx) in columns.iter().enumerate() {
                 if let Some(val) = row.get(col_idx).and_then(|v| v.parse::<f64>().ok()) {
@@ -171,10 +177,11 @@ impl DataOperations {
         let mut ys = Vec::with_capacity(data.len());
         for row in data.iter().skip(1) {
             if let (Some(xv), Some(yv)) = (row.get(x_col), row.get(y_col))
-                && let (Ok(x), Ok(y)) = (xv.parse::<f64>(), yv.parse::<f64>()) {
-                    xs.push(x);
-                    ys.push(y);
-                }
+                && let (Ok(x), Ok(y)) = (xv.parse::<f64>(), yv.parse::<f64>())
+            {
+                xs.push(x);
+                ys.push(y);
+            }
         }
 
         if xs.len() < 2 {
@@ -347,10 +354,7 @@ impl DataOperations {
         for rv in &row_vals {
             let mut out_row = vec![rv.clone()];
             for cv in &col_vals {
-                let n = counts
-                    .get(&(rv.clone(), cv.clone()))
-                    .copied()
-                    .unwrap_or(0);
+                let n = counts.get(&(rv.clone(), cv.clone())).copied().unwrap_or(0);
                 out_row.push(n.to_string());
             }
             result.push(out_row);
@@ -368,7 +372,9 @@ impl DataOperations {
         let header = &data[0];
 
         let data_rows = data.len().saturating_sub(1);
-        let mut col_data: Vec<Vec<f64>> = (0..columns.len()).map(|_| Vec::with_capacity(data_rows)).collect();
+        let mut col_data: Vec<Vec<f64>> = (0..columns.len())
+            .map(|_| Vec::with_capacity(data_rows))
+            .collect();
         for row in data.iter().skip(1) {
             for (i, &col_idx) in columns.iter().enumerate() {
                 if let Some(val) = row.get(col_idx).and_then(|v| v.parse::<f64>().ok()) {
@@ -504,9 +510,10 @@ impl DataOperations {
 
         for row in data.iter().skip(1) {
             if let Some(val) = row.get(column)
-                && seen.insert(val.clone()) {
-                    result.push(vec![val.clone()]);
-                }
+                && seen.insert(val.clone())
+            {
+                result.push(vec![val.clone()]);
+            }
         }
 
         result
@@ -694,11 +701,21 @@ impl ColumnStats {
     fn compute(values: &[f64]) -> Self {
         if values.is_empty() {
             return Self {
-                count: 0, mean: f64::NAN, std_dev: f64::NAN,
-                min: f64::NAN, max: f64::NAN,
-                p10: f64::NAN, p25: f64::NAN, p50: f64::NAN,
-                p75: f64::NAN, p90: f64::NAN, p95: f64::NAN, p99: f64::NAN,
-                skewness: f64::NAN, kurtosis: f64::NAN, empty: true,
+                count: 0,
+                mean: f64::NAN,
+                std_dev: f64::NAN,
+                min: f64::NAN,
+                max: f64::NAN,
+                p10: f64::NAN,
+                p25: f64::NAN,
+                p50: f64::NAN,
+                p75: f64::NAN,
+                p90: f64::NAN,
+                p95: f64::NAN,
+                p99: f64::NAN,
+                skewness: f64::NAN,
+                kurtosis: f64::NAN,
+                empty: true,
             };
         }
 
@@ -710,8 +727,14 @@ impl ColumnStats {
         let std_dev = variance.sqrt();
 
         // values is guaranteed non-empty (empty case returns early above)
-        let min = *values.iter().min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).unwrap_or(&f64::NAN);
-        let max = *values.iter().max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)).unwrap_or(&f64::NAN);
+        let min = *values
+            .iter()
+            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(&f64::NAN);
+        let max = *values
+            .iter()
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(&f64::NAN);
 
         // Sort once for all percentiles
         let mut sorted = values.to_vec();
@@ -753,9 +776,21 @@ impl ColumnStats {
         };
 
         Self {
-            count, mean, std_dev, min, max,
-            p10, p25, p50, p75, p90, p95, p99,
-            skewness, kurtosis, empty: false,
+            count,
+            mean,
+            std_dev,
+            min,
+            max,
+            p10,
+            p25,
+            p50,
+            p75,
+            p90,
+            p95,
+            p99,
+            skewness,
+            kurtosis,
+            empty: false,
         }
     }
 

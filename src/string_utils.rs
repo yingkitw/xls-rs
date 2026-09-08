@@ -29,11 +29,7 @@ pub fn string_with_capacity(estimated_size: usize) -> String {
 ///
 /// # Returns
 /// A new String with all parts joined by separator
-pub fn join_with_capacity(
-    parts: &[&str],
-    separator: &str,
-    estimated_part_size: usize,
-) -> String {
+pub fn join_with_capacity(parts: &[&str], separator: &str, estimated_part_size: usize) -> String {
     let total_capacity = parts.len() * estimated_part_size + (parts.len() * separator.len());
     let mut result = String::with_capacity(total_capacity);
 

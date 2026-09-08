@@ -1,6 +1,6 @@
 # SPEC
 
-**Version**: 0.1.16 | **Last updated**: 2026-08-15 | **License**: Apache-2.0
+**Version**: 0.1.16 | **Last updated**: 2026-09-08 | **License**: Apache-2.0
 
 ## Project
 
@@ -25,10 +25,10 @@
 
 ### Library (`xls_rs`)
 
-- Core types: `ExcelHandler`, `Converter`, `NativeXlsxReader`, `NativeXlsxWriter`.
+- Core types: `ExcelHandler`, `Converter`, `XlsxReader`, `XlsxWriter`.
 - Operations: `DataOperations` (sort, filter, join, concat, groupby, pivot, describe with percentiles/skewness/kurtosis, correlation (Pearson/Spearman), simple linear regression, etc.), `DataValidator`, `DataProfiler`.
-- Excel-specific: `NativeXlsxWriter`, `StreamingXlsxWriter`, `WriteMode`, charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping, freeze panes, auto-filter. XLSX writer XML generation is modular (`xml_gen.rs` with focused helpers for worksheet sections and styles, `style_registry.rs`, `cond_fmt_xml.rs`, `sparkline_xml.rs`, `chart_xml.rs`).
-- Formula: `FormulaEvaluator` for in-memory evaluation of Excel expressions.
+- Excel-specific: `XlsxWriter`, `StreamingXlsxWriter`, `WriteMode`, charts, sparklines, conditional formatting, merged cells, hyperlinks, comments, data validation, print setup, row/column grouping, freeze panes, auto-filter. XLSX writer XML generation is modular (`xml_gen.rs` with focused helpers for worksheet sections and styles, `style_registry.rs`, `cond_fmt_xml.rs`, `sparkline_xml.rs`, `chart_xml.rs`).
+- Formula: `FormulaEvaluator` for in-memory evaluation of Excel expressions — arithmetic, comparisons, ~35 common functions (including `IF`/`AND`/`OR`/`NOT`/`IFERROR`, text and lookup functions), and workbook defined names via `with_defined_names`.
 
 ### CLI (`xls-rs`)
 
@@ -48,7 +48,7 @@ xls-rs is a practical toolkit, not a complete Excel engine or analytics platform
 
 - **Formula evaluation**: practical subset (arithmetic, comparisons, common spreadsheet functions). Not a full Excel calculation engine.
 - **No lazy evaluation**: operations are eager. No query planning or predicate pushdown.
-- **XLSX streaming**: `XlsxStreamingReader` and `StreamingXlsxWriter` provide row-by-row parsing and writing. Full-materialization `NativeXlsxReader` available for random access.
+- **XLSX streaming**: `XlsxStreamingReader` and `StreamingXlsxWriter` provide row-by-row parsing and writing. Full-materialization `XlsxReader` available for random access.
 
 ## Non-functional requirements
 

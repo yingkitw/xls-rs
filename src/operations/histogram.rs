@@ -25,10 +25,7 @@ pub fn histogram(
         return Ok(Vec::new());
     }
 
-    let min_val = values
-        .iter()
-        .cloned()
-        .fold(f64::INFINITY, |a, b| a.min(b));
+    let min_val = values.iter().cloned().fold(f64::INFINITY, |a, b| a.min(b));
     let max_val = values
         .iter()
         .cloned()
@@ -64,11 +61,7 @@ pub fn histogram(
 }
 
 /// Render ASCII histogram to string
-pub fn render_histogram(
-    bins: &[(f64, f64, usize)],
-    width: usize,
-    show_labels: bool,
-) -> String {
+pub fn render_histogram(bins: &[(f64, f64, usize)], width: usize, show_labels: bool) -> String {
     if bins.is_empty() {
         return "No numeric data".to_string();
     }

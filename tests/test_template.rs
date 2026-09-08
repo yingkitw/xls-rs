@@ -5,15 +5,19 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use tempfile::TempDir;
 
 use xls_rs::{ExcelHandler, RowData, TemplateFiller, TemplateReader, XlsxWriter};
 
-static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-fn unique_path(prefix: &str, ext: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("test_tpl_{prefix}_{id}.{ext}")
+/// Returns a path inside `dir` for a test artifact. Per-test `TempDir`
+/// isolation makes name collisions impossible, so no global counter is
+/// needed — and the dir is cleaned up automatically on drop (no manual
+/// `remove_file`, no artifacts leaking into the repo root on panic).
+fn unique_path(dir: &TempDir, name: &str, ext: &str) -> String {
+    dir.path()
+        .join(format!("{name}.{ext}"))
+        .to_string_lossy()
+        .to_string()
 }
 
 /// Build a simple template XLSX with placeholders on disk and return its path.
@@ -46,7 +50,8 @@ fn build_template(path: &str) {
 
 #[test]
 fn test_template_reader_detects_placeholders() {
-    let tpl = unique_path("read", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let tpl = unique_path(&dir, "read", "xlsx");
     build_template(&tpl);
 
     let reader = TemplateReader::new().unwrap();
@@ -56,14 +61,13 @@ fn test_template_reader_detects_placeholders() {
     assert!(names.contains(&"invoice_id".to_string()));
     assert!(names.contains(&"customer_name".to_string()));
     assert!(names.contains(&"total".to_string()));
-
-    fs::remove_file(&tpl).ok();
 }
 
 #[test]
 fn test_template_filler_replaces_single_placeholder() {
-    let tpl = unique_path("fill1", "xlsx");
-    let out = unique_path("out1", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let tpl = unique_path(&dir, "fill1", "xlsx");
+    let out = unique_path(&dir, "out1", "xlsx");
     build_template(&tpl);
 
     let mut values = HashMap::new();
@@ -74,18 +78,19 @@ fn test_template_filler_replaces_single_placeholder() {
     // Verify by reading back
     let handler = ExcelHandler::new();
     let content = handler.read(&out).unwrap();
-    assert!(content.contains("Invoice #INV-42"), "content was: {content}");
+    assert!(
+        content.contains("Invoice #INV-42"),
+        "content was: {content}"
+    );
     // Unfilled placeholders are preserved as-is
     assert!(content.contains("{{customer_name}}"));
-
-    fs::remove_file(&tpl).ok();
-    fs::remove_file(&out).ok();
 }
 
 #[test]
 fn test_template_filler_replaces_all_placeholders() {
-    let tpl = unique_path("fill2", "xlsx");
-    let out = unique_path("out2", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let tpl = unique_path(&dir, "fill2", "xlsx");
+    let out = unique_path(&dir, "out2", "xlsx");
     build_template(&tpl);
 
     let mut values = HashMap::new();
@@ -100,16 +105,17 @@ fn test_template_filler_replaces_all_placeholders() {
     assert!(content.contains("Invoice #INV-100"));
     assert!(content.contains("Acme Corp"));
     assert!(content.contains("$1,250.00"));
-    assert!(!content.contains("{{"), "unfilled placeholder remains: {content}");
-
-    fs::remove_file(&tpl).ok();
-    fs::remove_file(&out).ok();
+    assert!(
+        !content.contains("{{"),
+        "unfilled placeholder remains: {content}"
+    );
 }
 
 #[test]
 fn test_template_filler_in_string_interpolation() {
-    let tpl = unique_path("interp", "xlsx");
-    let out = unique_path("interp_out", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let tpl = unique_path(&dir, "interp", "xlsx");
+    let out = unique_path(&dir, "interp_out", "xlsx");
     build_template(&tpl);
 
     let mut values = HashMap::new();
@@ -122,14 +128,12 @@ fn test_template_filler_in_string_interpolation() {
     let content = handler.read(&out).unwrap();
     // The note row interpolates multiple placeholders
     assert!(content.contains("Note: Globex owes 99.99"));
-
-    fs::remove_file(&tpl).ok();
-    fs::remove_file(&out).ok();
 }
 
 #[test]
 fn test_template_get_required_placeholders() {
-    let tpl = unique_path("req", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let tpl = unique_path(&dir, "req", "xlsx");
     build_template(&tpl);
 
     let required = TemplateFiller::get_required_placeholders(&tpl, None).unwrap();
@@ -137,14 +141,12 @@ fn test_template_get_required_placeholders() {
     assert!(required.contains(&"invoice_id".to_string()));
     assert!(required.contains(&"customer_name".to_string()));
     assert!(required.contains(&"total".to_string()));
-
-    fs::remove_file(&tpl).ok();
 }
 
 #[test]
 fn test_template_validate_missing_placeholders() {
-    use xls_rs::TemplateData;
     use xls_rs::PlaceholderInfo;
+    use xls_rs::TemplateData;
 
     let mut data = TemplateData::new("Sheet1".to_string());
     data.placeholders.push(PlaceholderInfo {

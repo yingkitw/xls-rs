@@ -94,8 +94,7 @@ impl DataOperations {
         let header = data[0].clone();
 
         // Pre-compile column name substitution regexes once (sorted by name length descending)
-        let mut indexed_header: Vec<(usize, &String)> =
-            header.iter().enumerate().collect();
+        let mut indexed_header: Vec<(usize, &String)> = header.iter().enumerate().collect();
         indexed_header.sort_by_key(|b| std::cmp::Reverse(b.1.len()));
 
         let col_regexes: Vec<(usize, regex::Regex)> = indexed_header
@@ -117,12 +116,8 @@ impl DataOperations {
             .collect::<Result<_, _>>()?;
 
         for row in data.iter_mut().skip(1) {
-            let value = self.evaluate_row_formula_optimized(
-                formula,
-                row,
-                &col_regexes,
-                &letter_regexes,
-            )?;
+            let value =
+                self.evaluate_row_formula_optimized(formula, row, &col_regexes, &letter_regexes)?;
             row.push(value);
         }
 
@@ -279,9 +274,7 @@ impl DataOperations {
         indices.par_sort_by(|&i, &j| {
             for (col_idx, (_, order)) in columns.iter().enumerate() {
                 let cmp = match (&keys[i][col_idx].0, &keys[j][col_idx].0) {
-                    (Some(a), Some(b)) => {
-                        a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-                    }
+                    (Some(a), Some(b)) => a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal),
                     (Some(_), None) => std::cmp::Ordering::Less,
                     (None, Some(_)) => std::cmp::Ordering::Greater,
                     (None, None) => keys[i][col_idx].1.cmp(keys[j][col_idx].1),
@@ -333,22 +326,25 @@ impl DataOperations {
 
         for row in data.iter_mut().skip(1) {
             if let Some(cell) = row.get_mut(column)
-                && let Ok(val) = cell.parse::<f64>() {
-                    let mut new_val = val;
-                    if let Some(min_val) = min
-                        && val < min_val {
-                            new_val = min_val;
-                            clipped += 1;
-                        }
-                    if let Some(max_val) = max
-                        && val > max_val {
-                            new_val = max_val;
-                            clipped += 1;
-                        }
-                    if new_val != val {
-                        *cell = format!("{:.2}", new_val);
-                    }
+                && let Ok(val) = cell.parse::<f64>()
+            {
+                let mut new_val = val;
+                if let Some(min_val) = min
+                    && val < min_val
+                {
+                    new_val = min_val;
+                    clipped += 1;
                 }
+                if let Some(max_val) = max
+                    && val > max_val
+                {
+                    new_val = max_val;
+                    clipped += 1;
+                }
+                if new_val != val {
+                    *cell = format!("{:.2}", new_val);
+                }
+            }
         }
 
         Ok(clipped)
@@ -369,13 +365,16 @@ impl DataOperations {
 
         // Use parallel reduce for min/max calculation on large datasets
         let (min_val, max_val) = if values.len() > 1000 {
-            let (min, max) = values.par_iter().fold(
-                || (f64::INFINITY, f64::NEG_INFINITY),
-                |(acc_min, acc_max), &val| (acc_min.min(val), acc_max.max(val)),
-            ).reduce(
-                || (f64::INFINITY, f64::NEG_INFINITY),
-                |(min1, max1), (min2, max2)| (min1.min(min2), max1.max(max2)),
-            );
+            let (min, max) = values
+                .par_iter()
+                .fold(
+                    || (f64::INFINITY, f64::NEG_INFINITY),
+                    |(acc_min, acc_max), &val| (acc_min.min(val), acc_max.max(val)),
+                )
+                .reduce(
+                    || (f64::INFINITY, f64::NEG_INFINITY),
+                    |(min1, max1), (min2, max2)| (min1.min(min2), max1.max(max2)),
+                );
             (min, max)
         } else {
             let min_val = values.iter().cloned().fold(f64::INFINITY, f64::min);
@@ -391,10 +390,11 @@ impl DataOperations {
 
         for row in data.iter_mut().skip(1) {
             if let Some(cell) = row.get_mut(column)
-                && let Ok(val) = cell.parse::<f64>() {
-                    let normalized = (val - min_val) / range;
-                    *cell = format!("{:.4}", normalized);
-                }
+                && let Ok(val) = cell.parse::<f64>()
+            {
+                let normalized = (val - min_val) / range;
+                *cell = format!("{:.4}", normalized);
+            }
         }
 
         Ok(())
@@ -427,10 +427,11 @@ impl DataOperations {
 
         for row in data.iter_mut().skip(1) {
             if let Some(cell) = row.get_mut(column)
-                && let Ok(val) = cell.parse::<f64>() {
-                    let z = (val - mean) / std;
-                    *cell = format!("{:.6}", z);
-                }
+                && let Ok(val) = cell.parse::<f64>()
+            {
+                let z = (val - mean) / std;
+                *cell = format!("{:.6}", z);
+            }
         }
 
         Ok(())
@@ -476,7 +477,11 @@ impl DataOperations {
 
         let max_len = data.iter().map(|r| r.len()).max().unwrap_or(0);
         if value_col >= max_len {
-            anyhow::bail!("column index {} out of range (max {})", value_col, max_len.saturating_sub(1));
+            anyhow::bail!(
+                "column index {} out of range (max {})",
+                value_col,
+                max_len.saturating_sub(1)
+            );
         }
 
         for row in data.iter_mut() {
@@ -553,9 +558,10 @@ impl DataOperations {
 
         for row in data.iter().skip(1) {
             if let Some(cell) = row.get(column)
-                && re.is_match(cell) {
-                    result.push(row.clone());
-                }
+                && re.is_match(cell)
+            {
+                result.push(row.clone());
+            }
         }
 
         Ok(result)

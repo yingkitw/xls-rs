@@ -5,20 +5,24 @@
 //! - CSV injection protection
 //! - XlsxWriter direct API
 
-use xls_rs::{
-    CellStyle, ChartConfig, ConditionalFormat, ConditionalRule, DataChartType, ExcelHandler,
-    RowData, Sparkline, SparklineGroup, SparklineType, StreamingXlsxWriter, XlsxWriter,
-    WriteOptions,
-};
 use std::fs;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use tempfile::TempDir;
+use xls_rs::{
+    CellStyle, ChartConfig, ConditionalFormat, ConditionalRule, DataChartType, ExcelHandler,
+    RowData, Sparkline, SparklineGroup, SparklineType, StreamingXlsxWriter, WriteOptions,
+    XlsxWriter,
+};
 
-static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-fn unique_path(prefix: &str, ext: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("test_adv_{prefix}_{id}.{ext}")
+/// Returns a path inside `dir` for a test artifact. Per-test `TempDir`
+/// isolation makes name collisions impossible, so no global counter is
+/// needed — and the dir is cleaned up automatically on drop (no manual
+/// `remove_file`, no artifacts leaking into the repo root on panic).
+fn unique_path(dir: &TempDir, name: &str, ext: &str) -> String {
+    dir.path()
+        .join(format!("{name}.{ext}"))
+        .to_string_lossy()
+        .to_string()
 }
 
 // ============ Chart Integration Tests ============
@@ -32,7 +36,8 @@ fn test_chart_scatter() {
         vec!["3".to_string(), "6".to_string()],
         vec!["5".to_string(), "10".to_string()],
     ];
-    let output_path = unique_path("chart_scatter", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_scatter", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Scatter,
@@ -42,13 +47,13 @@ fn test_chart_scatter() {
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
 
     let content = handler.read_with_sheet(&output_path, None).unwrap();
     assert!(!content.is_empty());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
@@ -60,7 +65,8 @@ fn test_chart_doughnut() {
         vec!["B".to_string(), "35".to_string()],
         vec!["C".to_string(), "25".to_string()],
     ];
-    let output_path = unique_path("chart_doughnut", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_doughnut", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Doughnut,
@@ -70,10 +76,10 @@ fn test_chart_doughnut() {
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
@@ -85,7 +91,8 @@ fn test_chart_area() {
         vec!["Feb".to_string(), "150".to_string()],
         vec!["Mar".to_string(), "200".to_string()],
     ];
-    let output_path = unique_path("chart_area", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_area", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Area,
@@ -95,23 +102,49 @@ fn test_chart_area() {
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_chart_multiple_series() {
     let handler = ExcelHandler::new();
     let data = vec![
-        vec!["Q".to_string(), "Sales".to_string(), "Costs".to_string(), "Profit".to_string()],
-        vec!["Q1".to_string(), "100".to_string(), "60".to_string(), "40".to_string()],
-        vec!["Q2".to_string(), "120".to_string(), "70".to_string(), "50".to_string()],
-        vec!["Q3".to_string(), "140".to_string(), "80".to_string(), "60".to_string()],
-        vec!["Q4".to_string(), "160".to_string(), "90".to_string(), "70".to_string()],
+        vec![
+            "Q".to_string(),
+            "Sales".to_string(),
+            "Costs".to_string(),
+            "Profit".to_string(),
+        ],
+        vec![
+            "Q1".to_string(),
+            "100".to_string(),
+            "60".to_string(),
+            "40".to_string(),
+        ],
+        vec![
+            "Q2".to_string(),
+            "120".to_string(),
+            "70".to_string(),
+            "50".to_string(),
+        ],
+        vec![
+            "Q3".to_string(),
+            "140".to_string(),
+            "80".to_string(),
+            "60".to_string(),
+        ],
+        vec![
+            "Q4".to_string(),
+            "160".to_string(),
+            "90".to_string(),
+            "70".to_string(),
+        ],
     ];
-    let output_path = unique_path("chart_multi_series", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_multi_series", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Column,
@@ -120,18 +153,22 @@ fn test_chart_multiple_series() {
         y_axis_title: Some("Amount".to_string()),
         category_column: 0,
         value_columns: vec![1, 2, 3],
-        colors: Some(vec!["4472C4".to_string(), "ED7D31".to_string(), "70AD47".to_string()]),
+        colors: Some(vec![
+            "4472C4".to_string(),
+            "ED7D31".to_string(),
+            "70AD47".to_string(),
+        ]),
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
 
     let content = handler.read_with_sheet(&output_path, None).unwrap();
     assert!(content.contains("Sales"));
     assert!(content.contains("Profit"));
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
@@ -142,20 +179,22 @@ fn test_add_chart_to_data() {
         vec!["A".to_string(), "10".to_string()],
         vec!["B".to_string(), "20".to_string()],
     ];
-    let output_path = unique_path("chart_add_to_data", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_add_to_data", "xlsx");
 
     let config = ChartConfig::default();
-    handler.add_chart_to_data(&data, &config, &output_path).unwrap();
+    handler
+        .add_chart_to_data(&data, &config, &output_path)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 // ============ Conditional Formatting Tests ============
 
 #[test]
 fn test_xlsx_writer_conditional_color_scale() {
-    let output_path = unique_path("cond_color_scale", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "cond_color_scale", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Data").unwrap();
 
@@ -184,19 +223,16 @@ fn test_xlsx_writer_conditional_color_scale() {
     let handler = ExcelHandler::new();
     let content = handler.read_with_sheet(&output_path, None).unwrap();
     assert!(content.contains("Value"));
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_xlsx_writer_conditional_three_color_scale() {
-    let output_path = unique_path("cond_3color", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "cond_3color", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Sheet1").unwrap();
 
-    let data: Vec<Vec<String>> = (0..10)
-        .map(|i| vec![format!("{}", i * 10)])
-        .collect();
+    let data: Vec<Vec<String>> = (0..10).map(|i| vec![format!("{}", i * 10)]).collect();
     writer.add_data(&data);
 
     writer.add_conditional_format(ConditionalFormat {
@@ -211,13 +247,12 @@ fn test_xlsx_writer_conditional_three_color_scale() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_xlsx_writer_conditional_data_bar() {
-    let output_path = unique_path("cond_databar", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "cond_databar", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Sheet1").unwrap();
 
@@ -240,13 +275,12 @@ fn test_xlsx_writer_conditional_data_bar() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_xlsx_writer_conditional_icon_set() {
-    let output_path = unique_path("cond_iconset", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "cond_iconset", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Sheet1").unwrap();
 
@@ -268,13 +302,12 @@ fn test_xlsx_writer_conditional_icon_set() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_xlsx_writer_conditional_formula() {
-    let output_path = unique_path("cond_formula", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "cond_formula", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Sheet1").unwrap();
 
@@ -299,13 +332,12 @@ fn test_xlsx_writer_conditional_formula() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_xlsx_writer_conditional_cell_value() {
-    let output_path = unique_path("cond_cellvalue", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "cond_cellvalue", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Sheet1").unwrap();
 
@@ -329,13 +361,12 @@ fn test_xlsx_writer_conditional_cell_value() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_xlsx_writer_multiple_conditional_rules() {
-    let output_path = unique_path("cond_multi", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "cond_multi", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Sheet1").unwrap();
 
@@ -364,22 +395,39 @@ fn test_xlsx_writer_multiple_conditional_rules() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 // ============ Sparkline Tests ============
 
 #[test]
 fn test_xlsx_writer_sparkline_line() {
-    let output_path = unique_path("sparkline_line", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "sparkline_line", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Sheet1").unwrap();
 
     let data = vec![
-        vec!["Q1".to_string(), "Q2".to_string(), "Q3".to_string(), "Q4".to_string(), "Trend".to_string()],
-        vec!["10".to_string(), "20".to_string(), "15".to_string(), "25".to_string(), "".to_string()],
-        vec!["30".to_string(), "25".to_string(), "35".to_string(), "40".to_string(), "".to_string()],
+        vec![
+            "Q1".to_string(),
+            "Q2".to_string(),
+            "Q3".to_string(),
+            "Q4".to_string(),
+            "Trend".to_string(),
+        ],
+        vec![
+            "10".to_string(),
+            "20".to_string(),
+            "15".to_string(),
+            "25".to_string(),
+            "".to_string(),
+        ],
+        vec![
+            "30".to_string(),
+            "25".to_string(),
+            "35".to_string(),
+            "40".to_string(),
+            "".to_string(),
+        ],
     ];
     writer.add_data(&data);
 
@@ -402,19 +450,28 @@ fn test_xlsx_writer_sparkline_line() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_xlsx_writer_sparkline_column() {
-    let output_path = unique_path("sparkline_col", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "sparkline_col", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Data").unwrap();
 
     let data = vec![
-        vec!["A".to_string(), "B".to_string(), "C".to_string(), "Spark".to_string()],
-        vec!["5".to_string(), "10".to_string(), "15".to_string(), "".to_string()],
+        vec![
+            "A".to_string(),
+            "B".to_string(),
+            "C".to_string(),
+            "Spark".to_string(),
+        ],
+        vec![
+            "5".to_string(),
+            "10".to_string(),
+            "15".to_string(),
+            "".to_string(),
+        ],
     ];
     writer.add_data(&data);
 
@@ -431,19 +488,22 @@ fn test_xlsx_writer_sparkline_column() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_xlsx_writer_sparkline_with_markers() {
-    let output_path = unique_path("sparkline_markers", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "sparkline_markers", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Sheet1").unwrap();
 
-    let data = vec![
-        vec!["1".to_string(), "3".to_string(), "2".to_string(), "5".to_string(), "".to_string()],
-    ];
+    let data = vec![vec![
+        "1".to_string(),
+        "3".to_string(),
+        "2".to_string(),
+        "5".to_string(),
+        "".to_string(),
+    ]];
     writer.add_data(&data);
 
     writer.add_sparkline_group(SparklineGroup {
@@ -459,15 +519,14 @@ fn test_xlsx_writer_sparkline_with_markers() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 // ============ Combined Features Test ============
 
 #[test]
 fn test_xlsx_writer_chart_with_conditional_formatting() {
-    let output_path = unique_path("chart_cond_fmt", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_cond_fmt", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Dashboard").unwrap();
 
@@ -506,22 +565,51 @@ fn test_xlsx_writer_chart_with_conditional_formatting() {
     let content = handler.read_with_sheet(&output_path, None).unwrap();
     assert!(content.contains("Product"));
     assert!(content.contains("Widget A"));
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_xlsx_writer_all_features_combined() {
-    let output_path = unique_path("all_features", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "all_features", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Report").unwrap();
 
     let data = vec![
-        vec!["Month".to_string(), "Revenue".to_string(), "Cost".to_string(), "Profit".to_string(), "Trend".to_string()],
-        vec!["Jan".to_string(), "100".to_string(), "60".to_string(), "40".to_string(), "".to_string()],
-        vec!["Feb".to_string(), "120".to_string(), "70".to_string(), "50".to_string(), "".to_string()],
-        vec!["Mar".to_string(), "140".to_string(), "80".to_string(), "60".to_string(), "".to_string()],
-        vec!["Apr".to_string(), "160".to_string(), "90".to_string(), "70".to_string(), "".to_string()],
+        vec![
+            "Month".to_string(),
+            "Revenue".to_string(),
+            "Cost".to_string(),
+            "Profit".to_string(),
+            "Trend".to_string(),
+        ],
+        vec![
+            "Jan".to_string(),
+            "100".to_string(),
+            "60".to_string(),
+            "40".to_string(),
+            "".to_string(),
+        ],
+        vec![
+            "Feb".to_string(),
+            "120".to_string(),
+            "70".to_string(),
+            "50".to_string(),
+            "".to_string(),
+        ],
+        vec![
+            "Mar".to_string(),
+            "140".to_string(),
+            "80".to_string(),
+            "60".to_string(),
+            "".to_string(),
+        ],
+        vec![
+            "Apr".to_string(),
+            "160".to_string(),
+            "90".to_string(),
+            "70".to_string(),
+            "".to_string(),
+        ],
     ];
     writer.add_data(&data);
 
@@ -546,10 +634,22 @@ fn test_xlsx_writer_all_features_combined() {
     writer.add_sparkline_group(SparklineGroup {
         sparkline_type: SparklineType::Line,
         sparklines: vec![
-            Sparkline { location: "E2".to_string(), data_range: "B2:D2".to_string() },
-            Sparkline { location: "E3".to_string(), data_range: "B3:D3".to_string() },
-            Sparkline { location: "E4".to_string(), data_range: "B4:D4".to_string() },
-            Sparkline { location: "E5".to_string(), data_range: "B5:D5".to_string() },
+            Sparkline {
+                location: "E2".to_string(),
+                data_range: "B2:D2".to_string(),
+            },
+            Sparkline {
+                location: "E3".to_string(),
+                data_range: "B3:D3".to_string(),
+            },
+            Sparkline {
+                location: "E4".to_string(),
+                data_range: "B4:D4".to_string(),
+            },
+            Sparkline {
+                location: "E5".to_string(),
+                data_range: "B5:D5".to_string(),
+            },
         ],
         color: "4472C4".to_string(),
         show_markers: true,
@@ -563,7 +663,11 @@ fn test_xlsx_writer_all_features_combined() {
         y_axis_title: Some("Amount".to_string()),
         category_column: 0,
         value_columns: vec![1, 2, 3],
-        colors: Some(vec!["4472C4".to_string(), "ED7D31".to_string(), "70AD47".to_string()]),
+        colors: Some(vec![
+            "4472C4".to_string(),
+            "ED7D31".to_string(),
+            "70AD47".to_string(),
+        ]),
         show_legend: true,
         ..Default::default()
     };
@@ -575,27 +679,36 @@ fn test_xlsx_writer_all_features_combined() {
 
     // Verify file size is reasonable (should be > 1KB with all features)
     let metadata = fs::metadata(&output_path).unwrap();
-    assert!(metadata.len() > 1000, "File too small: {} bytes", metadata.len());
+    assert!(
+        metadata.len() > 1000,
+        "File too small: {} bytes",
+        metadata.len()
+    );
 
     // Verify data readable
     let handler = ExcelHandler::new();
     let content = handler.read_with_sheet(&output_path, None).unwrap();
     assert!(content.contains("Month"));
     assert!(content.contains("Revenue"));
-
-    fs::remove_file(&output_path).ok();
 }
 
 // ============ Streaming XLSX Integration Tests ============
 
 #[test]
 fn test_streaming_xlsx_readback() {
-    let output_path = unique_path("streaming_readback", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "streaming_readback", "xlsx");
     let mut writer = StreamingXlsxWriter::create(&output_path, "Data").unwrap();
 
-    writer.write_row(&["Name".to_string(), "Score".to_string()]).unwrap();
-    writer.write_row(&["Alice".to_string(), "95".to_string()]).unwrap();
-    writer.write_row(&["Bob".to_string(), "87".to_string()]).unwrap();
+    writer
+        .write_row(&["Name".to_string(), "Score".to_string()])
+        .unwrap();
+    writer
+        .write_row(&["Alice".to_string(), "95".to_string()])
+        .unwrap();
+    writer
+        .write_row(&["Bob".to_string(), "87".to_string()])
+        .unwrap();
     writer.finish().unwrap();
 
     // Read back and verify content
@@ -608,30 +721,34 @@ fn test_streaming_xlsx_readback() {
     // Verify sheet name
     let sheets = handler.list_sheets(&output_path).unwrap();
     assert!(sheets.contains(&"Data".to_string()));
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_streaming_xlsx_numbers_detected() {
-    let output_path = unique_path("streaming_numbers", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "streaming_numbers", "xlsx");
     let mut writer = StreamingXlsxWriter::create(&output_path, "Sheet1").unwrap();
 
-    writer.write_row(&["ID".to_string(), "Value".to_string()]).unwrap();
-    writer.write_row(&["1".to_string(), "99.5".to_string()]).unwrap();
-    writer.write_row(&["2".to_string(), "0".to_string()]).unwrap();
+    writer
+        .write_row(&["ID".to_string(), "Value".to_string()])
+        .unwrap();
+    writer
+        .write_row(&["1".to_string(), "99.5".to_string()])
+        .unwrap();
+    writer
+        .write_row(&["2".to_string(), "0".to_string()])
+        .unwrap();
     writer.finish().unwrap();
 
     let handler = ExcelHandler::new();
     let content = handler.read_with_sheet(&output_path, None).unwrap();
     assert!(content.contains("99.5"));
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_streaming_xlsx_row_data_api() {
-    let output_path = unique_path("streaming_rowdata", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "streaming_rowdata", "xlsx");
     let mut writer = StreamingXlsxWriter::create(&output_path, "Sheet1").unwrap();
 
     let mut row = RowData::new();
@@ -643,7 +760,6 @@ fn test_streaming_xlsx_row_data_api() {
     writer.finish().unwrap();
 
     assert!(Path::new(&output_path).exists());
-    fs::remove_file(&output_path).ok();
 }
 
 // ============ ExcelHandler Sparkline/CondFmt Method Tests ============
@@ -651,20 +767,21 @@ fn test_streaming_xlsx_row_data_api() {
 #[test]
 fn test_excel_handler_add_sparkline_formula() {
     let handler = ExcelHandler::new();
-    let output_path = unique_path("handler_sparkline", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "handler_sparkline", "xlsx");
 
     handler
         .add_sparkline_formula(&output_path, "A2:D2", "E2", None)
         .unwrap();
 
     assert!(Path::new(&output_path).exists());
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_excel_handler_apply_conditional_format() {
     let handler = ExcelHandler::new();
-    let output_path = unique_path("handler_condfmt", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "handler_condfmt", "xlsx");
 
     let style = CellStyle {
         bold: true,
@@ -678,7 +795,6 @@ fn test_excel_handler_apply_conditional_format() {
         .unwrap();
 
     assert!(Path::new(&output_path).exists());
-    fs::remove_file(&output_path).ok();
 }
 
 // ============ Edge Case Tests ============
@@ -686,10 +802,9 @@ fn test_excel_handler_apply_conditional_format() {
 #[test]
 fn test_chart_with_header_only_data() {
     let handler = ExcelHandler::new();
-    let data: Vec<Vec<String>> = vec![
-        vec!["X".to_string(), "Y".to_string()],
-    ];
-    let output_path = unique_path("chart_header_only", "xlsx");
+    let data: Vec<Vec<String>> = vec![vec!["X".to_string(), "Y".to_string()]];
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_header_only", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Column,
@@ -697,10 +812,10 @@ fn test_chart_with_header_only_data() {
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
@@ -710,28 +825,34 @@ fn test_chart_with_single_data_row() {
         vec!["Cat".to_string(), "Val".to_string()],
         vec!["Only".to_string(), "42".to_string()],
     ];
-    let output_path = unique_path("chart_single_row", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_single_row", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Pie,
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_sparkline_winloss_type() {
-    let output_path = unique_path("sparkline_winloss", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "sparkline_winloss", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Sheet1").unwrap();
 
-    let data = vec![
-        vec!["1".to_string(), "-1".to_string(), "1".to_string(), "-1".to_string(), "".to_string()],
-    ];
+    let data = vec![vec![
+        "1".to_string(),
+        "-1".to_string(),
+        "1".to_string(),
+        "-1".to_string(),
+        "".to_string(),
+    ]];
     writer.add_data(&data);
 
     writer.add_sparkline_group(SparklineGroup {
@@ -747,13 +868,12 @@ fn test_sparkline_winloss_type() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_conditional_format_on_empty_sheet() {
-    let output_path = unique_path("cond_empty_sheet", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "cond_empty_sheet", "xlsx");
     let mut writer = XlsxWriter::new();
     writer.add_sheet("Sheet1").unwrap();
 
@@ -767,8 +887,6 @@ fn test_conditional_format_on_empty_sheet() {
     let file = fs::File::create(&output_path).unwrap();
     writer.save(std::io::BufWriter::new(file)).unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 // ============ Export Styled Preset Tests ============
@@ -819,7 +937,7 @@ fn write_options_for_preset(name: &str) -> anyhow::Result<WriteOptions> {
 #[test]
 fn test_export_styled_default_preset() {
     let options = write_options_for_preset("default").unwrap();
-    
+
     // Default should have header styling enabled
     assert!(options.style_header);
     assert!(options.auto_fit);
@@ -828,7 +946,7 @@ fn test_export_styled_default_preset() {
 #[test]
 fn test_export_styled_minimal_preset() {
     let options = write_options_for_preset("minimal").unwrap();
-    
+
     // Minimal should have no header styling
     assert!(!options.style_header);
     assert!(!options.freeze_header);
@@ -839,7 +957,7 @@ fn test_export_styled_minimal_preset() {
 #[test]
 fn test_export_styled_report_preset() {
     let options = write_options_for_preset("report").unwrap();
-    
+
     // Report should have all features enabled
     assert!(options.style_header);
     assert!(options.freeze_header);
@@ -851,7 +969,7 @@ fn test_export_styled_report_preset() {
 #[test]
 fn test_export_styled_executive_preset() {
     let options = write_options_for_preset("executive").unwrap();
-    
+
     // Executive should have corporate styling
     assert!(options.style_header);
     assert!(options.freeze_header);
@@ -867,10 +985,19 @@ fn test_export_styled_corporate_alias() {
     // "corporate" should be equivalent to "executive"
     let exec_options = write_options_for_preset("executive").unwrap();
     let corp_options = write_options_for_preset("corporate").unwrap();
-    
-    assert_eq!(exec_options.header_style.bold, corp_options.header_style.bold);
-    assert_eq!(exec_options.header_style.bg_color, corp_options.header_style.bg_color);
-    assert_eq!(exec_options.header_style.font_color, corp_options.header_style.font_color);
+
+    assert_eq!(
+        exec_options.header_style.bold,
+        corp_options.header_style.bold
+    );
+    assert_eq!(
+        exec_options.header_style.bg_color,
+        corp_options.header_style.bg_color
+    );
+    assert_eq!(
+        exec_options.header_style.font_color,
+        corp_options.header_style.font_color
+    );
 }
 
 #[test]
@@ -882,25 +1009,44 @@ fn test_export_styled_unknown_preset_fails() {
 #[test]
 fn test_export_styled_presets_write_excel() {
     let handler = ExcelHandler::new();
+    let dir = tempfile::tempdir().unwrap();
     let data = vec![
-        vec!["Product".to_string(), "Sales".to_string(), "Region".to_string()],
-        vec!["Widget".to_string(), "1000".to_string(), "North".to_string()],
-        vec!["Gadget".to_string(), "2000".to_string(), "South".to_string()],
+        vec![
+            "Product".to_string(),
+            "Sales".to_string(),
+            "Region".to_string(),
+        ],
+        vec![
+            "Widget".to_string(),
+            "1000".to_string(),
+            "North".to_string(),
+        ],
+        vec![
+            "Gadget".to_string(),
+            "2000".to_string(),
+            "South".to_string(),
+        ],
     ];
 
     // Test each preset creates a valid Excel file
     for preset in ["default", "minimal", "report", "executive"] {
-        let output_path = unique_path(&format!("styled_{}", preset), "xlsx");
+        let output_path = unique_path(&dir, &format!("styled_{}", preset), "xlsx");
         let options = write_options_for_preset(preset).unwrap();
-        
+
         handler.write_styled(&output_path, &data, &options).unwrap();
-        
-        assert!(Path::new(&output_path).exists(), "Preset {} should create file", preset);
-        
+
+        assert!(
+            Path::new(&output_path).exists(),
+            "Preset {} should create file",
+            preset
+        );
+
         // Verify we can read it back
         let content = handler.read_with_sheet(&output_path, None).unwrap();
-        assert!(content.contains("Product"), "Preset {} should preserve headers", preset);
-        
-        fs::remove_file(&output_path).ok();
+        assert!(
+            content.contains("Product"),
+            "Preset {} should preserve headers",
+            preset
+        );
     }
 }

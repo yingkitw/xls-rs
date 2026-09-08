@@ -1,7 +1,7 @@
 //! Data validation command handler
 
-use xls_rs::{converter::Converter, validation::DataValidator};
 use anyhow::{Context, Result};
+use xls_rs::{converter::Converter, validation::DataValidator};
 
 /// Handle the validate command
 ///

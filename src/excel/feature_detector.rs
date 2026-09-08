@@ -3,7 +3,7 @@
 //! This module provides utilities for detecting Excel features that may not be fully supported
 //! and returns structured error messages with actionable guidance.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use regex::Regex;
 use std::io::Read;
 use std::sync::OnceLock;
@@ -32,46 +32,26 @@ fn sqref_attr_regex() -> &'static Regex {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnsupportedFeature {
     /// Merged cells (partial support - cells are read but merge status is lost)
-    MergedCells {
-        sheet: String,
-        range: String,
-    },
+    MergedCells { sheet: String, range: String },
     /// Pivot tables (not supported - data may be read but pivot structure is lost)
-    PivotTable {
-        sheet: String,
-    },
+    PivotTable { sheet: String },
     /// Data validation (not supported - data is readable but validation rules are lost)
-    DataValidation {
-        sheet: String,
-        range: String,
-    },
+    DataValidation { sheet: String, range: String },
     /// Conditional formatting (read-only - formats are visible but not editable)
-    ConditionalFormatting {
-        sheet: String,
-    },
+    ConditionalFormatting { sheet: String },
     /// Array formulas (limited support - formulas may be read as static values)
-    ArrayFormulas {
-        sheet: String,
-    },
+    ArrayFormulas { sheet: String },
     /// Protected sheets (read-only - content readable but cannot be modified)
     ProtectedSheet {
         sheet: String,
         password_protected: bool,
     },
     /// External references/links (not supported - references may be broken)
-    ExternalReferences {
-        sheet: String,
-    },
+    ExternalReferences { sheet: String },
     /// Charts (read-only - data visible but chart configuration is lost)
-    Charts {
-        sheet: String,
-        count: usize,
-    },
+    Charts { sheet: String, count: usize },
     /// Images/Objects (not supported - visual elements are lost)
-    EmbeddedObjects {
-        sheet: String,
-        object_type: String,
-    },
+    EmbeddedObjects { sheet: String, object_type: String },
 }
 
 impl UnsupportedFeature {
@@ -108,7 +88,10 @@ impl UnsupportedFeature {
                     sheet
                 )
             }
-            Self::ProtectedSheet { sheet, password_protected } => {
+            Self::ProtectedSheet {
+                sheet,
+                password_protected,
+            } => {
                 if *password_protected {
                     format!(
                         "Sheet '{}' is password protected. Content is readable but cannot be modified. Remove protection to enable editing.",
@@ -150,8 +133,14 @@ impl UnsupportedFeature {
             Self::DataValidation { .. } => FeatureSeverity::Warning,
             Self::ConditionalFormatting { .. } => FeatureSeverity::Warning,
             Self::ArrayFormulas { .. } => FeatureSeverity::Limitation,
-            Self::ProtectedSheet { password_protected: true, .. } => FeatureSeverity::Error,
-            Self::ProtectedSheet { password_protected: false, .. } => FeatureSeverity::Warning,
+            Self::ProtectedSheet {
+                password_protected: true,
+                ..
+            } => FeatureSeverity::Error,
+            Self::ProtectedSheet {
+                password_protected: false,
+                ..
+            } => FeatureSeverity::Warning,
             Self::ExternalReferences { .. } => FeatureSeverity::Warning,
             Self::Charts { .. } => FeatureSeverity::Warning,
             Self::EmbeddedObjects { .. } => FeatureSeverity::Limitation,
@@ -269,9 +258,7 @@ impl FeatureDetector {
                 continue;
             }
             let mut data = String::new();
-            entry
-                .read_to_string(&mut data)
-                .map_err(|e| anyhow!(e))?;
+            entry.read_to_string(&mut data).map_err(|e| anyhow!(e))?;
 
             let sheet_idx = re_sheet_num
                 .captures(&ename)
@@ -293,7 +280,9 @@ impl FeatureDetector {
                 });
             }
             if data.contains("pivotCache") || data.contains("pivotTable") {
-                issues.push(UnsupportedFeature::PivotTable { sheet: sheet.clone() });
+                issues.push(UnsupportedFeature::PivotTable {
+                    sheet: sheet.clone(),
+                });
             }
             if data.contains("dataValidation") {
                 let range = ref_sq
@@ -345,12 +334,13 @@ impl FeatureDetector {
 
         // Check for very large files (more likely to have complex features)
         if let Ok(metadata) = std::fs::metadata(path)
-            && metadata.len() > 10 * 1024 * 1024 {
-                // File > 10MB
-                issues.push(UnsupportedFeature::PivotTable {
-                    sheet: "unknown".to_string(),
-                });
-            }
+            && metadata.len() > 10 * 1024 * 1024
+        {
+            // File > 10MB
+            issues.push(UnsupportedFeature::PivotTable {
+                sheet: "unknown".to_string(),
+            });
+        }
 
         // ODS files have different feature set
         if path_lower.ends_with(".ods") {
@@ -372,10 +362,7 @@ impl FeatureDetector {
             .collect();
 
         if !errors.is_empty() {
-            let error_messages: Vec<String> = errors
-                .iter()
-                .map(|f| f.description())
-                .collect();
+            let error_messages: Vec<String> = errors.iter().map(|f| f.description()).collect();
             return Err(anyhow!(
                 "File contains features that prevent write operations:\n{}",
                 error_messages.join("\n")
@@ -439,11 +426,7 @@ mod tests {
         let handler = crate::ExcelHandler::new();
         let data = vec![vec!["a".to_string()]];
         handler
-            .write_styled(
-                p.to_str().unwrap(),
-                &data,
-                &crate::WriteOptions::default(),
-            )
+            .write_styled(p.to_str().unwrap(), &data, &crate::WriteOptions::default())
             .unwrap();
         let issues = FeatureDetector::detect_potential_issues(p.to_str().unwrap()).unwrap();
         let errors: Vec<_> = issues

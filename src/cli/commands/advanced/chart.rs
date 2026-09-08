@@ -1,11 +1,11 @@
 //! Chart generation command handler
 
+use anyhow::Result;
 use xls_rs::{
     common::validation,
     converter::Converter,
     excel::{ChartConfig, DataChartType, ExcelHandler, WriteOptions},
 };
-use anyhow::Result;
 
 /// Handle the chart command
 ///

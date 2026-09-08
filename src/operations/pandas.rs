@@ -130,7 +130,11 @@ impl DataOperations {
         // Distribute remaining slots to largest strata
         let mut remainder = n - allocated;
         let mut by_size: Vec<usize> = (0..stratum_keys.len()).collect();
-        by_size.sort_by(|&a, &b| strata[&stratum_keys[b]].len().cmp(&strata[&stratum_keys[a]].len()));
+        by_size.sort_by(|&a, &b| {
+            strata[&stratum_keys[b]]
+                .len()
+                .cmp(&strata[&stratum_keys[a]].len())
+        });
         for &i in &by_size {
             if remainder == 0 {
                 break;
@@ -215,11 +219,7 @@ impl DataOperations {
     }
 
     /// Rename columns (first row is header)
-    pub fn rename_columns(
-        &self,
-        data: &mut [Vec<String>],
-        renames: &[(&str, &str)],
-    ) -> Result<()> {
+    pub fn rename_columns(&self, data: &mut [Vec<String>], renames: &[(&str, &str)]) -> Result<()> {
         if data.is_empty() {
             return Ok(());
         }
@@ -291,7 +291,8 @@ impl DataOperations {
         let empty_right: Vec<String> = vec![String::new(); right_width];
 
         let mut result = Vec::with_capacity(left.len());
-        let mut matched_right: std::collections::HashSet<usize> = std::collections::HashSet::with_capacity(right.len());
+        let mut matched_right: std::collections::HashSet<usize> =
+            std::collections::HashSet::with_capacity(right.len());
 
         for left_row in left {
             let key = left_row.get(left_col).cloned().unwrap_or_default();
@@ -344,9 +345,10 @@ impl DataOperations {
                     }
                     let mut new_row = empty_left.clone();
                     if let Some(key) = right_row.get(right_col)
-                        && left_col < new_row.len() {
-                            new_row[left_col] = key.clone();
-                        }
+                        && left_col < new_row.len()
+                    {
+                        new_row[left_col] = key.clone();
+                    }
                     for (i, val) in right_row.iter().enumerate() {
                         if i != right_col {
                             new_row.push(val.clone());
@@ -375,7 +377,8 @@ impl DataOperations {
 
         let header = &data[0];
         let data_rows = data.len().saturating_sub(1);
-        let mut groups: HashMap<String, Vec<Vec<f64>>> = HashMap::with_capacity(data_rows.min(1024));
+        let mut groups: HashMap<String, Vec<Vec<f64>>> =
+            HashMap::with_capacity(data_rows.min(1024));
 
         for row in data.iter().skip(1) {
             let key = row.get(group_col).cloned().unwrap_or_default();
@@ -536,7 +539,9 @@ impl DataOperations {
             }
         }
 
-        let id_cols: Vec<usize> = (0..header.len()).filter(|i| !pivot_set.contains(i)).collect();
+        let id_cols: Vec<usize> = (0..header.len())
+            .filter(|i| !pivot_set.contains(i))
+            .collect();
 
         let mut out_header: Vec<String> = id_cols
             .iter()
@@ -603,7 +608,9 @@ impl DataOperations {
 
         let excluded: HashSet<usize> = [names_from, values_from].into_iter().collect();
         let id_indices: Vec<usize> = if id_cols.is_empty() {
-            (0..header.len()).filter(|i| !excluded.contains(i)).collect()
+            (0..header.len())
+                .filter(|i| !excluded.contains(i))
+                .collect()
         } else {
             for &i in id_cols {
                 if i >= max_len {

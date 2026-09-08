@@ -48,10 +48,7 @@ impl TemplateData {
 
     /// Get all unique placeholder names
     pub fn placeholder_names(&self) -> Vec<String> {
-        let mut names: Vec<String> = self.placeholders
-            .iter()
-            .map(|p| p.name.clone())
-            .collect();
+        let mut names: Vec<String> = self.placeholders.iter().map(|p| p.name.clone()).collect();
         names.sort();
         names.dedup();
         names
@@ -93,7 +90,8 @@ impl TemplateReader {
                 .ok_or_else(|| anyhow::anyhow!("No sheets found in template"))?
         };
 
-        let sheet = workbook.get_sheet_by_name(&sheet_name)
+        let sheet = workbook
+            .get_sheet_by_name(&sheet_name)
             .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
 
         let mut template_data = TemplateData::new(sheet_name.clone());
@@ -103,10 +101,14 @@ impl TemplateReader {
             for (col_idx, cell) in row.iter().enumerate() {
                 let cell_value = cell.to_string();
                 if !cell_value.is_empty() {
-                    template_data.cells.insert((row_idx, col_idx), cell_value.clone());
+                    template_data
+                        .cells
+                        .insert((row_idx, col_idx), cell_value.clone());
 
                     // Check if this cell contains a placeholder
-                    if let Some(placeholder) = self.detect_placeholder(&cell_value, row_idx, col_idx) {
+                    if let Some(placeholder) =
+                        self.detect_placeholder(&cell_value, row_idx, col_idx)
+                    {
                         template_data.placeholders.push(placeholder);
                     }
                 }
@@ -139,7 +141,7 @@ impl TemplateReader {
         if let Some(captures) = self.placeholder_regex.captures(value) {
             let name = captures.get(1)?.as_str().to_string();
             let cell_ref = format!("{}{}", self.col_to_letter(col), row + 1);
-            
+
             Some(PlaceholderInfo {
                 cell_ref,
                 row,
@@ -186,12 +188,16 @@ mod tests {
     #[test]
     fn test_placeholder_detection() {
         let reader = TemplateReader::new().unwrap();
-        
+
         // Test valid placeholder
         assert!(reader.placeholder_regex.is_match("{{name}}"));
         assert!(reader.placeholder_regex.is_match("{{ customer_name }}"));
-        assert!(reader.placeholder_regex.is_match("Some text {{value}} more text"));
-        
+        assert!(
+            reader
+                .placeholder_regex
+                .is_match("Some text {{value}} more text")
+        );
+
         // Test invalid placeholders
         assert!(!reader.placeholder_regex.is_match("name"));
         assert!(!reader.placeholder_regex.is_match("{name}"));
@@ -217,7 +223,7 @@ mod tests {
             name: "customer_name".to_string(),
             full_value: "{{customer_name}}".to_string(),
         };
-        
+
         assert_eq!(info.cell_ref, "A1");
         assert_eq!(info.name, "customer_name");
     }

@@ -72,8 +72,8 @@ impl ExcelHandler {
         data: &[Vec<String>],
         chart_config: &ChartConfig,
     ) -> Result<()> {
-        use super::xlsx_writer::XlsxWriter;
         use super::types::WriteOptions;
+        use super::xlsx_writer::XlsxWriter;
 
         let options = WriteOptions::default();
         let mut writer = XlsxWriter::with_options(options);
@@ -83,7 +83,7 @@ impl ExcelHandler {
         writer.set_chart(chart_config.clone(), data.to_vec());
 
         let file = std::fs::File::create(path)?;
-        let buf = std::io::BufWriter::new(file);
+        let buf = std::io::BufWriter::with_capacity(crate::limits::BUFFER_CAPACITY, file);
         writer.save(buf)?;
         Ok(())
     }

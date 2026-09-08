@@ -2,9 +2,9 @@
 //!
 //! Outputs column names and inferred types as JSON.
 
-use xls_rs::converter::Converter;
 use anyhow::Result;
 use serde_json::json;
+use xls_rs::converter::Converter;
 
 /// Handle the schema command
 ///

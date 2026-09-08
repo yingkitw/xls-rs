@@ -7,8 +7,8 @@ use anyhow::{Context, Result};
 use std::fs::File;
 use std::io::{BufWriter, Seek, Write};
 
-use super::types::RowData;
 use super::XlsxWriter;
+use super::types::RowData;
 use crate::excel::types::WriteOptions;
 
 /// Streaming XLSX writer that accepts rows one at a time.
@@ -109,9 +109,15 @@ mod tests {
         let (_dir, path) = temp_xlsx("test_streaming_basic.xlsx");
         let mut writer = StreamingXlsxWriter::create(&path, "Data").unwrap();
 
-        writer.write_row(&["Name".to_string(), "Score".to_string()]).unwrap();
-        writer.write_row(&["Alice".to_string(), "95".to_string()]).unwrap();
-        writer.write_row(&["Bob".to_string(), "87".to_string()]).unwrap();
+        writer
+            .write_row(&["Name".to_string(), "Score".to_string()])
+            .unwrap();
+        writer
+            .write_row(&["Alice".to_string(), "95".to_string()])
+            .unwrap();
+        writer
+            .write_row(&["Bob".to_string(), "87".to_string()])
+            .unwrap();
 
         assert_eq!(writer.rows_written(), 3);
         writer.finish().unwrap();
@@ -127,15 +133,19 @@ mod tests {
         let mut writer = StreamingXlsxWriter::create(&path, "BigData").unwrap();
 
         // Write header
-        writer.write_row(&["ID".to_string(), "Value".to_string(), "Label".to_string()]).unwrap();
+        writer
+            .write_row(&["ID".to_string(), "Value".to_string(), "Label".to_string()])
+            .unwrap();
 
         // Write 10000 rows
         for i in 0..10_000 {
-            writer.write_row(&[
-                format!("{}", i),
-                format!("{:.2}", i as f64 * 1.5),
-                format!("Row_{}", i),
-            ]).unwrap();
+            writer
+                .write_row(&[
+                    format!("{}", i),
+                    format!("{:.2}", i as f64 * 1.5),
+                    format!("Row_{}", i),
+                ])
+                .unwrap();
         }
 
         assert_eq!(writer.rows_written(), 10_001);
@@ -177,8 +187,12 @@ mod tests {
         let mut writer =
             StreamingXlsxWriter::create_with_options(&path, "Custom", options).unwrap();
 
-        writer.write_row(&["Col1".to_string(), "Col2".to_string()]).unwrap();
-        writer.write_row(&["a".to_string(), "1".to_string()]).unwrap();
+        writer
+            .write_row(&["Col1".to_string(), "Col2".to_string()])
+            .unwrap();
+        writer
+            .write_row(&["a".to_string(), "1".to_string()])
+            .unwrap();
 
         assert_eq!(writer.rows_written(), 2);
         writer.finish().unwrap();

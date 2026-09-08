@@ -12,6 +12,9 @@ use super::xlsx_style_reader::XlsxStyleTable;
 
 type ParsedSheet = (Vec<Vec<XlsxCellValue>>, HashMap<(u32, u16), u32>);
 
+/// Buffered sheet inputs for Phase 2 parsing: (name, sheet_xml, table_xmls, images).
+type SheetInputs = (String, Vec<u8>, Vec<Vec<u8>>, Vec<XlsxImage>);
+
 /// Cell value types for XLSX reading.
 #[derive(Debug, Clone)]
 pub enum XlsxCellValue {
@@ -60,6 +63,19 @@ pub struct XlsxTableInfo {
     pub style_name: Option<String>,
 }
 
+/// An image embedded in an XLSX file, read back from `xl/media/`.
+#[derive(Debug, Clone)]
+pub struct XlsxImage {
+    /// 0-based anchor row (top-left corner).
+    pub anchor_row: u32,
+    /// 0-based anchor column (top-left corner).
+    pub anchor_col: u16,
+    /// Image format extension (e.g. "png", "jpeg", "gif", "bmp").
+    pub format: String,
+    /// Raw image bytes.
+    pub data: Vec<u8>,
+}
+
 /// Sheet data for XLSX reading.
 #[derive(Debug, Clone)]
 pub struct XlsxSheetData {
@@ -69,6 +85,10 @@ pub struct XlsxSheetData {
     pub style_indices: HashMap<(u32, u16), u32>,
     /// Structured tables defined on this sheet.
     pub tables: Vec<XlsxTableInfo>,
+    /// Images embedded on this sheet.
+    pub images: Vec<XlsxImage>,
+    /// Sheet protection settings, if `<sheetProtection>` is present.
+    pub sheet_protection: Option<super::xlsx_writer::SheetProtection>,
 }
 
 impl XlsxSheetData {
@@ -78,11 +98,14 @@ impl XlsxSheetData {
             cells: Vec::new(),
             style_indices: HashMap::new(),
             tables: Vec::new(),
+            images: Vec::new(),
+            sheet_protection: None,
         }
     }
 
     pub fn to_string_vec(&self) -> Vec<Vec<String>> {
-        self.cells.iter()
+        self.cells
+            .iter()
             .map(|row| row.iter().map(|cell| cell.to_string()).collect())
             .collect()
     }
@@ -96,7 +119,8 @@ impl XlsxSheetData {
     }
 
     pub fn get_cell(&self, row: usize, col: usize) -> &XlsxCellValue {
-        self.cells.get(row)
+        self.cells
+            .get(row)
             .and_then(|r| r.get(col))
             .unwrap_or(&XlsxCellValue::Empty)
     }
@@ -131,10 +155,12 @@ impl<'a> XmlScanner<'a> {
     /// Skip XML declaration <?xml ... ?>
     pub(crate) fn skip_declaration(&mut self) {
         self.skip_whitespace();
-        if self.pos + 5 <= self.data.len() && &self.data[self.pos..self.pos + 5] == b"<?xml"
-            && let Some(end) = self.find_from(b"?>", self.pos) {
-                self.pos = end + 2;
-            }
+        if self.pos + 5 <= self.data.len()
+            && &self.data[self.pos..self.pos + 5] == b"<?xml"
+            && let Some(end) = self.find_from(b"?>", self.pos)
+        {
+            self.pos = end + 2;
+        }
         // Skip comments <!-- -->
         loop {
             self.skip_whitespace();
@@ -190,7 +216,14 @@ impl<'a> XmlScanner<'a> {
                     // Ensure it's followed by whitespace, '>', '/>', or ':'
                     if after_tag < self.data.len() {
                         let c = self.data[after_tag];
-                        if c == b' ' || c == b'>' || c == b'/' || c == b':' || c == b'\t' || c == b'\n' || c == b'\r' {
+                        if c == b' '
+                            || c == b'>'
+                            || c == b'/'
+                            || c == b':'
+                            || c == b'\t'
+                            || c == b'\n'
+                            || c == b'\r'
+                        {
                             self.pos = tag_start;
                             return Some(tag_start);
                         }
@@ -201,14 +234,22 @@ impl<'a> XmlScanner<'a> {
                 if let Some(colon_pos) = self.find_colon_in_tag(tag_start) {
                     let local_start = colon_pos + 1;
                     let local_end = local_start + name_bytes.len();
-                    if local_end <= self.data.len() && &self.data[local_start..local_end] == name_bytes
-                        && local_end < self.data.len() {
-                            let c = self.data[local_end];
-                            if c == b' ' || c == b'>' || c == b'/' || c == b'\t' || c == b'\n' || c == b'\r' {
-                                self.pos = tag_start;
-                                return Some(tag_start);
-                            }
+                    if local_end <= self.data.len()
+                        && &self.data[local_start..local_end] == name_bytes
+                        && local_end < self.data.len()
+                    {
+                        let c = self.data[local_end];
+                        if c == b' '
+                            || c == b'>'
+                            || c == b'/'
+                            || c == b'\t'
+                            || c == b'\n'
+                            || c == b'\r'
+                        {
+                            self.pos = tag_start;
+                            return Some(tag_start);
                         }
+                    }
                 }
             }
             self.pos += 1;
@@ -278,6 +319,22 @@ impl<'a> XmlScanner<'a> {
         self.find_from(close.as_bytes(), from)
     }
 
+    /// Find an opening tag only within `limit` (exclusive byte offset).
+    /// Unlike `find_open_tag`, a match past `limit` restores the position and
+    /// returns `None` — prevents a value search inside one `<c>` element from
+    /// stealing data out of subsequent cells (e.g. formula cells without a
+    /// cached `<v>`).
+    pub(crate) fn find_open_tag_within(&mut self, local_name: &str, limit: usize) -> Option<usize> {
+        let save = self.pos;
+        match self.find_open_tag(local_name) {
+            Some(start) if start < limit => Some(start),
+            _ => {
+                self.pos = save;
+                None
+            }
+        }
+    }
+
     /// Parse attributes from a tag. Starts after the tag name.
     /// Returns a map of (local_name -> value) and the end position.
     pub(crate) fn parse_attributes(&self, attr_start: usize) -> (HashMap<String, String>, usize) {
@@ -308,7 +365,12 @@ impl<'a> XmlScanner<'a> {
             }
             // Read attribute name (may have namespace prefix)
             let name_start = pos;
-            while pos < self.data.len() && !matches!(self.data[pos], b'=' | b' ' | b'>' | b'/' | b'\t' | b'\n' | b'\r') {
+            while pos < self.data.len()
+                && !matches!(
+                    self.data[pos],
+                    b'=' | b' ' | b'>' | b'/' | b'\t' | b'\n' | b'\r'
+                )
+            {
                 pos += 1;
             }
             if pos >= self.data.len() || self.data[pos] != b'=' {
@@ -317,7 +379,11 @@ impl<'a> XmlScanner<'a> {
             }
             let full_name = String::from_utf8_lossy(&self.data[name_start..pos]).to_string();
             // Extract local name (after ':')
-            let local_name = full_name.rsplit(':').next().unwrap_or(&full_name).to_string();
+            let local_name = full_name
+                .rsplit(':')
+                .next()
+                .unwrap_or(&full_name)
+                .to_string();
             pos += 1; // skip '='
             // Skip whitespace
             while pos < self.data.len() && matches!(self.data[pos], b' ' | b'\t') {
@@ -347,7 +413,19 @@ impl<'a> XmlScanner<'a> {
 
     /// Extract text content between current position and the closing tag.
     /// Assumes we're positioned right after the opening tag's '>'.
+    /// Trims surrounding whitespace (appropriate for worksheet cell values).
     pub(crate) fn read_text_until_close(&mut self, local_name: &str) -> String {
+        self.read_text_impl(local_name, true)
+    }
+
+    /// Like `read_text_until_close` but preserves leading/trailing
+    /// whitespace — required for shared strings, where Excel keeps text
+    /// verbatim (e.g. `"Hello "` before a rich-text run).
+    pub(crate) fn read_text_verbatim_until_close(&mut self, local_name: &str) -> String {
+        self.read_text_impl(local_name, false)
+    }
+
+    fn read_text_impl(&mut self, local_name: &str, trim: bool) -> String {
         let text_start = self.pos;
         // Find closing tag </...local_name>
         // We need to find the matching close tag, handling nesting
@@ -363,19 +441,30 @@ impl<'a> XmlScanner<'a> {
                     if check_start + name_bytes.len() <= self.data.len() {
                         let after = check_start + name_bytes.len();
                         if &self.data[check_start..after] == name_bytes {
-                            let c = if after < self.data.len() { self.data[after] } else { b'>' };
+                            let c = if after < self.data.len() {
+                                self.data[after]
+                            } else {
+                                b'>'
+                            };
                             if c == b'>' || c == b' ' || c == b':' || c == b'\t' || c == b'\n' {
                                 depth -= 1;
                                 if depth == 0 {
-                                    let text = String::from_utf8_lossy(&self.data[text_start..self.pos]).to_string();
+                                    let text =
+                                        String::from_utf8_lossy(&self.data[text_start..self.pos])
+                                            .to_string();
                                     // Skip past closing tag
-                                    while self.pos < self.data.len() && self.data[self.pos] != b'>' {
+                                    while self.pos < self.data.len() && self.data[self.pos] != b'>'
+                                    {
                                         self.pos += 1;
                                     }
                                     if self.pos < self.data.len() {
                                         self.pos += 1;
                                     }
-                                    return xml_unescape(text.trim());
+                                    return if trim {
+                                        xml_unescape(text.trim())
+                                    } else {
+                                        xml_unescape(&text)
+                                    };
                                 }
                             }
                         }
@@ -383,19 +472,34 @@ impl<'a> XmlScanner<'a> {
                         if let Some(colon) = self.find_colon_in_tag(check_start) {
                             let local_start = colon + 1;
                             let local_end = local_start + name_bytes.len();
-                            if local_end <= self.data.len() && &self.data[local_start..local_end] == name_bytes {
-                                let c = if local_end < self.data.len() { self.data[local_end] } else { b'>' };
+                            if local_end <= self.data.len()
+                                && &self.data[local_start..local_end] == name_bytes
+                            {
+                                let c = if local_end < self.data.len() {
+                                    self.data[local_end]
+                                } else {
+                                    b'>'
+                                };
                                 if c == b'>' || c == b' ' || c == b':' || c == b'\t' || c == b'\n' {
                                     depth -= 1;
                                     if depth == 0 {
-                                        let text = String::from_utf8_lossy(&self.data[text_start..self.pos]).to_string();
-                                        while self.pos < self.data.len() && self.data[self.pos] != b'>' {
+                                        let text = String::from_utf8_lossy(
+                                            &self.data[text_start..self.pos],
+                                        )
+                                        .to_string();
+                                        while self.pos < self.data.len()
+                                            && self.data[self.pos] != b'>'
+                                        {
                                             self.pos += 1;
                                         }
                                         if self.pos < self.data.len() {
                                             self.pos += 1;
                                         }
-                                        return xml_unescape(text.trim());
+                                        return if trim {
+                                            xml_unescape(text.trim())
+                                        } else {
+                                            xml_unescape(&text)
+                                        };
                                     }
                                 }
                             }
@@ -408,28 +512,44 @@ impl<'a> XmlScanner<'a> {
                     if self.pos < self.data.len() {
                         self.pos += 1;
                     }
-                } else if self.pos + 1 < self.data.len() && self.data[self.pos + 1] != b'?' && self.data[self.pos + 1] != b'!' {
+                } else if self.pos + 1 < self.data.len()
+                    && self.data[self.pos + 1] != b'?'
+                    && self.data[self.pos + 1] != b'!'
+                {
                     // Opening tag - check if it matches our tag name for nesting
                     let tag_start = self.pos + 1;
                     if tag_start + name_bytes.len() <= self.data.len() {
                         let after = tag_start + name_bytes.len();
-                        if &self.data[tag_start..after] == name_bytes
-                            && after < self.data.len() {
-                                let c = self.data[after];
-                                if c == b' ' || c == b'>' || c == b'/' || c == b':' || c == b'\t' || c == b'\n' {
-                                    depth += 1;
-                                }
+                        if &self.data[tag_start..after] == name_bytes && after < self.data.len() {
+                            let c = self.data[after];
+                            if c == b' '
+                                || c == b'>'
+                                || c == b'/'
+                                || c == b':'
+                                || c == b'\t'
+                                || c == b'\n'
+                            {
+                                depth += 1;
                             }
+                        }
                         if let Some(colon) = self.find_colon_in_tag(tag_start) {
                             let local_start = colon + 1;
                             let local_end = local_start + name_bytes.len();
-                            if local_end <= self.data.len() && &self.data[local_start..local_end] == name_bytes
-                                && local_end < self.data.len() {
-                                    let c = self.data[local_end];
-                                    if c == b' ' || c == b'>' || c == b'/' || c == b':' || c == b'\t' || c == b'\n' {
-                                        depth += 1;
-                                    }
+                            if local_end <= self.data.len()
+                                && &self.data[local_start..local_end] == name_bytes
+                                && local_end < self.data.len()
+                            {
+                                let c = self.data[local_end];
+                                if c == b' '
+                                    || c == b'>'
+                                    || c == b'/'
+                                    || c == b':'
+                                    || c == b'\t'
+                                    || c == b'\n'
+                                {
+                                    depth += 1;
                                 }
+                            }
                         }
                     }
                     self.pos += 1;
@@ -536,16 +656,110 @@ fn parse_a1_range(range: &str) -> Option<(u32, u16, u32, u16)> {
     Some((sr, sc, er, ec))
 }
 
+/// Find `needle` in `haystack` starting from byte offset `from`.
+fn find_subslice_from(haystack: &[u8], needle: &[u8], from: usize) -> Option<usize> {
+    if from > haystack.len() || needle.is_empty() {
+        return None;
+    }
+    haystack[from..]
+        .windows(needle.len())
+        .position(|w| w == needle)
+        .map(|p| p + from)
+}
+
+/// Extract the value of `attr_name` from the first occurrence of an XML
+/// attribute in `xml`. The attribute value is XML-unescaped.
+fn extract_attr(xml: &[u8], attr_name: &[u8]) -> Option<String> {
+    let pos = find_subslice_from(xml, attr_name, 0)?;
+    // Skip past the attribute name
+    let after_name = pos + attr_name.len();
+    // Skip whitespace and '=' and whitespace and opening quote
+    let mut i = after_name;
+    while i < xml.len() && (xml[i] == b' ' || xml[i] == b'=' || xml[i] == b'\t' || xml[i] == b'\n')
+    {
+        i += 1;
+    }
+    if i >= xml.len() {
+        return None;
+    }
+    let quote = xml[i];
+    if quote != b'"' && quote != b'\'' {
+        return None;
+    }
+    i += 1;
+    let val_start = i;
+    while i < xml.len() && xml[i] != quote {
+        i += 1;
+    }
+    if i > val_start {
+        let raw = std::str::from_utf8(&xml[val_start..i]).ok()?;
+        Some(xml_unescape(raw))
+    } else {
+        Some(String::new())
+    }
+}
+
+/// Parse `<xdr:from>` cell position from a drawing anchor XML fragment.
+/// Returns (row, col) as 0-based indices.
+fn parse_from_cell(anchor: &[u8]) -> (u32, u16) {
+    // Find <xdr:from> ... </xdr:from>
+    let from_start = match find_subslice_from(anchor, b"<xdr:from", 0) {
+        Some(p) => p,
+        None => return (0, 0),
+    };
+    let from_end = match find_subslice_from(anchor, b"</xdr:from>", from_start) {
+        Some(p) => p,
+        None => return (0, 0),
+    };
+    let from = &anchor[from_start..from_end];
+
+    // Extract <xdr:col>N</xdr:col> and <xdr:row>N</xdr:row>
+    let col: u16 = extract_tag_text(from, b"xdr:col")
+        .unwrap_or(0)
+        .try_into()
+        .unwrap_or(0);
+    let row = extract_tag_text(from, b"xdr:row").unwrap_or(0);
+    (row, col)
+}
+
+/// Extract the integer text content of `<tag>...</tag>` from an XML
+/// fragment. Returns `None` if the tag is not found or the content is
+/// not a valid integer.
+fn extract_tag_text(xml: &[u8], tag: &[u8]) -> Option<u32> {
+    let open = find_subslice_from(xml, tag, 0)?;
+    // Find the end of the opening tag (the '>')
+    let gt = find_subslice_from(xml, b">", open)?;
+    let text_start = gt + 1;
+    let close_tag_start = find_subslice_from(xml, b"</", text_start)?;
+    let close_tag_end = find_subslice_from(xml, tag, close_tag_start)?;
+    if close_tag_end != close_tag_start + 2 {
+        return None;
+    }
+    let text = std::str::from_utf8(&xml[text_start..close_tag_start]).ok()?;
+    text.trim().parse().ok()
+}
+
 /// XLSX workbook reader.
 pub struct XlsxReader {
     sheets: Vec<XlsxSheetData>,
     styles: XlsxStyleTable,
     vba_project: Option<Vec<u8>>,
+    /// Workbook defined names as (name, reference) pairs, e.g.
+    /// `("MyData", "Sheet1!$A$1:$A$9")`.
+    defined_names: Vec<(String, String)>,
+    /// Document (core) properties from `docProps/core.xml`.
+    document_properties: Option<super::xlsx_writer::DocumentProperties>,
 }
 
 impl XlsxReader {
     pub fn new() -> Self {
-        Self { sheets: Vec::new(), styles: XlsxStyleTable::default(), vba_project: None }
+        Self {
+            sheets: Vec::new(),
+            styles: XlsxStyleTable::default(),
+            vba_project: None,
+            defined_names: Vec::new(),
+            document_properties: None,
+        }
     }
 
     /// Read an XLSX file from a path.
@@ -557,8 +771,7 @@ impl XlsxReader {
 
     /// Read an XLSX file from any Read+Seek source.
     pub fn from_reader<R: std::io::Read + std::io::Seek>(reader: R) -> Result<Self> {
-        let mut archive = ZipArchive::new(reader)
-            .context("Failed to open XLSX archive")?;
+        let mut archive = ZipArchive::new(reader).context("Failed to open XLSX archive")?;
         Self::from_archive(&mut archive)
     }
 
@@ -578,12 +791,24 @@ impl XlsxReader {
         let rels_xml = Self::read_zip_entry(archive, "xl/_rels/workbook.xml.rels")?;
         let rels_map = Self::parse_rels(&rels_xml);
 
-        // Read each sheet
-        let mut sheets = Vec::new();
+        // Defined names ("MyData" → "Sheet1!$A$1:$A$9") usable in formulas
+        let defined_names = Self::parse_defined_names(&workbook_xml);
+
+        // Phase 1 (sequential): buffer every sheet's XML plus any table XMLs.
+        // `ZipArchive::by_name` requires `&mut`, so ZIP reads cannot run in
+        // parallel — but they are cheap compared to XML parsing.
+        let mut inputs: Vec<SheetInputs> = Vec::with_capacity(sheets_info.len());
         for (name, rid) in &sheets_info {
-            let target = rels_map.get(rid)
-                .cloned()
-                .unwrap_or_else(|| format!("worksheets/sheet{}.xml", sheets_info.iter().position(|(n, _)| n == name).map(|i| i + 1).unwrap_or(1)));
+            let target = rels_map.get(rid).cloned().unwrap_or_else(|| {
+                format!(
+                    "worksheets/sheet{}.xml",
+                    sheets_info
+                        .iter()
+                        .position(|(n, _)| n == name)
+                        .map(|i| i + 1)
+                        .unwrap_or(1)
+                )
+            });
             let sheet_path = if let Some(stripped) = target.strip_prefix('/') {
                 stripped.to_string()
             } else {
@@ -591,18 +816,16 @@ impl XlsxReader {
             };
             let sheet_xml = Self::read_zip_entry(archive, &sheet_path)
                 .with_context(|| format!("Failed to read sheet XML: {}", sheet_path))?;
-            let (cells, style_indices) = Self::parse_sheet(&sheet_xml, &shared_strings);
-            let mut sheet = XlsxSheetData::new(name.clone());
-            sheet.cells = cells;
-            sheet.style_indices = style_indices;
 
-            // Read sheet rels to find table references
+            // Read sheet rels to find table and drawing references
             // Derive rels path from the actual sheet path:
             // "xl/worksheets/sheet1.xml" → "xl/worksheets/_rels/sheet1.xml.rels"
+            let mut table_xmls = Vec::new();
+            let mut images = Vec::new();
             let sheet_rels_path = if sheet_path.ends_with(".xml") {
                 let base = sheet_path.strip_suffix(".xml").unwrap();
                 let dir = base.rfind('/').map(|i| &base[..i]).unwrap_or(".");
-                let file = base.rfind('/').map(|i| &base[i+1..]).unwrap_or(base);
+                let file = base.rfind('/').map(|i| &base[i + 1..]).unwrap_or(base);
                 format!("{}/_rels/{}.xml.rels", dir, file)
             } else {
                 String::new()
@@ -610,40 +833,130 @@ impl XlsxReader {
             if !sheet_rels_path.is_empty()
                 && let Ok(sheet_rels_xml) = Self::read_zip_entry(archive, &sheet_rels_path)
             {
-                    let table_paths = Self::parse_table_rels(&sheet_rels_xml);
-                    for table_path in table_paths {
-                        let full_path = if let Some(stripped) = table_path.strip_prefix('/') {
-                            stripped.to_string()
-                        } else if let Some(stripped) = table_path.strip_prefix("../") {
-                            format!("xl/{}", stripped)
-                        } else {
-                            format!("xl/worksheets/{}", table_path)
-                        };
-                        if let Ok(table_xml) = Self::read_zip_entry(archive, &full_path)
-                            && let Some(table_info) = Self::parse_table_xml(&table_xml)
-                        {
-                            sheet.tables.push(table_info);
-                        }
+                let table_paths = Self::parse_table_rels(&sheet_rels_xml);
+                for table_path in table_paths {
+                    let full_path = if let Some(stripped) = table_path.strip_prefix('/') {
+                        stripped.to_string()
+                    } else if let Some(stripped) = table_path.strip_prefix("../") {
+                        format!("xl/{}", stripped)
+                    } else {
+                        format!("xl/worksheets/{}", table_path)
+                    };
+                    if let Ok(table_xml) = Self::read_zip_entry(archive, &full_path) {
+                        table_xmls.push(table_xml);
                     }
+                }
+
+                // Read images: find drawing relationship, parse drawing
+                // XML and drawing rels, then read media files.
+                if let Some(drawing_target) = Self::parse_drawing_rels(&sheet_rels_xml) {
+                    let drawing_path = if let Some(stripped) = drawing_target.strip_prefix('/') {
+                        stripped.to_string()
+                    } else if let Some(stripped) = drawing_target.strip_prefix("../") {
+                        format!("xl/{}", stripped)
+                    } else {
+                        format!("xl/worksheets/{}", drawing_target)
+                    };
+                    if let Ok(drawing_xml) = Self::read_zip_entry(archive, &drawing_path) {
+                        // Derive drawing rels path
+                        let drawing_rels_path = {
+                            let base = drawing_path.strip_suffix(".xml").unwrap_or(&drawing_path);
+                            let dir = base.rfind('/').map(|i| &base[..i]).unwrap_or(".");
+                            let file = base.rfind('/').map(|i| &base[i + 1..]).unwrap_or(base);
+                            format!("{}/_rels/{}.xml.rels", dir, file)
+                        };
+                        let drawing_rels_map = Self::read_zip_entry(archive, &drawing_rels_path)
+                            .ok()
+                            .map(|rels_xml| Self::parse_rels(&rels_xml))
+                            .unwrap_or_default();
+                        images = Self::parse_images_from_drawing(
+                            &drawing_xml,
+                            &drawing_rels_map,
+                            archive,
+                        );
+                    }
+                }
             }
 
-            sheets.push(sheet);
+            inputs.push((name.clone(), sheet_xml, table_xmls, images));
         }
+
+        // Phase 2: parse buffered sheet XML — in parallel when the workbook has
+        // enough sheets and the buffered total stays within the memory budget.
+        let total_xml_bytes: u64 = inputs.iter().map(|(_, xml, _, _)| xml.len() as u64).sum();
+        let use_parallel = inputs.len() >= crate::limits::PARALLEL_SHEET_PARSE_MIN_SHEETS
+            && total_xml_bytes <= crate::limits::PARALLEL_SHEET_PARSE_MAX_BYTES;
+        let sheets: Vec<XlsxSheetData> = if use_parallel {
+            use rayon::prelude::*;
+            inputs
+                .into_par_iter()
+                .map(|(name, xml, tables, images)| {
+                    Self::build_sheet_data(name, &xml, &tables, &shared_strings, images)
+                })
+                .collect()
+        } else {
+            inputs
+                .into_iter()
+                .map(|(name, xml, tables, images)| {
+                    Self::build_sheet_data(name, &xml, &tables, &shared_strings, images)
+                })
+                .collect()
+        };
 
         // Read VBA project if present (macro-enabled .xlsm)
         let vba_project = Self::read_zip_entry(archive, "xl/vbaProject.bin").ok();
 
-        Ok(Self { sheets, styles, vba_project })
+        // Read document (core) properties from docProps/core.xml
+        let document_properties = Self::read_zip_entry(archive, "docProps/core.xml")
+            .ok()
+            .and_then(|xml| Self::parse_core_xml(&xml));
+
+        Ok(Self {
+            sheets,
+            styles,
+            vba_project,
+            defined_names,
+            document_properties,
+        })
     }
 
-    fn read_styles<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>) -> XlsxStyleTable {
+    /// Parse one buffered sheet (XML + table XMLs + images) into `XlsxSheetData`.
+    /// Pure function over borrowed bytes — safe to run from worker threads.
+    fn build_sheet_data(
+        name: String,
+        sheet_xml: &[u8],
+        table_xmls: &[Vec<u8>],
+        shared_strings: &[String],
+        images: Vec<XlsxImage>,
+    ) -> XlsxSheetData {
+        let (cells, style_indices) = Self::parse_sheet(sheet_xml, shared_strings);
+        let sheet_protection = Self::parse_sheet_protection(sheet_xml);
+        let mut sheet = XlsxSheetData::new(name);
+        sheet.cells = cells;
+        sheet.style_indices = style_indices;
+        sheet.sheet_protection = sheet_protection;
+        for table_xml in table_xmls {
+            if let Some(table_info) = Self::parse_table_xml(table_xml) {
+                sheet.tables.push(table_info);
+            }
+        }
+        sheet.images = images;
+        sheet
+    }
+
+    fn read_styles<R: std::io::Read + std::io::Seek>(
+        archive: &mut ZipArchive<R>,
+    ) -> XlsxStyleTable {
         match Self::read_zip_entry(archive, "xl/styles.xml") {
             Ok(data) => XlsxStyleTable::parse(&data),
             Err(_) => XlsxStyleTable::default(),
         }
     }
 
-    fn read_zip_entry<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>, name: &str) -> Result<Vec<u8>> {
+    fn read_zip_entry<R: std::io::Read + std::io::Seek>(
+        archive: &mut ZipArchive<R>,
+        name: &str,
+    ) -> Result<Vec<u8>> {
         let mut entry = archive
             .by_name(name)
             .with_context(|| format!("Failed to find '{}' in XLSX archive", name))?;
@@ -668,7 +981,9 @@ impl XlsxReader {
         Ok(buf)
     }
 
-    fn read_shared_strings<R: std::io::Read + std::io::Seek>(archive: &mut ZipArchive<R>) -> Result<Vec<String>> {
+    fn read_shared_strings<R: std::io::Read + std::io::Seek>(
+        archive: &mut ZipArchive<R>,
+    ) -> Result<Vec<String>> {
         let xml = match Self::read_zip_entry(archive, "xl/sharedStrings.xml") {
             Ok(data) => data,
             Err(_) => return Ok(Vec::new()),
@@ -687,35 +1002,33 @@ impl XlsxReader {
                 continue;
             }
             scanner.skip_open_tag();
-            // Read text content - may be in <t> directly or in <r><t> rich text runs
+            // Collect every <t> inside this <si> — a plain entry has one,
+            // a rich-text entry has several <r><t> runs. Bounded to the <si>
+            // so runs never leak between entries.
+            let si_end = scanner
+                .find_close_tag("si", scanner.pos)
+                .unwrap_or(scanner.data.len());
             let mut text = String::new();
-            // Try direct <t> child
-            let save_pos = scanner.pos;
-            if scanner.find_open_tag("t").is_some() {
+            while scanner.find_open_tag_within("t", si_end).is_some() {
                 let t_tag_start = scanner.pos;
                 if scanner.is_self_closing(t_tag_start) {
                     scanner.skip_open_tag();
-                } else {
-                    scanner.skip_open_tag();
-                    text = scanner.read_text_until_close("t");
+                    continue;
                 }
-            } else {
-                // Rich text: multiple <r> elements each with <t>
-                scanner.pos = save_pos;
-                while scanner.find_open_tag("t").is_some() {
-                    let t_tag_start = scanner.pos;
-                    if scanner.is_self_closing(t_tag_start) {
-                        scanner.skip_open_tag();
-                        continue;
-                    }
-                    scanner.skip_open_tag();
-                    let run_text = scanner.read_text_until_close("t");
-                    text.push_str(&run_text);
-                }
+                scanner.skip_open_tag();
+                text.push_str(&scanner.read_text_verbatim_until_close("t"));
             }
             strings.push(text);
-            // Skip to end of <si>
-            scanner.find_open_tag("si"); // move past, the close will be handled by next iteration
+            // Advance past this <si>'s closing tag so the next iteration
+            // finds the following entry (skipping here previously landed the
+            // scanner inside the next <si>, losing every second string).
+            match scanner.find_close_tag("si", scanner.pos) {
+                Some(close) => {
+                    scanner.pos = close;
+                    scanner.skip_open_tag();
+                }
+                None => break,
+            }
         }
         Ok(strings)
     }
@@ -741,6 +1054,36 @@ impl XlsxReader {
             scanner.skip_open_tag();
         }
         sheets
+    }
+
+    /// Workbook defined names (name → reference), e.g. `("MyData", "Sheet1!$A$1:$A$9")`.
+    pub fn defined_names(&self) -> &[(String, String)] {
+        &self.defined_names
+    }
+
+    /// Parse `<definedName name="...">Sheet1!$A$1:$A$9</definedName>` entries.
+    fn parse_defined_names(xml: &[u8]) -> Vec<(String, String)> {
+        let xml_str = String::from_utf8_lossy(xml);
+        let mut scanner = XmlScanner::new(xml_str.as_bytes());
+        scanner.skip_declaration();
+
+        let mut names = Vec::new();
+        while scanner.find_open_tag("definedName").is_some() {
+            let tag_start = scanner.pos;
+            let tag_name = scanner.read_tag_name(tag_start);
+            let (attrs, _) = scanner.parse_attributes(tag_start + tag_name.len());
+            let name = attrs.get("name").cloned().unwrap_or_default();
+            if name.is_empty() || scanner.is_self_closing(tag_start) {
+                scanner.skip_open_tag();
+                continue;
+            }
+            scanner.skip_open_tag();
+            let reference = scanner.read_text_until_close("definedName");
+            if !reference.trim().is_empty() {
+                names.push((name, reference.trim().to_string()));
+            }
+        }
+        names
     }
 
     fn parse_rels(xml: &[u8]) -> HashMap<String, String> {
@@ -785,6 +1128,136 @@ impl XlsxReader {
             scanner.skip_open_tag();
         }
         paths
+    }
+
+    /// Parse worksheet rels XML and return the drawing relationship target
+    /// path (e.g. "../drawings/drawing1.xml") if present.
+    fn parse_drawing_rels(xml: &[u8]) -> Option<String> {
+        let xml_str = String::from_utf8_lossy(xml);
+        let mut scanner = XmlScanner::new(xml_str.as_bytes());
+        scanner.skip_declaration();
+
+        while scanner.find_open_tag("Relationship").is_some() {
+            let tag_start = scanner.pos;
+            let tag_name = scanner.read_tag_name(tag_start);
+            let name_end = tag_start + tag_name.len();
+            let (attrs, _) = scanner.parse_attributes(name_end);
+            let rel_type = attrs.get("Type").cloned().unwrap_or_default();
+            if rel_type.contains("/drawing")
+                && let Some(target) = attrs.get("Target")
+            {
+                return Some(target.clone());
+            }
+            scanner.skip_open_tag();
+        }
+        None
+    }
+
+    /// Parse `<sheetProtection>` from worksheet XML. Returns `None` if
+    /// the element is absent.
+    fn parse_sheet_protection(xml: &[u8]) -> Option<super::xlsx_writer::SheetProtection> {
+        let xml_str = String::from_utf8_lossy(xml);
+        let mut scanner = XmlScanner::new(xml_str.as_bytes());
+        scanner.skip_declaration();
+        scanner.find_open_tag("sheetProtection")?;
+        let tag_start = scanner.pos;
+        let _tag_name = scanner.read_tag_name(tag_start);
+        let name_end = tag_start + _tag_name.len();
+        let (attrs, _) = scanner.parse_attributes(name_end);
+        let get_bool = |key: &str| -> bool {
+            attrs
+                .get(key)
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false)
+        };
+        Some(super::xlsx_writer::SheetProtection {
+            sheet: get_bool("sheet"),
+            objects: get_bool("objects"),
+            scenarios: get_bool("scenarios"),
+            format_cells: get_bool("formatCells"),
+            format_columns: get_bool("formatColumns"),
+            format_rows: get_bool("formatRows"),
+            insert_columns: get_bool("insertColumns"),
+            insert_rows: get_bool("insertRows"),
+            insert_hyperlinks: get_bool("insertHyperlinks"),
+            delete_columns: get_bool("deleteColumns"),
+            delete_rows: get_bool("deleteRows"),
+            select_locked_cells: get_bool("selectLockedCells"),
+            sort: get_bool("sort"),
+            auto_filter: get_bool("autoFilter"),
+            pivot_tables: get_bool("pivotTables"),
+            select_unlocked_cells: get_bool("selectUnlockedCells"),
+            password: attrs.get("password").cloned(),
+        })
+    }
+
+    /// Parse drawing XML to extract image anchors, then read the referenced
+    /// media files from the ZIP archive. Returns one `XlsxImage` per
+    /// `<xdr:pic>` anchor found.
+    fn parse_images_from_drawing<R: std::io::Read + std::io::Seek>(
+        drawing_xml: &[u8],
+        drawing_rels: &HashMap<String, String>,
+        archive: &mut ZipArchive<R>,
+    ) -> Vec<XlsxImage> {
+        let xml_str = String::from_utf8_lossy(drawing_xml);
+        let data = xml_str.as_bytes();
+        let mut images = Vec::new();
+
+        // Find each <xdr:oneCellAnchor> or <xdr:twoCellAnchor> block.
+        // We scan for <xdr:pic> inside each anchor to extract the r:embed
+        // (which maps to a media path via drawing_rels) and the <xdr:from>
+        // cell position.
+        let anchor_tags = ["oneCellAnchor", "twoCellAnchor", "absoluteAnchor"];
+        for anchor_tag in &anchor_tags {
+            let open = format!("<xdr:{}", anchor_tag);
+            let close = format!("</xdr:{}", anchor_tag);
+            let mut search_from = 0;
+            while let Some(anchor_start) = find_subslice_from(data, open.as_bytes(), search_from) {
+                let anchor_end =
+                    find_subslice_from(data, close.as_bytes(), anchor_start).unwrap_or(data.len());
+                let anchor = &data[anchor_start..anchor_end];
+
+                // Find <xdr:pic> inside this anchor
+                if let Some(pic_start) = find_subslice_from(anchor, b"<xdr:pic", 0) {
+                    let pic_end = find_subslice_from(anchor, b"</xdr:pic>", pic_start)
+                        .unwrap_or(anchor.len());
+                    let pic = &anchor[pic_start..pic_end];
+
+                    // Extract r:embed from <a:blip r:embed="rIdN">
+                    let embed =
+                        extract_attr(pic, b"r:embed").or_else(|| extract_attr(pic, b"embed"));
+
+                    // Extract anchor cell from <xdr:from>
+                    let (anchor_row, anchor_col) = parse_from_cell(anchor);
+
+                    if let Some(rid) = embed
+                        && let Some(media_target) = drawing_rels.get(&rid)
+                    {
+                        // Resolve media path relative to xl/drawings/
+                        let media_path = if let Some(stripped) = media_target.strip_prefix('/') {
+                            stripped.to_string()
+                        } else if let Some(stripped) = media_target.strip_prefix("../") {
+                            format!("xl/{}", stripped)
+                        } else {
+                            format!("xl/drawings/{}", media_target)
+                        };
+                        if let Ok(media_bytes) = Self::read_zip_entry(archive, &media_path) {
+                            let format = media_path.rsplit('.').next().unwrap_or("").to_string();
+                            images.push(XlsxImage {
+                                anchor_row,
+                                anchor_col,
+                                format,
+                                data: media_bytes,
+                            });
+                        }
+                    }
+                }
+
+                search_from = anchor_end + close.len();
+            }
+        }
+
+        images
     }
 
     /// Parse a table XML file (xl/tables/tableN.xml) into XlsxTableInfo.
@@ -933,6 +1406,13 @@ impl XlsxReader {
                 }
                 scanner.skip_open_tag();
 
+                // Bound all child-tag searches to this cell's body so a
+                // missing value tag (e.g. formula cells with no cached <v>)
+                // can't reach into the next cell.
+                let cell_end = scanner
+                    .find_close_tag("c", scanner.pos)
+                    .unwrap_or(scanner.data.len());
+
                 // Read cell value: <v> for values, <is><t> for inline strings.
                 // Save position before each find_open_tag so that if the child
                 // tag is absent (empty cell), the scanner is restored and the
@@ -942,14 +1422,14 @@ impl XlsxReader {
                     "s" => {
                         // Shared string
                         let save = scanner.pos;
-                        if scanner.find_open_tag("v").is_some() {
+                        if scanner.find_open_tag_within("v", cell_end).is_some() {
                             let v_start = scanner.pos;
                             if !scanner.is_self_closing(v_start) {
                                 scanner.skip_open_tag();
                                 let text = scanner.read_text_until_close("v");
                                 if let Ok(idx) = text.parse::<usize>() {
                                     value = XlsxCellValue::String(
-                                        shared_strings.get(idx).cloned().unwrap_or_default()
+                                        shared_strings.get(idx).cloned().unwrap_or_default(),
                                     );
                                 }
                             } else {
@@ -960,16 +1440,30 @@ impl XlsxReader {
                         }
                     }
                     "inlineStr" => {
-                        // Inline string: <is><t>text</t></is>
+                        // Inline string: <is><t>text</t></is> or
+                        // <is><r><rPr>…</rPr><t>run1</t></r><r>…</r></is>
+                        // (rich text). Concatenate all <t> elements within
+                        // the <is> block to get the full cell text. Uses
+                        // verbatim reading to preserve leading/trailing
+                        // whitespace in rich-text runs.
                         let save = scanner.pos;
-                        if scanner.find_open_tag("t").is_some() {
-                            let t_start = scanner.pos;
-                            if !scanner.is_self_closing(t_start) {
-                                scanner.skip_open_tag();
-                                let text = scanner.read_text_until_close("t");
+                        // Find <is> opening tag
+                        if scanner.find_open_tag_within("is", cell_end).is_some() {
+                            let is_start = scanner.pos;
+                            scanner.skip_open_tag();
+                            let is_end = scanner.find_close_tag("is", is_start).unwrap_or(cell_end);
+                            let mut text = String::new();
+                            while scanner.find_open_tag_within("t", is_end).is_some() {
+                                let t_start = scanner.pos;
+                                if !scanner.is_self_closing(t_start) {
+                                    scanner.skip_open_tag();
+                                    text.push_str(&scanner.read_text_verbatim_until_close("t"));
+                                } else {
+                                    scanner.skip_open_tag();
+                                }
+                            }
+                            if !text.is_empty() {
                                 value = XlsxCellValue::String(text);
-                            } else {
-                                scanner.skip_open_tag();
                             }
                         } else {
                             scanner.pos = save;
@@ -978,12 +1472,14 @@ impl XlsxReader {
                     "b" => {
                         // Boolean
                         let save = scanner.pos;
-                        if scanner.find_open_tag("v").is_some() {
+                        if scanner.find_open_tag_within("v", cell_end).is_some() {
                             let v_start = scanner.pos;
                             if !scanner.is_self_closing(v_start) {
                                 scanner.skip_open_tag();
                                 let text = scanner.read_text_until_close("v");
-                                value = XlsxCellValue::Bool(text == "1" || text.eq_ignore_ascii_case("true"));
+                                value = XlsxCellValue::Bool(
+                                    text == "1" || text.eq_ignore_ascii_case("true"),
+                                );
                             } else {
                                 scanner.skip_open_tag();
                             }
@@ -994,7 +1490,7 @@ impl XlsxReader {
                     "e" => {
                         // Error
                         let save = scanner.pos;
-                        if scanner.find_open_tag("v").is_some() {
+                        if scanner.find_open_tag_within("v", cell_end).is_some() {
                             let v_start = scanner.pos;
                             if !scanner.is_self_closing(v_start) {
                                 scanner.skip_open_tag();
@@ -1010,7 +1506,7 @@ impl XlsxReader {
                     "str" => {
                         // Formula string result
                         let save = scanner.pos;
-                        if scanner.find_open_tag("v").is_some() {
+                        if scanner.find_open_tag_within("v", cell_end).is_some() {
                             let v_start = scanner.pos;
                             if !scanner.is_self_closing(v_start) {
                                 scanner.skip_open_tag();
@@ -1026,7 +1522,7 @@ impl XlsxReader {
                     _ => {
                         // Number (default)
                         let save = scanner.pos;
-                        if scanner.find_open_tag("v").is_some() {
+                        if scanner.find_open_tag_within("v", cell_end).is_some() {
                             let v_start = scanner.pos;
                             if !scanner.is_self_closing(v_start) {
                                 scanner.skip_open_tag();
@@ -1056,8 +1552,7 @@ impl XlsxReader {
             return (Vec::new(), style_indices);
         }
 
-        let (n_rows, n_cols) =
-            crate::limits::clamp_dense_dims(max_row as usize, max_col as usize);
+        let (n_rows, n_cols) = crate::limits::clamp_dense_dims(max_row as usize, max_col as usize);
         if n_rows == 0 || n_cols == 0 {
             return (Vec::new(), style_indices);
         }
@@ -1090,7 +1585,8 @@ impl XlsxReader {
     }
 
     pub fn read_all_to_string_vec(&self) -> HashMap<String, Vec<Vec<String>>> {
-        self.sheets.iter()
+        self.sheets
+            .iter()
             .map(|s| (s.name.clone(), s.to_string_vec()))
             .collect()
     }
@@ -1103,7 +1599,12 @@ impl XlsxReader {
     /// Resolve the style for a cell at (row, col) in the given sheet.
     /// Returns `None` if the sheet or cell is out of range, or if the
     /// cell has no style index.
-    pub fn cell_style(&self, sheet: usize, row: u32, col: u16) -> Option<super::xlsx_writer::XlsxCellStyle> {
+    pub fn cell_style(
+        &self,
+        sheet: usize,
+        row: u32,
+        col: u16,
+    ) -> Option<super::xlsx_writer::XlsxCellStyle> {
         let sheet_data = self.sheets.get(sheet)?;
         let style_idx = sheet_data.cell_style_index(row, col)?;
         self.styles.resolve_style(style_idx)
@@ -1123,6 +1624,72 @@ impl XlsxReader {
     /// Get all structured tables on a given sheet.
     pub fn tables(&self, sheet: usize) -> Option<&[XlsxTableInfo]> {
         self.sheets.get(sheet).map(|s| s.tables.as_slice())
+    }
+
+    /// Get all images embedded on a given sheet.
+    pub fn images(&self, sheet: usize) -> Option<&[XlsxImage]> {
+        self.sheets.get(sheet).map(|s| s.images.as_slice())
+    }
+
+    /// Get sheet protection settings for a given sheet.
+    pub fn sheet_protection(&self, sheet: usize) -> Option<&super::xlsx_writer::SheetProtection> {
+        self.sheets
+            .get(sheet)
+            .and_then(|s| s.sheet_protection.as_ref())
+    }
+
+    /// Get document (core) properties from `docProps/core.xml`.
+    pub fn document_properties(&self) -> Option<&super::xlsx_writer::DocumentProperties> {
+        self.document_properties.as_ref()
+    }
+
+    /// Parse `docProps/core.xml` into `DocumentProperties`.
+    fn parse_core_xml(xml: &[u8]) -> Option<super::xlsx_writer::DocumentProperties> {
+        let xml_str = String::from_utf8_lossy(xml);
+        let mut scanner = XmlScanner::new(xml_str.as_bytes());
+        scanner.skip_declaration();
+        scanner.find_open_tag("coreProperties")?;
+        scanner.skip_open_tag();
+
+        let mut props = super::xlsx_writer::DocumentProperties::default();
+        let mut found_any = false;
+
+        // Parse child elements using find_any_open_tag to handle namespaced
+        // tags (dc:title, cp:keywords, dcterms:created, etc.)
+        while let Some((full_tag_name, tag_start)) = scanner.find_any_open_tag() {
+            // Strip namespace prefix (e.g. "dc:title" → "title")
+            let local_name = full_tag_name
+                .split(':')
+                .next_back()
+                .unwrap_or(&full_tag_name)
+                .to_string();
+            let name_end = tag_start + full_tag_name.len();
+            let (_attrs, _) = scanner.parse_attributes(name_end);
+
+            if scanner.is_self_closing(tag_start) {
+                scanner.skip_open_tag();
+                continue;
+            }
+            scanner.skip_open_tag();
+            let text = scanner.read_text_verbatim_until_close(&local_name);
+
+            found_any = true;
+            match local_name.as_str() {
+                "title" => props.title = Some(text),
+                "creator" => props.creator = Some(text),
+                "subject" => props.subject = Some(text),
+                "description" => props.description = Some(text),
+                "keywords" => props.keywords = Some(text),
+                "category" => props.category = Some(text),
+                "contentStatus" => props.content_status = Some(text),
+                "created" => props.created = Some(text),
+                "modified" => props.modified = Some(text),
+                "lastModifiedBy" => props.last_modified_by = Some(text),
+                _ => {}
+            }
+        }
+
+        if found_any { Some(props) } else { None }
     }
 }
 

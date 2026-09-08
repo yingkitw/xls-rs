@@ -10,8 +10,7 @@ use std::fmt;
 /// This enum provides type safety for cell values, allowing the codebase
 /// to distinguish between strings, numbers, booleans, dates, and empty values.
 /// This eliminates the need for repeated string parsing and improves performance.
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum CellValue {
     /// String data
     String(String),
@@ -154,10 +153,12 @@ impl CellValue {
     /// Convert from string representation with type hint
     pub fn from_string_with_type(s: &str, type_hint: Option<&DataType>) -> Self {
         match type_hint {
-            Some(DataType::Integer) => s.parse::<i64>()
+            Some(DataType::Integer) => s
+                .parse::<i64>()
                 .map(CellValue::Integer)
                 .unwrap_or_else(|_| CellValue::String(s.to_string())),
-            Some(DataType::Number) => s.parse::<f64>()
+            Some(DataType::Number) => s
+                .parse::<f64>()
                 .map(CellValue::Number)
                 .unwrap_or_else(|_| CellValue::String(s.to_string())),
             Some(DataType::Boolean) => match s.to_lowercase().as_str() {
@@ -166,13 +167,13 @@ impl CellValue {
                 _ => CellValue::String(s.to_string()),
             },
             Some(DataType::String) | None => CellValue::parse(s),
-            Some(DataType::DateTime) => s.parse::<i64>()
+            Some(DataType::DateTime) => s
+                .parse::<i64>()
                 .map(CellValue::DateTime)
                 .unwrap_or_else(|_| CellValue::String(s.to_string())),
         }
     }
 }
-
 
 impl fmt::Display for CellValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -384,8 +385,7 @@ impl From<DataSet> for Vec<Vec<String>> {
         let mut result = vec![dataset.columns];
 
         for row in dataset.rows {
-            let string_row: Vec<String> =
-                row.iter().map(|v| v.to_display_string()).collect();
+            let string_row: Vec<String> = row.iter().map(|v| v.to_display_string()).collect();
             result.push(string_row);
         }
 
@@ -408,7 +408,10 @@ mod tests {
         assert_eq!(CellValue::parse("1"), CellValue::Integer(1));
         assert_eq!(CellValue::parse("42"), CellValue::Integer(42));
         assert_eq!(CellValue::parse("2.5"), CellValue::Number(2.5));
-        assert_eq!(CellValue::parse("hello"), CellValue::String("hello".to_string()));
+        assert_eq!(
+            CellValue::parse("hello"),
+            CellValue::String("hello".to_string())
+        );
     }
 
     #[test]

@@ -11,7 +11,7 @@ mod transform;
 pub mod types;
 
 pub use core::DataOperations;
-pub use diff::{diff, ChangedRow, DiffResult};
+pub use diff::{ChangedRow, DiffResult, diff};
 pub use histogram::{histogram, render_histogram};
 pub use types::{AggFunc, JoinType, SortOrder};
 

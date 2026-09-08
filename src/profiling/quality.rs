@@ -21,10 +21,10 @@ impl super::profiler::DataProfiler {
         if matches!(
             data_type,
             DataType::String | DataType::Email | DataType::Url | DataType::Phone
-        )
-            && unique_percentage > 80.0 {
-                score -= (unique_percentage - 80.0) * 0.2;
-            }
+        ) && unique_percentage > 80.0
+        {
+            score -= (unique_percentage - 80.0) * 0.2;
+        }
 
         // Check for consistent lengths (good for structured data)
         if let Some(length_stats) = length_stats {
@@ -127,20 +127,22 @@ impl super::profiler::DataProfiler {
             }
 
             if let Some(numeric_stats) = &column.numeric_stats
-                && numeric_stats.skewness.abs() > 2.0 {
-                    recommendations.push(format!(
-                        "Column '{}' has high skewness ({:.2}). Consider transformation.",
-                        column.name, numeric_stats.skewness
-                    ));
-                }
+                && numeric_stats.skewness.abs() > 2.0
+            {
+                recommendations.push(format!(
+                    "Column '{}' has high skewness ({:.2}). Consider transformation.",
+                    column.name, numeric_stats.skewness
+                ));
+            }
 
             if let Some(length_stats) = &column.length_stats
-                && length_stats.std_dev_length / length_stats.avg_length > 0.5 {
-                    recommendations.push(format!(
-                        "Column '{}' has inconsistent length pattern.",
-                        column.name
-                    ));
-                }
+                && length_stats.std_dev_length / length_stats.avg_length > 0.5
+            {
+                recommendations.push(format!(
+                    "Column '{}' has inconsistent length pattern.",
+                    column.name
+                ));
+            }
         }
 
         recommendations

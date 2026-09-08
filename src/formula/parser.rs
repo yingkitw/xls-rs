@@ -141,9 +141,10 @@ pub fn get_range_values(range: &CellRange, data: &[Vec<String>]) -> Vec<f64> {
             }
             if let Some(row_data) = data.get(row as usize)
                 && let Some(cell) = row_data.get(col as usize)
-                    && let Ok(num) = cell.parse::<f64>() {
-                        values.push(num);
-                    }
+                && let Ok(num) = cell.parse::<f64>()
+            {
+                values.push(num);
+            }
         }
     }
 

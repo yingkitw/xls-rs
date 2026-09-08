@@ -92,7 +92,6 @@ impl QualityReportGenerator {
                 });
                 accuracy_score -= 10.0;
             }
-
         }
 
         let consistency = profile.data_quality_score;

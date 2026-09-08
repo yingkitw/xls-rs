@@ -2,12 +2,12 @@
 //!
 //! Implements data manipulation operations like sort, filter, replace, etc.
 
+use anyhow::Result;
 use xls_rs::{
     common::validation,
     converter::Converter,
     operations::{DataOperations, SortOrder},
 };
-use anyhow::Result;
 
 /// Data transformation command handler
 #[derive(Default)]
@@ -119,10 +119,11 @@ impl TransformCommandHandler {
             let mut count = 0;
             for row in &mut data {
                 if let Some(cell) = row.get_mut(col_idx)
-                    && cell.contains(&find) {
-                        *cell = cell.replace(&find, &replace);
-                        count += 1;
-                    }
+                    && cell.contains(&find)
+                {
+                    *cell = cell.replace(&find, &replace);
+                    count += 1;
+                }
             }
             crate::cli::runtime::log(format!(
                 "Replaced {count} occurrences in column '{col_name}'"
@@ -313,10 +314,11 @@ impl TransformCommandHandler {
                 // Skip header
                 for col_idx in &col_indices {
                     if let Some(cell) = row.get_mut(*col_idx)
-                        && cell.is_empty() {
-                            *cell = value.clone();
-                            count += 1;
-                        }
+                        && cell.is_empty()
+                    {
+                        *cell = value.clone();
+                        count += 1;
+                    }
                 }
             }
             crate::cli::runtime::log(format!("Filled {count} cells in specified columns"));
@@ -377,9 +379,10 @@ impl TransformCommandHandler {
 
         // Add header if new column
         if let Some(header) = data.first_mut()
-            && !header.contains(&column) {
-                header.push(column.clone());
-            }
+            && !header.contains(&column)
+        {
+            header.push(column.clone());
+        }
 
         // Add values to each row
         for (i, row) in data.iter_mut().enumerate().skip(1) {
@@ -495,7 +498,9 @@ impl TransformCommandHandler {
         ops.zscore(&mut data, col_idx)?;
 
         converter.write_any_data(&output, &data, None)?;
-        crate::cli::runtime::log(format!("Z-score standardized column {column}; wrote {output}"));
+        crate::cli::runtime::log(format!(
+            "Z-score standardized column {column}; wrote {output}"
+        ));
         Ok(())
     }
 
@@ -572,12 +577,7 @@ impl TransformCommandHandler {
     }
 
     /// Handle the diff command
-    pub fn handle_diff(
-        &self,
-        left: String,
-        right: String,
-        key: Option<String>,
-    ) -> Result<()> {
+    pub fn handle_diff(&self, left: String, right: String, key: Option<String>) -> Result<()> {
         let converter = Converter::new();
         let left_data = converter.read_any_data(&left, None)?;
         let right_data = converter.read_any_data(&right, None)?;

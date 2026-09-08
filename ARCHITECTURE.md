@@ -1,6 +1,6 @@
 # ARCHITECTURE
 
-**Version**: 0.1.16 | **Last updated**: 2026-08-15 | **License**: Apache-2.0
+**Version**: 0.1.16 | **Last updated**: 2026-09-08 | **License**: Apache-2.0
 
 ## Table of Contents
 - [High level](#high-level)
@@ -24,13 +24,14 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 - **Rich XLSX Authoring**: Styles, charts, conditional formatting, sparklines, structured tables, merged cells, hyperlinks, comments, print setup, freeze panes, auto-filter.
 - **Eager operations**: All data operations are eager (no lazy query planning). This keeps the codebase simple, lean, and predictable.
 - **Memory safety caps**: `src/limits.rs` enforces hard caps on cell counts, range dimensions, formula depth, and string distance lengths to prevent resource exhaustion attacks.
+- **Parallel sheet parsing**: `XlsxReader::from_archive` reads ZIP entries sequentially (the zip reader needs `&mut`), buffers each sheet's XML, then parses sheets in parallel with rayon. Guarded by memory/count thresholds in `src/limits.rs`; sequential fallback keeps peak memory bounded for huge workbooks.
 - **Modular XML Generation**: `src/excel/xlsx_writer/` splits XML generation into dedicated submodules (`xml_gen.rs`, `style_registry.rs`, `chart_xml.rs`, `cond_fmt_xml.rs`, `sparkline_xml.rs`, `streaming.rs`).
 
 ## Key modules
 
 ### Excel Layer (`src/excel/`)
 
-- `src/excel/xlsx_reader.rs`: `NativeXlsxReader` — reads sheets, cells, dimensions, shared strings, and tables.
+- `src/excel/xlsx_reader.rs`: `XlsxReader` — reads sheets, cells, dimensions, shared strings, and tables.
 - `src/excel/xlsx_streaming_reader.rs`: `XlsxStreamingReader` — streaming row-by-row XML parser for large files.
 - `src/excel/xlsx_writer/`: Modular writer generating valid OOXML spreadsheets with styles, charts, sparklines, tables, conditional formats, and streaming support.
 - `src/excel/xlsx_style_reader.rs`: Parses and inspects cell styles and number formats.
@@ -56,7 +57,7 @@ The CLI delegates command execution to domain handlers under `src/cli/commands/`
 ### Support & CLI Layer
 
 - `src/cli/`: Clap CLI parser, runtime execution context, output formatting (table, CSV, JSON, Markdown, HTML, LaTeX), and command handlers (`src/cli/commands/`).
-- `src/error.rs` / `src/error_traits.rs`: Typed `XlsError` / `ErrorKind` hierarchy with stable error codes.
+- `src/error.rs` / `src/error_traits.rs`: Typed `XlsRsError` / `ErrorKind` hierarchy with stable error codes.
 - `src/config.rs`: TOML config loader (`.xls-rs.toml`).
 - `src/limits.rs`: Safety limits and memory caps.
 - `src/types.rs`: Core types (`Cell`, `Row`, `Sheet`, `Workbook`, `CellValue`).
@@ -77,7 +78,7 @@ src/cli/commands/ (io, pandas, transform, advanced)
 xls-rs core library (ExcelHandler, DataOperations, FormulaEvaluator)
      │
      ▼
-Native XLSX Reader / Writer / Streaming Engine
+Native XLSX Reader (`XlsxReader`) / Writer (`XlsxWriter`) / Streaming Engine
 ```
 
 ## Testing layout

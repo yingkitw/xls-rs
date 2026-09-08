@@ -108,7 +108,7 @@ mod tests {
         add_cell_to_row(&mut row, "123");
         add_cell_to_row(&mut row, "hello");
         add_cell_to_row(&mut row, "");
-        
+
         assert_eq!(row.cells.len(), 3);
         assert!(matches!(row.cells[0], CellData::Number(123.0)));
         assert!(matches!(&row.cells[1], CellData::String(s) if s == "hello"));
@@ -120,7 +120,7 @@ mod tests {
         let mut row = RowData::new();
         let values = vec!["123".to_string(), "hello".to_string(), "".to_string()];
         add_cells_to_row(&mut row, &values);
-        
+
         assert_eq!(row.cells.len(), 3);
     }
 }

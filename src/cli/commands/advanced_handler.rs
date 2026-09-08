@@ -78,7 +78,14 @@ impl AdvancedCommandHandler {
         category_column: Option<usize>,
         value_columns: Option<Vec<usize>>,
     ) -> Result<()> {
-        advanced::handle_add_chart(input, output, chart_type, title, category_column, value_columns)
+        advanced::handle_add_chart(
+            input,
+            output,
+            chart_type,
+            title,
+            category_column,
+            value_columns,
+        )
     }
 
     pub fn handle_add_sparkline(
@@ -103,13 +110,7 @@ impl AdvancedCommandHandler {
         sheet: Option<String>,
     ) -> Result<()> {
         advanced::handle_conditional_format(
-            output,
-            range,
-            condition,
-            bg_color,
-            font_color,
-            bold,
-            sheet,
+            output, range, condition, bg_color, font_color, bold, sheet,
         )
     }
 

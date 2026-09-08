@@ -3,12 +3,12 @@
 //! Implements pandas-inspired operations like head, tail, join, groupby, concat, etc.
 
 use crate::cli::OutputFormat;
+use anyhow::Result;
 use xls_rs::{
     common::validation,
     converter::Converter,
     operations::{AggFunc, DataOperations, JoinType},
 };
-use anyhow::Result;
 
 /// Pandas-style operation command handler
 #[derive(Default)]
@@ -70,8 +70,9 @@ impl PandasCommandHandler {
         let ops = DataOperations::new();
         let sample_data = match method.as_str() {
             "stratified" => {
-                let col_name = stratum_column
-                    .ok_or_else(|| anyhow::anyhow!("--stratum-column is required for stratified sampling"))?;
+                let col_name = stratum_column.ok_or_else(|| {
+                    anyhow::anyhow!("--stratum-column is required for stratified sampling")
+                })?;
                 let col_idx = self.find_column_index(&data, &col_name)?;
                 ops.stratified_sample(&data, n, col_idx, seed)?
             }
@@ -658,10 +659,12 @@ impl PandasCommandHandler {
             let mut is_numeric = true;
             for row in data.iter().skip(1) {
                 if let Some(cell) = row.get(i)
-                    && !cell.is_empty() && cell.parse::<f64>().is_err() {
-                        is_numeric = false;
-                        break;
-                    }
+                    && !cell.is_empty()
+                    && cell.parse::<f64>().is_err()
+                {
+                    is_numeric = false;
+                    break;
+                }
             }
             if is_numeric {
                 numeric_cols.push(i);
@@ -679,13 +682,16 @@ impl PandasCommandHandler {
                 let stdout = std::io::stdout();
                 let mut writer = stdout.lock();
                 for row in data {
-                    let escaped: Vec<String> = row.iter().map(|cell| {
-                        if cell.contains(',') || cell.contains('"') || cell.contains('\n') {
-                            format!("\"{}\"", cell.replace('"', "\"\""))
-                        } else {
-                            cell.clone()
-                        }
-                    }).collect();
+                    let escaped: Vec<String> = row
+                        .iter()
+                        .map(|cell| {
+                            if cell.contains(',') || cell.contains('"') || cell.contains('\n') {
+                                format!("\"{}\"", cell.replace('"', "\"\""))
+                            } else {
+                                cell.clone()
+                            }
+                        })
+                        .collect();
                     writeln!(writer, "{}", escaped.join(","))?;
                 }
                 writer.flush()?;
@@ -701,7 +707,10 @@ impl PandasCommandHandler {
                         let value = row.get(i).map(|s| s.as_str()).unwrap_or("");
                         obj.insert(header.clone(), serde_json::json!(value));
                     }
-                    println!("{}", serde_json::to_string(&serde_json::Value::Object(obj))?);
+                    println!(
+                        "{}",
+                        serde_json::to_string(&serde_json::Value::Object(obj))?
+                    );
                 }
             }
             OutputFormat::Json => {

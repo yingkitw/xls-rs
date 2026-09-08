@@ -19,13 +19,9 @@ pub enum ConditionalRule {
         max_color: String,
     },
     /// Data bar visualization
-    DataBar {
-        color: String,
-    },
+    DataBar { color: String },
     /// Icon set (3Icons, 4Arrows, 5Quarters, etc.)
-    IconSet {
-        icon_style: String,
-    },
+    IconSet { icon_style: String },
     /// Formula-based: highlight cells where formula is true
     Formula {
         formula: String,
@@ -68,7 +64,10 @@ pub fn generate_conditional_formatting_xml(
         for (rule_idx, rule) in cf.rules.iter().enumerate() {
             let priority = dxf_id + rule_idx + 1;
             match rule {
-                ConditionalRule::ColorScale { min_color, max_color } => {
+                ConditionalRule::ColorScale {
+                    min_color,
+                    max_color,
+                } => {
                     xml.push_str(&format!(
                         r#"<cfRule type="colorScale" priority="{}">"#,
                         priority
@@ -117,7 +116,10 @@ pub fn generate_conditional_formatting_xml(
                         r#"<cfRule type="iconSet" priority="{}">"#,
                         priority
                     ));
-                    xml.push_str(&format!(r#"<iconSet iconSet="{}">"#, escape_xml(icon_style)));
+                    xml.push_str(&format!(
+                        r#"<iconSet iconSet="{}">"#,
+                        escape_xml(icon_style)
+                    ));
                     xml.push_str(r#"<cfvo type="percent" val="0"/>"#);
                     xml.push_str(r#"<cfvo type="percent" val="33"/>"#);
                     xml.push_str(r#"<cfvo type="percent" val="67"/>"#);

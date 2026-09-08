@@ -17,9 +17,21 @@ fn test_library_and_cli_can_read_xlsx() {
 
     // Create XLSX via library
     let data = vec![
-        vec!["Product".to_string(), "Category".to_string(), "Price".to_string()],
-        vec!["Laptop".to_string(), "Electronics".to_string(), "1200".to_string()],
-        vec!["Mouse".to_string(), "Electronics".to_string(), "25".to_string()],
+        vec![
+            "Product".to_string(),
+            "Category".to_string(),
+            "Price".to_string(),
+        ],
+        vec![
+            "Laptop".to_string(),
+            "Electronics".to_string(),
+            "1200".to_string(),
+        ],
+        vec![
+            "Mouse".to_string(),
+            "Electronics".to_string(),
+            "25".to_string(),
+        ],
     ];
     let converter = xls_rs::Converter::new();
     converter
@@ -69,15 +81,16 @@ fn test_cli_write_range_mode_preserve() {
         vec!["1".to_string(), "2".to_string()],
     ];
     handler
-        .write(output.to_string_lossy().as_ref(), &baseline, Default::default())
+        .write(
+            output.to_string_lossy().as_ref(),
+            &baseline,
+            Default::default(),
+        )
         .unwrap();
 
     // Create patch XLSX
     let patch_path = dir.path().join("patch.xlsx");
-    let patch_data = vec![
-        vec!["X".to_string()],
-        vec!["99".to_string()],
-    ];
+    let patch_data = vec![vec!["X".to_string()], vec!["99".to_string()]];
     let converter = xls_rs::Converter::new();
     converter
         .write_any_data(patch_path.to_string_lossy().as_ref(), &patch_data, None)
@@ -114,4 +127,3 @@ fn test_cli_write_range_mode_preserve() {
         .unwrap();
     assert!(!data.is_empty());
 }
-

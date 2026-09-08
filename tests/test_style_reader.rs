@@ -1,10 +1,10 @@
 //! Integration test: write styled XLSX, read it back, verify styles round-trip.
 
 use std::io::Cursor;
-use xls_rs::excel::xlsx_reader::XlsxReader;
+use xls_rs::RowData;
 use xls_rs::XlsxCellStyle;
 use xls_rs::XlsxWriter;
-use xls_rs::RowData;
+use xls_rs::excel::xlsx_reader::XlsxReader;
 
 #[test]
 fn test_style_round_trip_bold_fill() {

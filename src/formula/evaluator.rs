@@ -13,6 +13,9 @@ thread_local! {
 
 pub struct FormulaEvaluator {
     excel_handler: ExcelHandler,
+    /// Workbook defined names (uppercased key → raw reference), enabling
+    /// `SUM(MyRange)`-style formulas. Populated via `with_defined_names`.
+    defined_names: std::collections::HashMap<String, String>,
 }
 
 impl Default for FormulaEvaluator {
@@ -25,7 +28,18 @@ impl FormulaEvaluator {
     pub fn new() -> Self {
         Self {
             excel_handler: ExcelHandler::new(),
+            defined_names: std::collections::HashMap::new(),
         }
+    }
+
+    /// Register workbook defined names (name → reference, e.g.
+    /// `"MyData" → "Sheet1!$A$1:$A$9"`) so formulas can use them.
+    /// Keys are matched case-insensitively, as in Excel.
+    pub fn with_defined_names(mut self, names: std::collections::HashMap<String, String>) -> Self {
+        for (k, v) in names {
+            self.defined_names.insert(k.to_uppercase(), v);
+        }
+        self
     }
 
     pub fn apply_to_excel(
@@ -44,23 +58,35 @@ impl FormulaEvaluator {
             .or_else(|| sheet_names.first().map(|s| s.as_str()))
             .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook"))?;
 
-        let sheet = workbook.get_sheet_by_name(sheet_name)
+        let sheet = workbook
+            .get_sheet_by_name(sheet_name)
             .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
 
-        use crate::excel::xlsx_writer::XlsxWriter;
         use crate::excel::xlsx_writer::RowData;
+        use crate::excel::xlsx_writer::XlsxWriter;
 
         let mut writer = XlsxWriter::new();
         writer.add_sheet(sheet_name)?;
 
         let (target_row, target_col) = self.parse_cell_reference(cell)?;
 
-        for (row_idx, row) in sheet.cells.iter().enumerate() {
+        // Extend to the target cell even when it lies outside the existing
+        // grid (e.g. column F on a 4-column sheet) — previously such targets
+        // silently no-op'd.
+        let last_row = (sheet.cells.len() as u32).max(target_row + 1);
+        for row_idx in 0..last_row {
+            let existing_row = sheet.cells.get(row_idx as usize);
+            let mut row_len = existing_row.map(|r| r.len()).unwrap_or(0);
+            let is_target_row = row_idx == target_row;
+            if is_target_row {
+                row_len = row_len.max(target_col as usize + 1);
+            }
+
             let mut row_data = RowData::new();
-            for (col_idx, cell) in row.iter().enumerate() {
-                if row_idx as u32 == target_row && col_idx as u16 == target_col {
+            for col_idx in 0..row_len {
+                if is_target_row && col_idx == target_col as usize {
                     row_data.add_formula(formula);
-                } else {
+                } else if let Some(cell) = existing_row.and_then(|r| r.get(col_idx)) {
                     let cell_str = cell.to_string();
                     if let Ok(num) = cell_str.parse::<f64>() {
                         row_data.add_number(num);
@@ -69,13 +95,16 @@ impl FormulaEvaluator {
                     } else {
                         row_data.add_empty();
                     }
+                } else {
+                    row_data.add_empty();
                 }
             }
             writer.add_row(row_data);
         }
 
         let file = std::fs::File::create(output)?;
-        let mut buf_writer = std::io::BufWriter::new(file);
+        let mut buf_writer =
+            std::io::BufWriter::with_capacity(crate::limits::BUFFER_CAPACITY, file);
         writer.save(&mut buf_writer)?;
 
         Ok(())
@@ -97,11 +126,12 @@ impl FormulaEvaluator {
             .or_else(|| sheet_names.first().map(|s| s.as_str()))
             .ok_or_else(|| anyhow::anyhow!("No sheets found in workbook"))?;
 
-        let sheet = workbook.get_sheet_by_name(sheet_name)
+        let sheet = workbook
+            .get_sheet_by_name(sheet_name)
             .with_context(|| format!("Failed to read sheet: {}", sheet_name))?;
 
-        use crate::excel::xlsx_writer::XlsxWriter;
         use crate::excel::xlsx_writer::RowData;
+        use crate::excel::xlsx_writer::XlsxWriter;
 
         let mut writer = XlsxWriter::new();
         writer.add_sheet(sheet_name)?;
@@ -133,13 +163,20 @@ impl FormulaEvaluator {
         }
 
         let file = std::fs::File::create(output)?;
-        let mut buf_writer = std::io::BufWriter::new(file);
+        let mut buf_writer =
+            std::io::BufWriter::with_capacity(crate::limits::BUFFER_CAPACITY, file);
         writer.save(&mut buf_writer)?;
 
         Ok(cells_affected)
     }
 
-    pub fn apply_to_csv(&self, _input: &str, _output: &str, _formula: &str, _cell: &str) -> Result<()> {
+    pub fn apply_to_csv(
+        &self,
+        _input: &str,
+        _output: &str,
+        _formula: &str,
+        _cell: &str,
+    ) -> Result<()> {
         anyhow::bail!("CSV support has been removed. Use apply_to_range for XLSX files.")
     }
 
@@ -171,7 +208,9 @@ impl FormulaEvaluator {
                 .and_then(|i| i.checked_add(ch.to_ascii_uppercase() as u32 - b'A' as u32 + 1))
                 .ok_or_else(|| anyhow::anyhow!("Column '{}' is out of range", col))?;
         }
-        let idx = index.checked_sub(1).ok_or_else(|| anyhow::anyhow!("Invalid column"))?;
+        let idx = index
+            .checked_sub(1)
+            .ok_or_else(|| anyhow::anyhow!("Invalid column"))?;
         if idx > u16::MAX as u32 {
             anyhow::bail!("Column '{}' is out of range", col);
         }
@@ -184,13 +223,40 @@ impl FormulaEvaluator {
         data: &[Vec<String>],
     ) -> Result<FormulaResult> {
         let formula_trimmed = formula.trim();
+        let upper = formula_trimmed.to_uppercase();
 
         if formula_trimmed.starts_with("IF(") {
             self.evaluate_if(formula_trimmed, data)
         } else if formula_trimmed.starts_with("CONCAT(") {
             self.evaluate_concat(formula_trimmed, data)
-        } else if formula_trimmed.to_uppercase().starts_with("INDEX(") {
-            self.evaluate_index(&formula_trimmed.to_uppercase(), data)
+        } else if upper.starts_with("INDEX(") {
+            self.evaluate_index(&upper, data)
+        } else if upper.starts_with("UPPER(") {
+            self.evaluate_upper(formula_trimmed, data)
+        } else if upper.starts_with("LOWER(") {
+            self.evaluate_lower(formula_trimmed, data)
+        } else if upper.starts_with("TRIM(") {
+            self.evaluate_trim(formula_trimmed, data)
+        } else if upper.starts_with("LEFT(") {
+            self.evaluate_left(formula_trimmed, data)
+        } else if upper.starts_with("RIGHT(") {
+            self.evaluate_right(formula_trimmed, data)
+        } else if upper.starts_with("MID(") {
+            self.evaluate_mid(formula_trimmed, data)
+        } else if upper.starts_with("AND(") {
+            Ok(FormulaResult::Bool(
+                self.evaluate_and(formula_trimmed, data)?,
+            ))
+        } else if upper.starts_with("OR(") {
+            Ok(FormulaResult::Bool(
+                self.evaluate_or(formula_trimmed, data)?,
+            ))
+        } else if upper.starts_with("NOT(") {
+            Ok(FormulaResult::Bool(
+                self.evaluate_not(formula_trimmed, data)?,
+            ))
+        } else if upper.starts_with("IFERROR(") {
+            self.evaluate_iferror(formula_trimmed, data)
         } else {
             let num = self.evaluate_formula(formula_trimmed, data)?;
             Ok(FormulaResult::Number(num))
@@ -216,6 +282,13 @@ impl FormulaEvaluator {
     }
 
     fn evaluate_formula_inner(&self, formula: &str, data: &[Vec<String>]) -> Result<f64> {
+        // Top-level comparison (outside parentheses/quotes): `A1>=B1`,
+        // `SUM(MyData)>Threshold`. Checked first — a leading function call
+        // would otherwise swallow the whole expression via its own branch.
+        if let Some(v) = self.try_eval_comparison(formula, data)? {
+            return Ok(v);
+        }
+
         if formula.starts_with("SUM(") {
             self.evaluate_sum(formula, data)
         } else if formula.starts_with("AVERAGE(") {
@@ -240,6 +313,22 @@ impl FormulaEvaluator {
             self.evaluate_countif(formula, data)
         } else if formula.starts_with("MATCH(") {
             self.evaluate_match(formula, data)
+        } else if formula.starts_with("COUNTA(") {
+            self.evaluate_counta(formula, data)
+        } else if formula.starts_with("AVERAGEIF(") {
+            self.evaluate_averageif(formula, data)
+        } else if formula.starts_with("MOD(") {
+            self.evaluate_mod(formula, data)
+        } else if formula.starts_with("INT(") {
+            self.evaluate_int(formula, data)
+        } else if formula.starts_with("POWER(") {
+            self.evaluate_power(formula, data)
+        } else if formula.starts_with("SQRT(") {
+            self.evaluate_sqrt(formula, data)
+        } else if formula.starts_with("ROUNDUP(") {
+            self.evaluate_roundup(formula, data)
+        } else if formula.starts_with("ROUNDDOWN(") {
+            self.evaluate_rounddown(formula, data)
         } else if formula.contains('+')
             || formula.contains('-')
             || formula.contains('*')
@@ -248,9 +337,70 @@ impl FormulaEvaluator {
             self.evaluate_arithmetic(formula, data)
         } else if let Ok(num) = formula.parse::<f64>() {
             Ok(num)
+        } else if let Some(target) = self.defined_names.get(&formula.to_uppercase()) {
+            // Named single cell used in a scalar context (e.g. `Threshold`)
+            let cleaned = target.rsplit('!').next().unwrap_or(target).replace('$', "");
+            if let Ok(range) = self.parse_simple_range(&cleaned)
+                && range.start_row == range.end_row
+                && range.start_col == range.end_col
+            {
+                return self
+                    .get_cell_value_by_index(range.start_row, range.start_col, data)
+                    .ok_or_else(|| anyhow::anyhow!("Named cell {} is empty", formula));
+            }
+            anyhow::bail!("Named range '{}' cannot be used as a scalar value", formula)
         } else {
             self.get_cell_value(formula, data)
         }
+    }
+
+    /// Detect and evaluate a comparison at paren-depth 0 (`>`, `>=`, `<`, `<=`,
+    /// `=`, `<>`, `!=`), returning 1.0/0.0 (Excel numeric coercion of booleans).
+    /// Returns `None` when the expression has no top-level comparison.
+    fn try_eval_comparison(&self, formula: &str, data: &[Vec<String>]) -> Result<Option<f64>> {
+        const OPS: [&str; 7] = [">=", "<=", "<>", "!=", "=", ">", "<"];
+        let bytes = formula.as_bytes();
+        let mut depth = 0i32;
+        let mut i = 0usize;
+
+        while i < bytes.len() {
+            match bytes[i] {
+                b'(' => depth += 1,
+                b')' => depth -= 1,
+                b'"' => {
+                    i += 1;
+                    while i < bytes.len() && bytes[i] != b'"' {
+                        i += 1;
+                    }
+                }
+                _ if depth == 0 => {
+                    for op in OPS {
+                        if i > 0 && formula[i..].starts_with(op) {
+                            let left = formula[..i].trim();
+                            let right = formula[i + op.len()..].trim();
+                            if left.is_empty() || right.is_empty() {
+                                continue;
+                            }
+                            let l = self.evaluate_formula(left, data)?;
+                            let r = self.evaluate_formula(right, data)?;
+                            let res = match op {
+                                ">=" => l >= r,
+                                "<=" => l <= r,
+                                "<>" | "!=" => (l - r).abs() > f64::EPSILON,
+                                "=" => (l - r).abs() < f64::EPSILON,
+                                ">" => l > r,
+                                "<" => l < r,
+                                _ => false,
+                            };
+                            return Ok(Some(if res { 1.0 } else { 0.0 }));
+                        }
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        Ok(None)
     }
 
     fn evaluate_if(&self, formula: &str, data: &[Vec<String>]) -> Result<FormulaResult> {
@@ -273,7 +423,20 @@ impl FormulaEvaluator {
         }
     }
 
-    fn evaluate_condition(&self, condition: &str, data: &[Vec<String>]) -> Result<bool> {
+    pub(crate) fn evaluate_condition(&self, condition: &str, data: &[Vec<String>]) -> Result<bool> {
+        // Logical functions compose inside conditions (e.g. inside IF) and
+        // must be checked before operator scanning, since their arguments
+        // contain comparison operators.
+        let trimmed = condition.trim();
+        let upper = trimmed.to_uppercase();
+        if upper.starts_with("AND(") {
+            return self.evaluate_and(trimmed, data);
+        } else if upper.starts_with("OR(") {
+            return self.evaluate_or(trimmed, data);
+        } else if upper.starts_with("NOT(") {
+            return self.evaluate_not(trimmed, data);
+        }
+
         let ops = [">=", "<=", "<>", "!=", "=", ">", "<"];
 
         for op in ops {
@@ -385,10 +548,37 @@ impl FormulaEvaluator {
             .rfind(')')
             .ok_or_else(|| anyhow::anyhow!("Invalid formula format"))?;
         let range_str = &formula[start + 1..end];
+        self.resolve_range_str(range_str, 0)
+    }
 
-        if let Some(colon_pos) = range_str.find(':') {
-            let start_cell = &range_str[..colon_pos];
-            let end_cell = &range_str[colon_pos + 1..];
+    /// Resolve a range reference: `A1:B2`, single cell `B2`, sheet-qualified
+    /// `Sheet1!$A$1:$B$2`, or a workbook defined name like `MyData`.
+    fn resolve_range_str(&self, raw: &str, depth: usize) -> Result<CellRange> {
+        if depth > 4 {
+            anyhow::bail!("Defined name resolution too deep (cycle?)");
+        }
+
+        // Strip a sheet prefix ("Sheet1!A1:B2") and absolute markers ("$")
+        let cleaned = raw.trim();
+        let after_sheet = cleaned.rsplit('!').next().unwrap_or(cleaned);
+        let stripped = after_sheet.replace('$', "");
+
+        if let Ok(range) = self.parse_simple_range(&stripped) {
+            return Ok(range);
+        }
+
+        // Not a cell reference — try a defined name (case-insensitive)
+        if let Some(target) = self.defined_names.get(&stripped.to_uppercase()) {
+            return self.resolve_range_str(target, depth + 1);
+        }
+
+        anyhow::bail!("Invalid range: {}", raw)
+    }
+
+    fn parse_simple_range(&self, stripped: &str) -> Result<CellRange> {
+        if let Some(colon_pos) = stripped.find(':') {
+            let start_cell = &stripped[..colon_pos];
+            let end_cell = &stripped[colon_pos + 1..];
 
             let (start_row, start_col) = self.parse_cell_reference(start_cell)?;
             let (end_row, end_col) = self.parse_cell_reference(end_cell)?;
@@ -400,7 +590,7 @@ impl FormulaEvaluator {
                 end_col,
             })
         } else {
-            let (row, col) = self.parse_cell_reference(range_str)?;
+            let (row, col) = self.parse_cell_reference(stripped)?;
             Ok(CellRange {
                 start_row: row,
                 start_col: col,

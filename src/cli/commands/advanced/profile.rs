@@ -1,7 +1,7 @@
 //! Data profiling command handler
 
-use xls_rs::{converter::Converter, profiling::DataProfiler};
 use anyhow::{Context, Result};
+use xls_rs::{converter::Converter, profiling::DataProfiler};
 
 /// Handle the profile command
 ///

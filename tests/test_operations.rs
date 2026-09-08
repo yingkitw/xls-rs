@@ -561,9 +561,7 @@ fn test_rolling_mean_column() {
         vec!["2".to_string(), "20".to_string()],
         vec!["3".to_string(), "30".to_string()],
     ];
-    ops
-        .rolling_mean_column(&mut data, 1, 2, "roll2")
-        .unwrap();
+    ops.rolling_mean_column(&mut data, 1, 2, "roll2").unwrap();
     assert_eq!(data[0][2], "roll2");
     let r1: f64 = data[1][2].parse().unwrap();
     assert!((r1 - 10.0).abs() < 1e-5);
@@ -788,11 +786,28 @@ fn test_systematic_sample() {
 fn test_pivot_longer_basic() {
     let ops = DataOperations::new();
     let data = vec![
-        vec!["id".to_string(), "Q1".to_string(), "Q2".to_string(), "Q3".to_string()],
-        vec!["A".to_string(), "10".to_string(), "20".to_string(), "30".to_string()],
-        vec!["B".to_string(), "40".to_string(), "50".to_string(), "60".to_string()],
+        vec![
+            "id".to_string(),
+            "Q1".to_string(),
+            "Q2".to_string(),
+            "Q3".to_string(),
+        ],
+        vec![
+            "A".to_string(),
+            "10".to_string(),
+            "20".to_string(),
+            "30".to_string(),
+        ],
+        vec![
+            "B".to_string(),
+            "40".to_string(),
+            "50".to_string(),
+            "60".to_string(),
+        ],
     ];
-    let long = ops.pivot_longer(&data, &[1, 2, 3], "quarter", "sales").unwrap();
+    let long = ops
+        .pivot_longer(&data, &[1, 2, 3], "quarter", "sales")
+        .unwrap();
     assert_eq!(long[0], vec!["id", "quarter", "sales"]);
     // 2 rows × 3 pivoted cols = 6 data rows + 1 header
     assert_eq!(long.len(), 7);
@@ -901,7 +916,9 @@ fn test_pivot_longer_wider_roundtrip() {
         vec!["X".to_string(), "100".to_string(), "200".to_string()],
         vec!["Y".to_string(), "300".to_string(), "400".to_string()],
     ];
-    let long = ops.pivot_longer(&original, &[1, 2], "quarter", "value").unwrap();
+    let long = ops
+        .pivot_longer(&original, &[1, 2], "quarter", "value")
+        .unwrap();
     let wide = ops.pivot_wider(&long, 1, 2, &[0]).unwrap();
     assert_eq!(wide[0], vec!["id", "Q1", "Q2"]);
     let x = wide.iter().find(|r| r[0] == "X").unwrap();

@@ -27,26 +27,29 @@ use std::io::{Seek, Write};
 use zip::ZipWriter;
 use zip::write::FileOptions;
 
-mod types;
-mod xml_gen;
 pub mod chart_xml;
 pub mod cond_fmt_xml;
+pub mod image_xml;
 pub mod sparkline_xml;
 pub mod streaming;
 pub mod style_registry;
+mod types;
+mod xml_gen;
 
-pub use types::{
-    CellComment, CellData, ColGroup, DataValidation, Hyperlink, MergeCell, Operator, PageMargins,
-    PageOrientation, PrintSetup, RowData, RowGroup, SheetData, Table, TableStyleInfo, ValidationType,
-};
 pub use cond_fmt_xml::{ConditionalFormat, ConditionalRule};
 pub use sparkline_xml::{Sparkline, SparklineGroup, SparklineType};
 pub use style_registry::{SharedStrings, StyleRegistry, XlsxCellStyle};
+pub use types::{
+    CellComment, CellData, ColGroup, DataValidation, DocumentProperties, Hyperlink, Image,
+    ImageFormat, MergeCell, Operator, PageMargins, PageOrientation, PrintSetup, RichTextRun,
+    RichTextRunStyle, RowData, RowGroup, SheetData, SheetProtection, Table, TableStyleInfo,
+    ValidationType, WorkbookProtection,
+};
 
 use super::types::WriteOptions;
 use xml_gen::*;
 
-use super::chart::{ChartConfig};
+use super::chart::ChartConfig;
 
 /// XLSX workbook writer
 pub struct XlsxWriter {
@@ -63,6 +66,10 @@ pub struct XlsxWriter {
     /// it from cells written anywhere.
     named_formats: std::collections::BTreeMap<String, u32>,
     vba_project: Option<Vec<u8>>,
+    /// Optional workbook-level protection (lock structure/windows).
+    workbook_protection: Option<WorkbookProtection>,
+    /// Optional document (core) properties written to `docProps/core.xml`.
+    document_properties: Option<DocumentProperties>,
 }
 
 impl XlsxWriter {
@@ -78,6 +85,8 @@ impl XlsxWriter {
             styles: StyleRegistry::new(),
             named_formats: std::collections::BTreeMap::new(),
             vba_project: None,
+            workbook_protection: None,
+            document_properties: None,
         }
     }
 
@@ -109,7 +118,11 @@ impl XlsxWriter {
 
     /// Set a chart for the current (last added) sheet
     pub fn set_chart(&mut self, config: ChartConfig, data: Vec<Vec<String>>) {
-        let sheet_idx = if self.sheets.is_empty() { 0 } else { self.sheets.len() - 1 };
+        let sheet_idx = if self.sheets.is_empty() {
+            0
+        } else {
+            self.sheets.len() - 1
+        };
         while self.chart_configs.len() <= sheet_idx {
             self.chart_configs.push(None);
         }
@@ -143,6 +156,8 @@ impl XlsxWriter {
             row_groups: Vec::new(),
             col_groups: Vec::new(),
             tables: Vec::new(),
+            images: Vec::new(),
+            sheet_protection: None,
         });
         Ok(())
     }
@@ -162,7 +177,13 @@ impl XlsxWriter {
     }
 
     /// Add a merged cell range to the current sheet (0-based, inclusive)
-    pub fn add_merge_cell(&mut self, start_row: usize, start_col: usize, end_row: usize, end_col: usize) {
+    pub fn add_merge_cell(
+        &mut self,
+        start_row: usize,
+        start_col: usize,
+        end_row: usize,
+        end_col: usize,
+    ) {
         if let Some(sheet) = self.sheets.last_mut() {
             sheet.merge_cells.push(MergeCell {
                 start_row,
@@ -240,6 +261,31 @@ impl XlsxWriter {
         }
     }
 
+    /// Insert an image anchored at the given cell on the current sheet.
+    /// The image bytes are stored verbatim and written to `xl/media/`.
+    pub fn insert_image(&mut self, image: Image) {
+        if let Some(sheet) = self.sheets.last_mut() {
+            sheet.images.push(image);
+        }
+    }
+
+    /// Set sheet protection on the current (last) sheet.
+    pub fn set_sheet_protection(&mut self, protection: SheetProtection) {
+        if let Some(sheet) = self.sheets.last_mut() {
+            sheet.sheet_protection = Some(protection);
+        }
+    }
+
+    /// Set workbook-level protection (lock structure/windows).
+    pub fn set_workbook_protection(&mut self, protection: WorkbookProtection) {
+        self.workbook_protection = Some(protection);
+    }
+
+    /// Set document (core) properties written to `docProps/core.xml`.
+    pub fn set_document_properties(&mut self, props: DocumentProperties) {
+        self.document_properties = Some(props);
+    }
+
     /// Add a row to the current sheet
     pub fn add_row(&mut self, row: RowData) {
         if let Some(sheet) = self.sheets.last_mut() {
@@ -284,21 +330,39 @@ impl XlsxWriter {
     pub fn save<W: Write + Seek>(&self, mut writer: W) -> Result<()> {
         let mut zip = ZipWriter::new(&mut writer);
 
-        // Determine which sheets have charts, comments, or tables
+        // Determine which sheets have charts, comments, tables, or images
         let chart_flags: Vec<bool> = (0..self.sheets.len())
             .map(|i| self.chart_configs.get(i).and_then(|c| c.as_ref()).is_some())
             .collect();
         let comment_flags: Vec<bool> = self.sheets.iter().map(|s| !s.comments.is_empty()).collect();
         let table_counts: Vec<usize> = self.sheets.iter().map(|s| s.tables.len()).collect();
+        let image_flags: Vec<bool> = self.sheets.iter().map(|s| !s.images.is_empty()).collect();
+        // A sheet needs a drawing part when it has a chart OR images.
+        let drawing_flags: Vec<bool> = (0..self.sheets.len())
+            .map(|i| chart_flags[i] || image_flags[i])
+            .collect();
 
-        // Add [Content_Types].xml (with chart/comment/table content types if needed)
-        add_content_types_ext(&mut zip, self.sheets.len(), &chart_flags, &comment_flags, self.vba_project.is_some(), &table_counts)?;
+        let has_core = self.document_properties.is_some();
+
+        // Add [Content_Types].xml (with chart/comment/table/image content types)
+        add_content_types_ext(
+            &mut zip,
+            self.sheets.len(),
+            &xml_gen::ContentTypesConfig {
+                chart_flags: &chart_flags,
+                comment_flags: &comment_flags,
+                has_vba: self.vba_project.is_some(),
+                table_counts: &table_counts,
+                image_flags: &image_flags,
+                has_core,
+            },
+        )?;
 
         // Add _rels/.rels
-        add_rels(&mut zip)?;
+        add_rels(&mut zip, has_core)?;
 
         // Add xl/workbook.xml
-        add_workbook(&mut zip, &self.sheets)?;
+        add_workbook(&mut zip, &self.sheets, self.workbook_protection.as_ref())?;
 
         // Add xl/_rels/workbook.xml.rels
         add_workbook_rels(&mut zip, self.sheets.len())?;
@@ -316,7 +380,14 @@ impl XlsxWriter {
             } else {
                 Vec::new()
             };
-            add_worksheet(&mut zip, idx, sheet, &self.options, chart_flags[idx], &table_rel_ids)?;
+            add_worksheet(
+                &mut zip,
+                idx,
+                sheet,
+                &self.options,
+                drawing_flags[idx],
+                &table_rel_ids,
+            )?;
             // Advance global table index by the number of tables on this sheet
             table_global_idx += sheet.tables.len();
         }
@@ -330,20 +401,46 @@ impl XlsxWriter {
             }
         }
 
-        // Add chart files for sheets that have charts
+        // Add chart + image drawing parts for sheets that have either.
         for (idx, sheet) in self.sheets.iter().enumerate() {
-            if let Some(Some((config, data))) = self.chart_configs.get(idx) {
-                chart_xml::add_chart_to_zip(&mut zip, idx, config, data, &sheet.name)?;
+            let chart = self.chart_configs.get(idx).and_then(|c| c.as_ref());
+            if chart.is_some() || !sheet.images.is_empty() {
+                // Write chart XML first (if present) — the drawing rels
+                // reference it as rId1.
+                if let Some((config, data)) = chart {
+                    let chart_xml = chart_xml::generate_chart_xml(config, data, &sheet.name);
+                    let opts = FileOptions::<()>::default()
+                        .compression_method(zip::CompressionMethod::Deflated);
+                    zip.start_file(format!("xl/charts/chart{}.xml", idx + 1), opts)?;
+                    zip.write_all(chart_xml.as_bytes())?;
+                }
+                let chart_info = chart.map(|(config, _)| {
+                    (
+                        "rId1",
+                        config.width as u64 * 9525,
+                        config.height as u64 * 9525,
+                    )
+                });
+                image_xml::add_drawing_to_zip(&mut zip, idx, chart_info, &sheet.images)?;
             }
         }
 
         // Add xl/theme/theme1.xml
         add_theme(&mut zip)?;
 
+        // Add docProps/core.xml if document properties are set
+        if let Some(ref props) = self.document_properties {
+            let core_xml = xml_gen::generate_core_xml(props);
+            let opts =
+                FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
+            zip.start_file("docProps/core.xml", opts)?;
+            zip.write_all(core_xml.as_bytes())?;
+        }
+
         // Add VBA project if present (macro-enabled .xlsm)
         if let Some(vba) = &self.vba_project {
-            let opts = FileOptions::<()>::default()
-                .compression_method(zip::CompressionMethod::Stored);
+            let opts =
+                FileOptions::<()>::default().compression_method(zip::CompressionMethod::Stored);
             zip.start_file("xl/vbaProject.bin", opts)?;
             zip.write_all(vba)?;
         }
@@ -362,8 +459,8 @@ impl Default for XlsxWriter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::CellStyle;
+    use super::*;
     use std::io::Cursor;
 
     #[test]
@@ -533,11 +630,26 @@ mod tests {
         writer.add_data(&data);
 
         assert_eq!(writer.sheets[0].rows.len(), 3);
-        assert!(matches!(writer.sheets[0].rows[0].cells[0], CellData::String(_)));
-        assert!(matches!(writer.sheets[0].rows[1].cells[0], CellData::String(_)));
-        assert!(matches!(writer.sheets[0].rows[1].cells[1], CellData::Number(_)));
-        assert!(matches!(writer.sheets[0].rows[2].cells[0], CellData::String(_)));
-        assert!(matches!(writer.sheets[0].rows[2].cells[1], CellData::Number(_)));
+        assert!(matches!(
+            writer.sheets[0].rows[0].cells[0],
+            CellData::String(_)
+        ));
+        assert!(matches!(
+            writer.sheets[0].rows[1].cells[0],
+            CellData::String(_)
+        ));
+        assert!(matches!(
+            writer.sheets[0].rows[1].cells[1],
+            CellData::Number(_)
+        ));
+        assert!(matches!(
+            writer.sheets[0].rows[2].cells[0],
+            CellData::String(_)
+        ));
+        assert!(matches!(
+            writer.sheets[0].rows[2].cells[1],
+            CellData::Number(_)
+        ));
     }
 
     #[test]
@@ -563,7 +675,7 @@ mod tests {
 
         assert_eq!(writer.sheets[0].column_widths.len(), 6);
         assert_eq!(writer.sheets[0].column_widths[0], 8.43); // default
-        assert_eq!(writer.sheets[0].column_widths[5], 10.0);  // set value
+        assert_eq!(writer.sheets[0].column_widths[5], 10.0); // set value
     }
 
     #[test]
@@ -716,9 +828,15 @@ mod tests {
         assert_eq!(&output[0..4], b"PK\x03\x04");
 
         assert_eq!(writer.sheets[0].rows[0].cells.len(), 3);
-        assert!(matches!(writer.sheets[0].rows[0].cells[0], CellData::String(_)));
+        assert!(matches!(
+            writer.sheets[0].rows[0].cells[0],
+            CellData::String(_)
+        ));
         assert!(matches!(writer.sheets[0].rows[0].cells[1], CellData::Empty));
-        assert!(matches!(writer.sheets[0].rows[0].cells[2], CellData::String(_)));
+        assert!(matches!(
+            writer.sheets[0].rows[0].cells[2],
+            CellData::String(_)
+        ));
     }
 
     #[test]
@@ -917,7 +1035,10 @@ mod tests {
             font_color: Some("FFFFFF".into()),
             ..Default::default()
         });
-        assert!(idx > 0, "custom style should not collide with default index 0");
+        assert!(
+            idx > 0,
+            "custom style should not collide with default index 0"
+        );
 
         let mut buf = Cursor::new(Vec::new());
         writer.save(&mut buf).unwrap();

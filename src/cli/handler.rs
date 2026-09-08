@@ -4,12 +4,12 @@
 //! to specialized command handlers based on the command type.
 
 use crate::cli::{
+    Commands,
     commands::{
-        io::IoCommandHandler, pandas::PandasCommandHandler, transform::TransformCommandHandler,
-        AdvancedCommandHandler,
+        AdvancedCommandHandler, io::IoCommandHandler, pandas::PandasCommandHandler,
+        transform::TransformCommandHandler,
     },
     format::OutputFormat,
-    Commands,
 };
 use anyhow::{Context, Result};
 
@@ -182,7 +182,9 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 format,
                 method,
                 stratum_column,
-            } => self.pandas.handle_sample(input, n, seed, format, method, stratum_column),
+            } => self
+                .pandas
+                .handle_sample(input, n, seed, format, method, stratum_column),
 
             Commands::Describe { input, format } => self.pandas.handle_describe(input, format),
 
@@ -190,9 +192,11 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 self.pandas.handle_value_counts(input, column)
             }
 
-            Commands::Corr { input, columns, method } => {
-                self.pandas.handle_corr(input, columns, &method)
-            }
+            Commands::Corr {
+                input,
+                columns,
+                method,
+            } => self.pandas.handle_corr(input, columns, &method),
 
             Commands::Regress {
                 input,
@@ -275,13 +279,9 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 names_from,
                 values_from,
                 id_cols,
-            } => self.pandas.handle_pivot_wider(
-                input,
-                output,
-                names_from,
-                values_from,
-                id_cols,
-            ),
+            } => self
+                .pandas
+                .handle_pivot_wider(input, output, names_from, values_from, id_cols),
 
             // Advanced commands
             Commands::Schema { input, output } => self.advanced.handle_schema(input, output),
@@ -291,7 +291,9 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 table,
                 output,
                 batch_size,
-            } => self.advanced.handle_to_sql(input, table, output, batch_size),
+            } => self
+                .advanced
+                .handle_to_sql(input, table, output, batch_size),
 
             Commands::Profile { input, output } => self.advanced.handle_profile(input, output),
 
@@ -330,9 +332,14 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 title,
                 category_column,
                 value_columns,
-            } => self
-                .advanced
-                .handle_add_chart(input, output, chart_type, title, category_column, value_columns),
+            } => self.advanced.handle_add_chart(
+                input,
+                output,
+                chart_type,
+                title,
+                category_column,
+                value_columns,
+            ),
 
             Commands::AddSparkline {
                 output,
@@ -352,13 +359,7 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 bold,
                 sheet,
             } => self.advanced.handle_conditional_format(
-                output,
-                range,
-                condition,
-                bg_color,
-                font_color,
-                bold,
-                sheet,
+                output, range, condition, bg_color, font_color, bold, sheet,
             ),
 
             Commands::ApplyFormulaRange {
@@ -384,7 +385,8 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 let max_val: f64 = max
                     .parse()
                     .with_context(|| format!("Invalid max value: {}", max))?;
-                self.transform.handle_clip(input, output, column, min_val, max_val)
+                self.transform
+                    .handle_clip(input, output, column, min_val, max_val)
             }
 
             Commands::Normalize {
@@ -405,14 +407,18 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 column,
                 from_format,
                 to_format,
-            } => self.transform.handle_parse_date(input, output, column, from_format, to_format),
+            } => self
+                .transform
+                .handle_parse_date(input, output, column, from_format, to_format),
 
             Commands::RegexFilter {
                 input,
                 output,
                 column,
                 pattern,
-            } => self.transform.handle_regex_filter(input, output, column, pattern),
+            } => self
+                .transform
+                .handle_regex_filter(input, output, column, pattern),
 
             Commands::RegexReplace {
                 input,
@@ -420,11 +426,11 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                 column,
                 pattern,
                 replacement,
-            } => self.transform.handle_regex_replace(input, output, column, pattern, replacement),
+            } => self
+                .transform
+                .handle_regex_replace(input, output, column, pattern, replacement),
 
-            Commands::Diff { left, right, key } => {
-                self.transform.handle_diff(left, right, key)
-            }
+            Commands::Diff { left, right, key } => self.transform.handle_diff(left, right, key),
 
             Commands::StrDistance { a, b, method } => {
                 use xls_rs::string_distance;
@@ -441,16 +447,14 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
                         let s = string_distance::jaro_winkler(&a, &b);
                         println!("Jaro-Winkler similarity: {:.4}", s);
                     }
-                    "hamming" => {
-                        match string_distance::hamming(&a, &b) {
-                            Some(d) => println!("Hamming distance: {}", d),
-                            None => anyhow::bail!(
-                                "Hamming distance requires strings of equal length (got {} and {})",
-                                a.len(),
-                                b.len()
-                            ),
-                        }
-                    }
+                    "hamming" => match string_distance::hamming(&a, &b) {
+                        Some(d) => println!("Hamming distance: {}", d),
+                        None => anyhow::bail!(
+                            "Hamming distance requires strings of equal length (got {} and {})",
+                            a.len(),
+                            b.len()
+                        ),
+                    },
                     _ => anyhow::bail!(
                         "Unknown method '{}'. Use: levenshtein, jaro, jaro-winkler, hamming",
                         method
@@ -468,4 +472,3 @@ impl super::commands::CommandHandler for DefaultCommandHandler {
         }
     }
 }
-

@@ -244,7 +244,10 @@ impl BorderKey {
             .as_deref()
             .and_then(Rgb::parse)
             .map(|c| c.to_argb_hex());
-        let side = |st: String, co: Option<String>| BorderSide { style: st, color_argb: co };
+        let side = |st: String, co: Option<String>| BorderSide {
+            style: st,
+            color_argb: co,
+        };
         if style.is_empty() {
             BorderKey {
                 left: side(String::new(), None),
@@ -264,10 +267,22 @@ impl BorderKey {
 
     pub fn empty() -> BorderKey {
         BorderKey {
-            left: BorderSide { style: String::new(), color_argb: None },
-            right: BorderSide { style: String::new(), color_argb: None },
-            top: BorderSide { style: String::new(), color_argb: None },
-            bottom: BorderSide { style: String::new(), color_argb: None },
+            left: BorderSide {
+                style: String::new(),
+                color_argb: None,
+            },
+            right: BorderSide {
+                style: String::new(),
+                color_argb: None,
+            },
+            top: BorderSide {
+                style: String::new(),
+                color_argb: None,
+            },
+            bottom: BorderSide {
+                style: String::new(),
+                color_argb: None,
+            },
         }
     }
 }
@@ -349,8 +364,16 @@ impl StyleRegistry {
         reg.border_index.insert(no_border, 0);
 
         for code in [
-            "General", "0", "0.00", "#,##0", "#,##0.00",
-            "0%", "0.00%", "m/d/yyyy", "h:mm:ss AM/PM", "m/d/yyyy h:mm",
+            "General",
+            "0",
+            "0.00",
+            "#,##0",
+            "#,##0.00",
+            "0%",
+            "0.00%",
+            "m/d/yyyy",
+            "h:mm:ss AM/PM",
+            "m/d/yyyy h:mm",
         ] {
             let id = builtin_id_for(code);
             reg.num_fmt_id_by_code.insert(code.to_string(), id);
@@ -417,9 +440,8 @@ impl StyleRegistry {
         let has_font_overrides = font != self.fonts[0];
         let has_fill_overrides = fill != self.fills[0];
         let has_border_overrides = border != self.borders[0];
-        let has_align_overrides = style.align.is_some()
-            || style.valign.is_some()
-            || style.wrap.unwrap_or(false);
+        let has_align_overrides =
+            style.align.is_some() || style.valign.is_some() || style.wrap.unwrap_or(false);
         let has_num_overrides = num_fmt_id != builtin_numfmt::GENERAL;
 
         let font_id = self.intern_font(font);
@@ -461,9 +483,15 @@ impl StyleRegistry {
         let border = BorderKey::from_style(style);
 
         let num_fmt_id = if let Some(code) = &style.number_format {
-            self.num_fmt_id_by_code.get(code).copied().unwrap_or(builtin_numfmt::GENERAL)
+            self.num_fmt_id_by_code
+                .get(code)
+                .copied()
+                .unwrap_or(builtin_numfmt::GENERAL)
         } else if style.date.unwrap_or(false) {
-            self.num_fmt_id_by_code.get("yyyy-mm-dd").copied().unwrap_or(builtin_numfmt::GENERAL)
+            self.num_fmt_id_by_code
+                .get("yyyy-mm-dd")
+                .copied()
+                .unwrap_or(builtin_numfmt::GENERAL)
         } else {
             builtin_numfmt::GENERAL
         };
@@ -602,7 +630,10 @@ mod tests {
     fn builtin_codes_resolve_to_reserved_ids() {
         let mut reg = StyleRegistry::new();
         assert_eq!(reg.intern_num_fmt("General"), builtin_numfmt::GENERAL);
-        assert_eq!(reg.intern_num_fmt("#,##0.00"), builtin_numfmt::THOUSANDS_DECIMAL);
+        assert_eq!(
+            reg.intern_num_fmt("#,##0.00"),
+            builtin_numfmt::THOUSANDS_DECIMAL
+        );
         assert_eq!(reg.intern_num_fmt("m/d/yyyy"), builtin_numfmt::DATE_SLASH);
     }
 
@@ -612,7 +643,11 @@ mod tests {
         let a = reg.intern_num_fmt("yyyy-mm-dd");
         let b = reg.intern_num_fmt("yyyy-mm-dd");
         assert_eq!(a, b);
-        assert_eq!(reg.num_fmt_count(), 1, "yyyy-mm-dd should be registered as custom");
+        assert_eq!(
+            reg.num_fmt_count(),
+            1,
+            "yyyy-mm-dd should be registered as custom"
+        );
     }
 
     #[test]
@@ -716,6 +751,9 @@ mod tests {
         let h = XlsxCellStyle::header();
         let n = XlsxCellStyle::note();
         assert_ne!(reg.register(&h), reg.register(&n));
-        assert_ne!(reg.register(&XlsxCellStyle::highlighted()), reg.register(&h));
+        assert_ne!(
+            reg.register(&XlsxCellStyle::highlighted()),
+            reg.register(&h)
+        );
     }
 }

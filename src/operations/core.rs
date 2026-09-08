@@ -133,7 +133,9 @@ impl FilterOperator for DataOperations {
                             false
                         }
                     }
-                    _ => self.evaluate_condition(cell_value, &condition).unwrap_or(false),
+                    _ => self
+                        .evaluate_condition(cell_value, &condition)
+                        .unwrap_or(false),
                 }
             })
             .map(|(idx, _)| idx)
@@ -233,10 +235,11 @@ impl DataOperations {
         let mut count = 0;
         for row in data.iter_mut() {
             if let Some(cell) = row.get_mut(column)
-                && cell.contains(find) {
-                    *cell = cell.replace(find, replace_with);
-                    count += 1;
-                }
+                && cell.contains(find)
+            {
+                *cell = cell.replace(find, replace_with);
+                count += 1;
+            }
         }
         count
     }
@@ -378,9 +381,10 @@ impl TransformOperator for DataOperations {
         match operation {
             TransformOperation::RenameColumn { from, to } => {
                 if let Some(row) = data.first_mut()
-                    && from < row.len() {
-                        row[from] = to;
-                    }
+                    && from < row.len()
+                {
+                    row[from] = to;
+                }
             }
             TransformOperation::DropColumn(col_idx) => {
                 for row in data.iter_mut() {
@@ -408,6 +412,9 @@ impl TransformOperator for DataOperations {
                                 match evaluator.evaluate_formula_full(&row_formula, data) {
                                     Ok(crate::formula::FormulaResult::Number(n)) => n.to_string(),
                                     Ok(crate::formula::FormulaResult::Text(s)) => s,
+                                    Ok(crate::formula::FormulaResult::Bool(b)) => {
+                                        if b { "TRUE" } else { "FALSE" }.to_string()
+                                    }
                                     Err(_) => format!("#ERROR: {}", name),
                                 }
                             })
@@ -423,6 +430,9 @@ impl TransformOperator for DataOperations {
                                 let value = match result {
                                     crate::formula::FormulaResult::Number(n) => n.to_string(),
                                     crate::formula::FormulaResult::Text(s) => s,
+                                    crate::formula::FormulaResult::Bool(b) => {
+                                        if b { "TRUE" } else { "FALSE" }.to_string()
+                                    }
                                 };
                                 for row in data.iter_mut() {
                                     row.push(value.clone());

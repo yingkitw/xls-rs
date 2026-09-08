@@ -1,8 +1,8 @@
 //! Hard caps to mitigate memory bombs and hang-on-allocate paths.
 //!
 //! Spreadsheet formats can declare enormous dimensions (far corner cells,
-//! ODS `number-*-repeated`, cyclic CFB FAT chains). Without bounds, dense
-//! materialization and chain walks can exhaust RAM or loop forever.
+//! huge ZIP entries, runaway formula ranges). Without bounds, dense
+//! materialization can exhaust RAM or loop forever.
 
 /// Excel absolute maxima (XFD / 1048576).
 pub const MAX_SHEET_ROWS: usize = 1_048_576;
@@ -12,12 +12,15 @@ pub const MAX_SHEET_COLS: usize = 16_384;
 /// One far-corner cell must not allocate a full Excel-sized matrix.
 pub const MAX_DENSE_CELLS: usize = 10_000_000;
 
-/// Cap ODS `number-columns-repeated` / `number-rows-repeated` expansions.
-pub const MAX_ODS_CELL_REPEAT: usize = MAX_SHEET_COLS;
-pub const MAX_ODS_ROW_REPEAT: usize = 100_000;
-
 /// Reject ZIP entries larger than this when slurping into memory.
 pub const MAX_ZIP_ENTRY_BYTES: u64 = 512 * 1024 * 1024; // 512 MiB
+
+/// Minimum sheet count before multi-threaded sheet parsing pays off.
+pub const PARALLEL_SHEET_PARSE_MIN_SHEETS: usize = 2;
+
+/// Skip multi-threaded sheet parsing when buffered sheet XML exceeds this
+/// total, to bound peak memory (sequential parsing drops each sheet early).
+pub const PARALLEL_SHEET_PARSE_MAX_BYTES: u64 = 128 * 1024 * 1024; // 128 MiB
 
 /// Max output rows from a many-to-many join before aborting.
 pub const MAX_JOIN_OUTPUT_ROWS: usize = 5_000_000;
@@ -36,9 +39,6 @@ pub const MAX_FORMULA_DEPTH: usize = 64;
 
 /// Max cells a formula range may span (pre-allocation / iteration budget).
 pub const MAX_FORMULA_RANGE_CELLS: usize = 1_000_000;
-
-/// Max FAT/mini-FAT sector hops when walking a CFB stream (cycle guard).
-pub const MAX_CFB_SECTOR_HOPS: usize = 4_000_000;
 
 /// Maximum entries in the Excel metadata cache before eviction.
 pub const METADATA_CACHE_SIZE: usize = 100;

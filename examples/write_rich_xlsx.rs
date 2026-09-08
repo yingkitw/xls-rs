@@ -4,13 +4,13 @@
 //! sparklines, data validation, hyperlinks, cell comments, print setup,
 //! row/column outlines, and embedded charts.
 //!
-//! Run with: `cargo run --example write_rich_xls`
+//! Run with: `cargo run --example write_rich_xlsx`
 
 use xls_rs::excel::chart::{ChartConfig, DataChartType};
 use xls_rs::excel::{
-    ConditionalFormat, ConditionalRule, DataValidation, Operator, PageMargins,
-    PageOrientation, PrintSetup, RowData, Sparkline, SparklineGroup, SparklineType,
-    ValidationType, WriteOptions, XlsxCellStyle, XlsxWriter,
+    ConditionalFormat, ConditionalRule, DataValidation, Operator, PageMargins, PageOrientation,
+    PrintSetup, RowData, Sparkline, SparklineGroup, SparklineType, ValidationType, WriteOptions,
+    XlsxCellStyle, XlsxWriter,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -284,7 +284,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Data rows with per-cell styles
         let transactions: &[(&str, &str, f64, f64, &str)] = &[
             ("2024-01-15", "Office supplies", 1250.50, 0.0875, "Approved"),
-            ("2024-02-03", "Software license", 4800.00, 0.0875, "Approved"),
+            (
+                "2024-02-03",
+                "Software license",
+                4800.00,
+                0.0875,
+                "Approved",
+            ),
             ("2024-02-20", "Travel expense", 3200.75, 0.0875, "Pending"),
             ("2024-03-01", "Consulting fee", 15000.00, 0.0, "Approved"),
             ("2024-03-10", "Equipment", 8750.25, 0.0875, "Rejected"),
@@ -357,7 +363,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             row.add_number(*q2);
             row.add_number(*q3);
             row.add_number(*q4);
-            row.add_formula(format!("SUM(B{}:E{})", sales.len() - sales.iter().position(|s| s.0 == *name).unwrap() + 1, sales.len() - sales.iter().position(|s| s.0 == *name).unwrap() + 1));
+            row.add_formula(format!(
+                "SUM(B{}:E{})",
+                sales.len() - sales.iter().position(|s| s.0 == *name).unwrap() + 1,
+                sales.len() - sales.iter().position(|s| s.0 == *name).unwrap() + 1
+            ));
             w.add_row(row);
         }
 
@@ -485,10 +495,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
         // Hyperlinks
-        w.add_hyperlink("I2", "https://example.com/north", Some("North region details"));
-        w.add_hyperlink("I3", "https://example.com/south", Some("South region details"));
-        w.add_hyperlink("I4", "https://example.com/east", Some("East region details"));
-        w.add_hyperlink("I5", "https://example.com/west", Some("West region details"));
+        w.add_hyperlink(
+            "I2",
+            "https://example.com/north",
+            Some("North region details"),
+        );
+        w.add_hyperlink(
+            "I3",
+            "https://example.com/south",
+            Some("South region details"),
+        );
+        w.add_hyperlink(
+            "I4",
+            "https://example.com/east",
+            Some("East region details"),
+        );
+        w.add_hyperlink(
+            "I5",
+            "https://example.com/west",
+            Some("West region details"),
+        );
 
         // Cell comments
         w.add_comment("B2", "Strong start to the year", Some("Analyst"));
@@ -538,7 +564,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             row.add_number(*budget);
             row.add_number(*actual);
             row.add_formula(format!("D{row_num}-C{row_num}"));
-            row.add_formula(format!("IF(C{row_num}=0,0,(D{row_num}-C{row_num})/C{row_num})"));
+            row.add_formula(format!(
+                "IF(C{row_num}=0,0,(D{row_num}-C{row_num})/C{row_num})"
+            ));
             w.add_row(row);
         }
 
@@ -557,7 +585,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             row.add_number(*budget);
             row.add_number(*actual);
             row.add_formula(format!("D{row_num}-C{row_num}"));
-            row.add_formula(format!("IF(C{row_num}=0,0,(D{row_num}-C{row_num})/C{row_num})"));
+            row.add_formula(format!(
+                "IF(C{row_num}=0,0,(D{row_num}-C{row_num})/C{row_num})"
+            ));
             w.add_row(row);
         }
 
@@ -569,7 +599,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         summary.add_formula("SUM(C3:C5)-SUM(C6:C9)");
         summary.add_formula("SUM(D3:D5)-SUM(D6:D9)");
         summary.add_formula(format!("D{summary_row}-C{summary_row}"));
-        summary.add_formula(format!("IF(C{summary_row}=0,0,(D{summary_row}-C{summary_row})/C{summary_row})"));
+        summary.add_formula(format!(
+            "IF(C{summary_row}=0,0,(D{summary_row}-C{summary_row})/C{summary_row})"
+        ));
         w.add_row(summary);
 
         // Row outlines: group revenue rows (2-4, 0-based) and expense rows (5-8)
@@ -643,9 +675,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Add a column chart
         let chart_data: Vec<Vec<String>> = months
             .iter()
-            .map(|(m, r, e)| {
-                vec![m.to_string(), r.to_string(), e.to_string()]
-            })
+            .map(|(m, r, e)| vec![m.to_string(), r.to_string(), e.to_string()])
             .collect();
 
         w.set_chart(

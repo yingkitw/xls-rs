@@ -27,17 +27,20 @@ impl TemplateFiller {
         values: &HashMap<String, String>,
     ) -> Result<XlsxWriter> {
         let mut writer = XlsxWriter::new();
-        
-        writer.add_sheet(&template_data.sheet_name)
+
+        writer
+            .add_sheet(&template_data.sheet_name)
             .with_context(|| format!("Failed to add sheet: {}", template_data.sheet_name))?;
 
         // Find the maximum dimensions of the template
-        let max_row = template_data.cells
+        let max_row = template_data
+            .cells
             .keys()
             .map(|(r, _)| *r)
             .max()
             .unwrap_or(0);
-        let max_col = template_data.cells
+        let max_col = template_data
+            .cells
             .keys()
             .map(|(_, c)| *c)
             .max()
@@ -46,7 +49,7 @@ impl TemplateFiller {
         // Write all cells row by row
         for row in 0..=max_row {
             let mut row_data = RowData::new();
-            
+
             for col in 0..=max_col {
                 let cell_key = (row, col);
 
@@ -64,7 +67,7 @@ impl TemplateFiller {
                     row_data.add_empty();
                 }
             }
-            
+
             writer.add_row(row_data);
         }
 
@@ -92,12 +95,12 @@ impl TemplateFiller {
     /// Replace all {{placeholder}} patterns in a string with values
     fn replace_placeholders_in_string(s: &str, values: &HashMap<String, String>) -> String {
         let mut result = s.to_string();
-        
+
         for (key, value) in values {
             let pattern = format!("{{{{{}}}}}", key);
             result = result.replace(&pattern, value);
         }
-        
+
         result
     }
 
@@ -116,16 +119,17 @@ impl TemplateFiller {
     ) -> Result<()> {
         let reader = crate::excel::template::TemplateReader::new()?;
         let template_data = reader.read_template(template_path, sheet_name)?;
-        
+
         let writer = Self::fill_template(&template_data, values)?;
-        
+
         let file = File::create(output_path)
             .with_context(|| format!("Failed to create output file: {}", output_path))?;
-        let buffered = BufWriter::new(file);
-        
-        writer.save(buffered)
+        let buffered = BufWriter::with_capacity(crate::limits::BUFFER_CAPACITY, file);
+
+        writer
+            .save(buffered)
             .with_context(|| format!("Failed to write XLSX file: {}", output_path))?;
-        
+
         Ok(())
     }
 
@@ -190,7 +194,7 @@ mod tests {
     #[test]
     fn test_template_data_placeholder_names() {
         let mut template_data = TemplateData::new("Sheet1".to_string());
-        
+
         template_data.placeholders.push(PlaceholderInfo {
             cell_ref: "A1".to_string(),
             row: 0,
@@ -198,7 +202,7 @@ mod tests {
             name: "name".to_string(),
             full_value: "{{name}}".to_string(),
         });
-        
+
         template_data.placeholders.push(PlaceholderInfo {
             cell_ref: "B1".to_string(),
             row: 0,
@@ -216,7 +220,7 @@ mod tests {
     #[test]
     fn test_validate_placeholders() {
         let mut template_data = TemplateData::new("Sheet1".to_string());
-        
+
         template_data.placeholders.push(PlaceholderInfo {
             cell_ref: "A1".to_string(),
             row: 0,

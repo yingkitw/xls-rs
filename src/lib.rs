@@ -34,23 +34,23 @@ pub use error_traits::{
     ToTraitBasedError, TraitBasedError, UserFriendlyError,
 };
 pub use excel::{
-    add_cell_to_row, add_cells_to_row, classify_cell, CellComment, CellData, CellStyle,
-    ChartConfig, ColGroup, ConditionalFormat, ConditionalRule, DataChartType, DataValidation,
-    ExcelHandler, FeatureDetector, FeatureSeverity, Hyperlink, MergeCell, Operator, PageMargins,
-    PageOrientation, PlaceholderInfo, PrintSetup, RowData, RowGroup, SharedStrings, Sparkline,
-    SparklineGroup, SparklineType, StreamingXlsxWriter, StyleRegistry, Table, TableStyleInfo,
-    TemplateData, TemplateFiller, TemplateReader, UnsupportedFeature, ValidationType, WriteMode,
-    WriteOptions, XlsxCellStyle, XlsxStyleTable, XlsxWriter,
-    XlsxStreamingReader, XlsxRowIterator,
+    CellComment, CellData, CellStyle, ChartConfig, ColGroup, ConditionalFormat, ConditionalRule,
+    DataChartType, DataValidation, DocumentProperties, ExcelHandler, FeatureDetector,
+    FeatureSeverity, Hyperlink, Image, ImageFormat, MergeCell, Operator, PageMargins,
+    PageOrientation, PlaceholderInfo, PrintSetup, RichTextRun, RichTextRunStyle, RowData, RowGroup,
+    SharedStrings, SheetProtection, Sparkline, SparklineGroup, SparklineType, StreamingXlsxWriter,
+    StyleRegistry, Table, TableStyleInfo, TemplateData, TemplateFiller, TemplateReader,
+    UnsupportedFeature, ValidationType, WorkbookProtection, WriteMode, WriteOptions, XlsxCellStyle,
+    XlsxImage, XlsxReader, XlsxRowIterator, XlsxSheetData, XlsxStreamingReader, XlsxStyleTable,
+    XlsxWriter, add_cell_to_row, add_cells_to_row, classify_cell,
 };
 pub use format_detector::DefaultFormatDetector;
 pub use formula::{FormulaEvaluator, FormulaResult};
 pub use handler_registry::HandlerRegistry;
 pub use helpers::{
-    default_column_names, filter_by_range, matches_extension, max_column_count,
-    parse_safe_f64, parse_safe_i64, parse_safe_usize,
-    with_cell_context, with_file_context, with_full_context,
-    validate_row_index, validate_column_index,
+    default_column_names, filter_by_range, matches_extension, max_column_count, parse_safe_f64,
+    parse_safe_i64, parse_safe_usize, validate_column_index, validate_row_index, with_cell_context,
+    with_file_context, with_full_context,
 };
 pub use operations::{
     AggFunc, DataOperations, JoinType, NoProgress, ProgressCallback, SortOrder, StderrProgress,
@@ -59,12 +59,12 @@ pub use profiling::{ColumnProfile, DataProfile, DataProfiler};
 pub use quality::{IssueSeverity, QualityIssue, QualityReport, QualityReportGenerator};
 pub use string_distance::{hamming, jaro, jaro_winkler, levenshtein};
 pub use string_utils::{
-    join_cell_reference, join_with_capacity, string_with_capacity, StringBuilder,
+    StringBuilder, join_cell_reference, join_with_capacity, string_with_capacity,
 };
 pub use traits::{
     CellRangeProvider, DataOperator, DataReader, DataWriteOptions, DataWriter, FileHandler,
     FilterCondition, FilterOperator, FormatDetector, SchemaProvider, SortOperator,
     TransformOperation, TransformOperator,
 };
-pub use types::{CellValue, DataSet, DataType, DataRow};
+pub use types::{CellValue, DataRow, DataSet, DataType};
 pub use validation::{DataValidator, ValidationConfig, ValidationResult, ValidationRule};

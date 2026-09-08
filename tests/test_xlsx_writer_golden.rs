@@ -45,7 +45,11 @@ fn test_xlsx_writer_styled_headers() {
     let output_path = dir.path().join("test_styled.xlsx");
 
     let data = vec![
-        vec!["Product".to_string(), "Price".to_string(), "Stock".to_string()],
+        vec![
+            "Product".to_string(),
+            "Price".to_string(),
+            "Stock".to_string(),
+        ],
         vec!["Laptop".to_string(), "999.99".to_string(), "50".to_string()],
         vec!["Mouse".to_string(), "25.00".to_string(), "200".to_string()],
     ];
@@ -72,7 +76,9 @@ fn test_xlsx_writer_styled_headers() {
     assert!(read_data.len() >= data.len());
     assert_eq!(read_data[0][0], "Product");
     // Verify the value exists somewhere in the read data (Excel might format numbers differently)
-    let found = read_data.iter().any(|row| row.iter().any(|cell| cell == "25.00" || cell == "25"));
+    let found = read_data
+        .iter()
+        .any(|row| row.iter().any(|cell| cell == "25.00" || cell == "25"));
     assert!(found, "Expected to find '25' or '25.00' in read data");
 }
 
@@ -245,9 +251,13 @@ fn test_xlsx_writer_special_characters() {
 
     assert!(read_data.len() >= data.len());
     // Verify unicode characters are preserved
-    let found_unicode = read_data.iter().any(|row| row.iter().any(|cell| cell.contains("áéíóú")));
+    let found_unicode = read_data
+        .iter()
+        .any(|row| row.iter().any(|cell| cell.contains("áéíóú")));
     assert!(found_unicode);
-    let found_japanese = read_data.iter().any(|row| row.iter().any(|cell| cell.contains("日本語")));
+    let found_japanese = read_data
+        .iter()
+        .any(|row| row.iter().any(|cell| cell.contains("日本語")));
     assert!(found_japanese);
 }
 
@@ -260,16 +270,8 @@ fn test_xlsx_writer_roundtrip() {
 
     let data = vec![
         vec!["A".to_string(), "B".to_string(), "C".to_string()],
-        vec![
-            "1".to_string(),
-            "2".to_string(),
-            "3".to_string(),
-        ],
-        vec![
-            "4".to_string(),
-            "5".to_string(),
-            "6".to_string(),
-        ],
+        vec!["1".to_string(), "2".to_string(), "3".to_string()],
+        vec!["4".to_string(), "5".to_string(), "6".to_string()],
     ];
 
     // Write initial file

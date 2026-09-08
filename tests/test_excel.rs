@@ -1,15 +1,22 @@
 mod common;
 
-use xls_rs::{CellStyle, ChartConfig, DataChartType, DataWriter, ExcelHandler, WriteMode, WriteOptions};
 use std::fs;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use tempfile::TempDir;
+use xls_rs::{
+    CellStyle, ChartConfig, DataChartType, DataWriter, ExcelHandler, WriteMode, WriteOptions,
+    XlsxWriter,
+};
 
-static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-fn unique_path(prefix: &str, ext: &str) -> String {
-    let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("test_{prefix}_{id}.{ext}")
+/// Returns a path inside `dir` for a test artifact. Per-test `TempDir`
+/// isolation makes name collisions impossible, so no global counter is
+/// needed — and the dir is cleaned up automatically on drop (no manual
+/// `remove_file`, no artifacts leaking into the repo root on panic).
+fn unique_path(dir: &TempDir, name: &str, ext: &str) -> String {
+    dir.path()
+        .join(format!("{name}.{ext}"))
+        .to_string_lossy()
+        .to_string()
 }
 
 fn ensure_examples() {
@@ -65,9 +72,14 @@ fn test_read_excel_employees_example() {
         .read_with_sheet(&common::example_path("employees.xlsx"), None)
         .unwrap();
 
-    // Verify content contains expected data
-    assert!(content.contains("Name") || content.contains("ID"));
-    assert!(content.contains("Alice") || content.contains("Engineering"));
+    // Verify content contains expected data.
+    // Guards fixture integrity: values with internal spaces must survive
+    // the CSV→XLSX generation path intact (regression for truncated
+    // "Alice Johnson" → "Alice" fixture).
+    assert!(content.contains("Name") && content.contains("ID"));
+    assert!(content.contains("Alice Johnson") && content.contains("Bob Smith"));
+    assert!(content.contains("Department") && content.contains("Salary"));
+    assert!(content.contains("85000") && content.contains("65000"));
 }
 
 #[test]
@@ -101,8 +113,9 @@ fn test_excel_example_read_as_json() {
 fn test_excel_write_and_read() {
     let handler = ExcelHandler::new();
     let data = read_example_csv("numbers");
+    let dir = tempfile::tempdir().unwrap();
 
-    let output_path = unique_path("excel_rw", "xlsx");
+    let output_path = unique_path(&dir, "excel_rw", "xlsx");
 
     // Write to Excel
     let options = WriteOptions::default();
@@ -114,15 +127,14 @@ fn test_excel_write_and_read() {
     let content = handler.read_with_sheet(&output_path, None).unwrap();
     assert!(!content.is_empty());
     assert!(content.contains("A") || content.contains("10"));
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_excel_write_from_csv() {
     let handler = ExcelHandler::new();
     let csv_path = common::example_path("sales.csv");
-    let output_path = unique_path("excel_from_csv", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "excel_from_csv", "xlsx");
 
     handler
         .write_from_csv(&csv_path, &output_path, Some("Sales"))
@@ -133,18 +145,44 @@ fn test_excel_write_from_csv() {
     // Verify sheet name
     let sheets = handler.list_sheets(&output_path).unwrap();
     assert!(sheets.contains(&"Sales".to_string()));
+}
 
-    fs::remove_file(&output_path).ok();
+#[test]
+fn test_excel_write_from_csv_preserves_spaces_and_columns() {
+    // Regression: unquoted CSV fields with internal spaces (e.g. "Alice Johnson")
+    // and trailing columns must survive the CSV → XLSX ingest path intact.
+    let handler = ExcelHandler::new();
+    let dir = tempfile::tempdir().unwrap();
+    let csv_path = dir.path().join("spaces.csv");
+    std::fs::write(
+        &csv_path,
+        "ID,Name,Department,Salary\n1,Alice Johnson,Engineering,85000\n2,Bob Smith,Sales,65000\n",
+    )
+    .unwrap();
+    let output_path = unique_path(&dir, "excel_csv_spaces", "xlsx");
+
+    handler
+        .write_from_csv(csv_path.to_str().unwrap(), &output_path, None)
+        .unwrap();
+
+    let data = handler.read_sheet_data(&output_path, None).unwrap();
+
+    assert_eq!(data[0], vec!["ID", "Name", "Department", "Salary"]);
+    assert_eq!(data[1], vec!["1", "Alice Johnson", "Engineering", "85000"]);
+    assert_eq!(data[2], vec!["2", "Bob Smith", "Sales", "65000"]);
 }
 
 #[test]
 fn test_excel_read_range() {
     let handler = ExcelHandler::new();
     let csv_path = common::example_path("numbers.csv");
-    let excel_path = unique_path("excel_range", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let excel_path = unique_path(&dir, "excel_range", "xlsx");
 
     // First create an Excel file
-    handler.write_from_csv(&csv_path, &excel_path, None).unwrap();
+    handler
+        .write_from_csv(&csv_path, &excel_path, None)
+        .unwrap();
 
     // Read a specific range
     let range = xls_rs::excel::reader::CellRange::parse("A1:B3").unwrap();
@@ -152,15 +190,14 @@ fn test_excel_read_range() {
 
     assert_eq!(data.len(), 3); // 3 rows (header + 2 data rows)
     assert_eq!(data[0].len(), 2); // 2 columns (A and B)
-
-    fs::remove_file(&excel_path).ok();
 }
 
 #[test]
 fn test_excel_list_sheets() {
     let handler = ExcelHandler::new();
     let csv_path = common::example_path("employees.csv");
-    let excel_path = unique_path("excel_sheets", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let excel_path = unique_path(&dir, "excel_sheets", "xlsx");
 
     handler
         .write_from_csv(&csv_path, &excel_path, Some("Employees"))
@@ -170,24 +207,23 @@ fn test_excel_list_sheets() {
 
     assert!(!sheets.is_empty());
     assert!(sheets.contains(&"Employees".to_string()));
-
-    fs::remove_file(&excel_path).ok();
 }
 
 #[test]
 fn test_excel_read_as_json() {
     let handler = ExcelHandler::new();
     let csv_path = common::example_path("lookup.csv");
-    let excel_path = unique_path("excel_json", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let excel_path = unique_path(&dir, "excel_json", "xlsx");
 
-    handler.write_from_csv(&csv_path, &excel_path, None).unwrap();
+    handler
+        .write_from_csv(&csv_path, &excel_path, None)
+        .unwrap();
 
     let json = handler.read_as_json(&excel_path, None).unwrap();
 
     assert!(json.starts_with("["));
     assert!(json.contains("Widget") || json.contains("Gadget"));
-
-    fs::remove_file(&excel_path).ok();
 }
 
 // ============ Styled Write Tests ============
@@ -196,7 +232,8 @@ fn test_excel_read_as_json() {
 fn test_excel_write_styled_with_header() {
     let handler = ExcelHandler::new();
     let data = read_example_csv("sales");
-    let output_path = unique_path("excel_styled", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "excel_styled", "xlsx");
 
     let options = WriteOptions {
         sheet_name: Some("StyledSheet".to_string()),
@@ -217,8 +254,6 @@ fn test_excel_write_styled_with_header() {
         .read_with_sheet(&output_path, Some("StyledSheet"))
         .unwrap();
     assert!(content.contains("Product"));
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
@@ -258,14 +293,8 @@ fn test_chart_type_from_str() {
         DataChartType::parse("column").unwrap(),
         DataChartType::Column
     );
-    assert_eq!(
-        DataChartType::parse("line").unwrap(),
-        DataChartType::Line
-    );
-    assert_eq!(
-        DataChartType::parse("area").unwrap(),
-        DataChartType::Area
-    );
+    assert_eq!(DataChartType::parse("line").unwrap(), DataChartType::Line);
+    assert_eq!(DataChartType::parse("area").unwrap(), DataChartType::Area);
     assert_eq!(DataChartType::parse("pie").unwrap(), DataChartType::Pie);
     assert_eq!(
         DataChartType::parse("scatter").unwrap(),
@@ -307,7 +336,8 @@ fn test_write_with_chart_column() {
         vec!["B".to_string(), "20".to_string()],
         vec!["C".to_string(), "30".to_string()],
     ];
-    let output_path = unique_path("chart_column", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_column", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Column,
@@ -322,21 +352,22 @@ fn test_write_with_chart_column() {
         colors: None,
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
 
     // Verify data can be read back
     let content = handler.read_with_sheet(&output_path, None).unwrap();
     assert!(content.contains("Category"));
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_write_with_chart_bar() {
     let handler = ExcelHandler::new();
     let data = read_example_csv("numbers");
-    let output_path = unique_path("chart_bar", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_bar", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Bar,
@@ -346,10 +377,10 @@ fn test_write_with_chart_bar() {
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
@@ -365,7 +396,8 @@ fn test_write_with_chart_line() {
         vec!["Feb".to_string(), "120".to_string(), "90".to_string()],
         vec!["Mar".to_string(), "140".to_string(), "100".to_string()],
     ];
-    let output_path = unique_path("chart_line", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_line", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Line,
@@ -376,14 +408,14 @@ fn test_write_with_chart_line() {
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
 
     // Verify data readable
     let content = handler.read_with_sheet(&output_path, None).unwrap();
     assert!(content.contains("Month"));
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
@@ -395,7 +427,8 @@ fn test_write_with_chart_pie() {
         vec!["Furniture".to_string(), "30".to_string()],
         vec!["Office".to_string(), "25".to_string()],
     ];
-    let output_path = unique_path("chart_pie", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_pie", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Pie,
@@ -405,10 +438,10 @@ fn test_write_with_chart_pie() {
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
@@ -420,7 +453,8 @@ fn test_write_with_chart_custom_colors() {
         vec!["2".to_string(), "20".to_string()],
         vec!["3".to_string(), "15".to_string()],
     ];
-    let output_path = unique_path("chart_colors", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_colors", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Column,
@@ -431,10 +465,10 @@ fn test_write_with_chart_custom_colors() {
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
@@ -445,7 +479,8 @@ fn test_write_with_chart_no_legend() {
         vec!["A".to_string(), "50".to_string()],
         vec!["B".to_string(), "75".to_string()],
     ];
-    let output_path = unique_path("chart_no_legend", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "chart_no_legend", "xlsx");
 
     let config = ChartConfig {
         chart_type: DataChartType::Column,
@@ -453,10 +488,10 @@ fn test_write_with_chart_no_legend() {
         ..Default::default()
     };
 
-    handler.write_with_chart(&output_path, &data, &config).unwrap();
+    handler
+        .write_with_chart(&output_path, &data, &config)
+        .unwrap();
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 // ============ Write Range Tests ============
@@ -468,7 +503,8 @@ fn test_write_range() {
         vec!["X".to_string(), "Y".to_string()],
         vec!["1".to_string(), "2".to_string()],
     ];
-    let output_path = unique_path("excel_write_range", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "excel_write_range", "xlsx");
 
     // Write starting at B2 (row 1, col 1)
     handler
@@ -476,8 +512,6 @@ fn test_write_range() {
         .unwrap();
 
     assert!(Path::new(&output_path).exists());
-
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
@@ -487,20 +521,21 @@ fn test_write_range_expand() {
         vec!["X".to_string(), "Y".to_string()],
         vec!["1".to_string(), "2".to_string()],
     ];
-    let output_path = unique_path("excel_write_expand", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "excel_write_expand", "xlsx");
 
     handler
         .write_range_with_mode(&output_path, &data, 1, 1, None, WriteMode::Expand)
         .unwrap();
 
     assert!(Path::new(&output_path).exists());
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_write_range_preserve() {
     let handler = ExcelHandler::new();
-    let output_path = unique_path("excel_write_preserve", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "excel_write_preserve", "xlsx");
 
     // First write baseline data
     let baseline = vec![
@@ -508,43 +543,41 @@ fn test_write_range_preserve() {
         vec!["1".to_string(), "2".to_string(), "3".to_string()],
         vec!["4".to_string(), "5".to_string(), "6".to_string()],
     ];
-    handler.write(&output_path, &baseline, Default::default()).unwrap();
+    handler
+        .write(&output_path, &baseline, Default::default())
+        .unwrap();
 
     // Overwrite a sub-range starting at B2 (row 1, col 1)
-    let patch = vec![
-        vec!["X".to_string()],
-        vec!["Y".to_string()],
-    ];
+    let patch = vec![vec!["X".to_string()], vec!["Y".to_string()]];
     handler
         .write_range_with_mode(&output_path, &patch, 1, 1, None, WriteMode::Preserve)
         .unwrap();
 
     assert!(Path::new(&output_path).exists());
-    fs::remove_file(&output_path).ok();
 }
 
 #[test]
 fn test_write_range_overwrite() {
     let handler = ExcelHandler::new();
-    let output_path = unique_path("excel_write_overwrite", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let output_path = unique_path(&dir, "excel_write_overwrite", "xlsx");
 
     // First write baseline data
     let baseline = vec![
         vec!["A".to_string(), "B".to_string()],
         vec!["1".to_string(), "2".to_string()],
     ];
-    handler.write(&output_path, &baseline, Default::default()).unwrap();
+    handler
+        .write(&output_path, &baseline, Default::default())
+        .unwrap();
 
     // Overwrite starting at B2 (row 1, col 1)
-    let patch = vec![
-        vec!["X".to_string(), "Y".to_string()],
-    ];
+    let patch = vec![vec!["X".to_string(), "Y".to_string()]];
     handler
         .write_range_with_mode(&output_path, &patch, 1, 1, None, WriteMode::Overwrite)
         .unwrap();
 
     assert!(Path::new(&output_path).exists());
-    fs::remove_file(&output_path).ok();
 }
 
 // ============ Parse Cell Reference Tests ============
@@ -577,15 +610,17 @@ fn test_cell_typing_consistency_across_writers() {
         vec!["0".to_string(), "=SUM(A1)".to_string(), "   ".to_string()],
     ];
 
+    let dir = tempfile::tempdir().unwrap();
+
     // Test DataWriter::write (uses XlsxWriter::add_data)
-    let path1 = unique_path("typing_datawriter", "xlsx");
+    let path1 = unique_path(&dir, "typing_datawriter", "xlsx");
     handler.write(&path1, &data, Default::default()).unwrap();
     let content1 = handler.read_with_sheet(&path1, None).unwrap();
     assert!(content1.contains("42.5"));
     assert!(content1.contains("hello"));
 
     // Test write_styled (uses add_cell_to_row directly)
-    let path2 = unique_path("typing_styled", "xlsx");
+    let path2 = unique_path(&dir, "typing_styled", "xlsx");
     handler
         .write_styled(&path2, &data, &WriteOptions::default())
         .unwrap();
@@ -594,17 +629,13 @@ fn test_cell_typing_consistency_across_writers() {
     assert!(content2.contains("hello"));
 
     // Test write_range_with_mode Expand (uses add_cell_to_row)
-    let path3 = unique_path("typing_range", "xlsx");
+    let path3 = unique_path(&dir, "typing_range", "xlsx");
     handler
         .write_range_with_mode(&path3, &data, 0, 0, None, WriteMode::Expand)
         .unwrap();
     let content3 = handler.read_with_sheet(&path3, None).unwrap();
     assert!(content3.contains("42.5"));
     assert!(content3.contains("hello"));
-
-    fs::remove_file(&path1).ok();
-    fs::remove_file(&path2).ok();
-    fs::remove_file(&path3).ok();
 }
 
 #[test]
@@ -616,7 +647,8 @@ fn test_read_sheet_data_preserves_commas() {
         vec!["Bob".to_string(), "Also, loves, them".to_string()],
     ];
 
-    let path = unique_path("commas", "xlsx");
+    let dir = tempfile::tempdir().unwrap();
+    let path = unique_path(&dir, "commas", "xlsx");
     handler.write(&path, &data, Default::default()).unwrap();
 
     // read_sheet_data preserves commas correctly
@@ -627,6 +659,197 @@ fn test_read_sheet_data_preserves_commas() {
     // read_with_sheet CSV path splits on commas (documented behavior for string output)
     let csv = handler.read_with_sheet(&path, None).unwrap();
     assert!(csv.contains("Loves, commas"));
+}
 
-    fs::remove_file(&path).ok();
+// ============ Parallel Sheet Parsing Tests ============
+
+#[test]
+fn test_parallel_read_multi_sheet_order_and_content() {
+    // Workbooks with >= 2 sheets take the rayon-parallel parse path in
+    // XlsxReader::from_archive. Sheet order and per-sheet content must be
+    // identical to the sequential path (indexed collect preserves order).
+    let mut writer = XlsxWriter::new();
+    let sheet_data: Vec<(&str, Vec<Vec<String>>)> = vec![
+        (
+            "Alpha",
+            vec![
+                vec!["Item".to_string(), "Notes".to_string()],
+                vec!["1".to_string(), "Red Apple".to_string()],
+            ],
+        ),
+        (
+            "Beta",
+            vec![
+                vec!["Code".to_string(), "Label".to_string()],
+                vec!["2".to_string(), "Blue Whale".to_string()],
+            ],
+        ),
+        (
+            "Gamma",
+            vec![vec!["Name".to_string()], vec!["Carol Davis".to_string()]],
+        ),
+        (
+            "Delta",
+            vec![
+                vec!["Price".to_string(), "Qty".to_string()],
+                vec!["19.99".to_string(), "3".to_string()],
+            ],
+        ),
+    ];
+    for (name, data) in &sheet_data {
+        writer.add_sheet(name).unwrap();
+        writer.add_data(data);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let path = unique_path(&dir, "parallel_sheets", "xlsx");
+    let file = fs::File::create(&path).unwrap();
+    writer.save(std::io::BufWriter::new(file)).unwrap();
+
+    let wb = xls_rs::excel::xlsx_reader::XlsxReader::from_path(&path).unwrap();
+
+    // Sheet order preserved
+    assert_eq!(wb.sheet_names(), vec!["Alpha", "Beta", "Gamma", "Delta"]);
+
+    // Per-sheet content intact (values with internal spaces, numbers)
+    let alpha = wb.get_sheet_by_name("Alpha").unwrap();
+    let alpha_rows = alpha.to_string_vec();
+    assert_eq!(alpha_rows[1][1], "Red Apple");
+
+    let gamma = wb.get_sheet_by_name("Gamma").unwrap();
+    assert_eq!(gamma.to_string_vec()[1][0], "Carol Davis");
+
+    let delta = wb.get_sheet_by_name("Delta").unwrap();
+    let delta_rows = delta.to_string_vec();
+    assert_eq!(delta_rows[1][0], "19.99");
+    assert_eq!(delta_rows[1][1], "3");
+
+    // read_all_to_string_vec returns every sheet with correct data
+    let all = wb.read_all_to_string_vec();
+    assert_eq!(all.len(), 4);
+    assert_eq!(all["Beta"][1][1], "Blue Whale");
+}
+
+#[test]
+fn test_formula_cell_without_cached_value_does_not_leak_next_value() {
+    // Regression: a formula cell written without a cached <v> (what
+    // `xls-rs formula` produces) must read as Empty. The value-tag search
+    // is now bounded to the cell body; previously it leaked past </c> and
+    // stole the next cell's value (A2 displayed B2's "40").
+    let handler = ExcelHandler::new();
+    let data = vec![
+        vec!["10".to_string(), "20".to_string()],
+        vec!["30".to_string(), "40".to_string()],
+    ];
+    let dir = tempfile::tempdir().unwrap();
+    let input = unique_path(&dir, "formula_leak_in", "xlsx");
+    handler.write(&input, &data, Default::default()).unwrap();
+
+    let output = unique_path(&dir, "formula_leak_out", "xlsx");
+    let evaluator = xls_rs::FormulaEvaluator::new();
+    evaluator
+        .apply_to_excel(&input, &output, "A1+B1", "A2", None)
+        .unwrap();
+
+    let wb = xls_rs::excel::xlsx_reader::XlsxReader::from_path(&output).unwrap();
+    let rows = wb.get_sheet_by_name("Sheet1").unwrap().to_string_vec();
+
+    assert_eq!(rows[0][0], "10");
+    assert_eq!(rows[0][1], "20");
+    assert_eq!(
+        rows[1][0], "",
+        "formula cell without cached value reads empty"
+    );
+    assert_eq!(
+        rows[1][1], "40",
+        "value after formula cell must not be stolen"
+    );
+}
+
+// ============ Shared Strings Compatibility Tests (real-Excel files) ============
+
+#[test]
+fn test_read_shared_strings_all_entries_in_order() {
+    // Regression: real Excel files store strings in a shared-strings table.
+    // The reader previously advanced into the next <si> while skipping the
+    // current one, silently dropping every second string.
+    let handler = ExcelHandler::new();
+    let path = common::fixture_path("shared_strings_basic.xlsx");
+    let rows = handler.read_sheet_data(&path, None).unwrap();
+
+    let expected = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
+    assert_eq!(rows.len(), expected.len());
+    for (i, e) in expected.iter().enumerate() {
+        assert_eq!(rows[i][0], *e, "shared string {} must match", i);
+    }
+}
+
+#[test]
+fn test_read_shared_strings_rich_text_concatenates_runs() {
+    // Rich-text entries (<si><r><t>..</t></r><r><t>..</t></r></si>) must
+    // concatenate all runs; previously only the first run was kept.
+    let handler = ExcelHandler::new();
+    let path = common::fixture_path("shared_strings_richtext.xlsx");
+    let rows = handler.read_sheet_data(&path, None).unwrap();
+
+    assert_eq!(rows[0][0], "Hello World");
+    assert_eq!(rows[0][1], "plain entry");
+}
+
+#[test]
+fn test_apply_formula_beyond_existing_grid() {
+    // Regression: `formula --cell F1` on a 4-column sheet used to silently
+    // write nothing. The grid must extend to the target cell.
+    let handler = ExcelHandler::new();
+    let data = vec![
+        vec!["10".to_string(), "20".to_string()],
+        vec!["30".to_string(), "40".to_string()],
+    ];
+    let dir = tempfile::tempdir().unwrap();
+    let input = unique_path(&dir, "beyond_grid_in", "xlsx");
+    handler.write(&input, &data, Default::default()).unwrap();
+
+    let output = unique_path(&dir, "beyond_grid_out", "xlsx");
+    let evaluator = xls_rs::FormulaEvaluator::new();
+    evaluator
+        .apply_to_excel(&input, &output, "A1*3", "E2", None)
+        .unwrap();
+
+    let wb = xls_rs::excel::xlsx_reader::XlsxReader::from_path(&output).unwrap();
+    let rows = wb.get_sheet_by_name("Sheet1").unwrap().to_string_vec();
+
+    // Existing cells preserved; row 2 extended to column E with formula
+    assert_eq!(rows[0][0], "10");
+    assert_eq!(rows[1][0], "30", "existing cells preserved");
+    assert_eq!(rows[1][1], "40", "existing cells preserved");
+    assert_eq!(rows[1].len(), 5, "grid extends to target column E");
+}
+
+#[test]
+fn test_read_formula_cells_with_cached_values() {
+    // Real Excel files cache the last computed result next to the formula:
+    // numeric `<f>..</f><v>42</v>`, string-result `t="str"`, or no cache at
+    // all. The reader must return the cached value and never leak values
+    // from neighboring cells (see formula-leak regression above).
+    let handler = ExcelHandler::new();
+    let path = common::fixture_path("formula_cached.xlsx");
+    let rows = handler.read_sheet_data(&path, None).unwrap();
+
+    assert_eq!(rows[0][0], "21"); // plain input A1
+    assert_eq!(rows[0][1], "hello"); // inline string
+    assert_eq!(rows[1][1], "42", "numeric cached formula result");
+    assert_eq!(rows[2][1], "HELLO", "string cached formula result (t=str)");
+    assert_eq!(rows[3][1], "", "uncached formula cell reads empty");
+}
+
+#[test]
+fn test_read_array_formula_with_cached_value() {
+    // Array formulas (<f t="array" ref="...">) written by Excel carry a
+    // cached result; the reader must return it and ignore the <f> attributes.
+    let handler = ExcelHandler::new();
+    let path = common::fixture_path("array_formula.xlsx");
+    let rows = handler.read_sheet_data(&path, None).unwrap();
+
+    assert_eq!(rows[0], vec!["1", "2", "3"]);
+    assert_eq!(rows[1][0], "array sum");
+    assert_eq!(rows[1][1], "6", "cached array formula result");
 }

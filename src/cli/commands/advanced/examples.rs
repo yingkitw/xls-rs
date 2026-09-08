@@ -62,23 +62,23 @@ Cherry,300\n",
         std::fs::write(&lookup_csv, "Code,Name\nW,Widget\nG,Gadget\n")?;
     }
 
-    // Generate a couple of non-CSV artifacts from the CSVs.
-    let converter = xls_rs::converter::Converter::new();
+    // Generate XLSX artifacts from the CSVs via the internal CSV ingest path.
+    let handler = xls_rs::excel::ExcelHandler::new();
 
     let sales_xlsx = dir.join("sales.xlsx");
     if !sales_xlsx.exists() {
-        converter.convert(
+        handler.write_from_csv(
             sales_csv.to_string_lossy().as_ref(),
             sales_xlsx.to_string_lossy().as_ref(),
             None,
         )?;
     }
 
-    let sales_parquet = dir.join("sales.parquet");
-    if !sales_parquet.exists() {
-        converter.convert(
-            sales_csv.to_string_lossy().as_ref(),
-            sales_parquet.to_string_lossy().as_ref(),
+    let employees_xlsx = dir.join("employees.xlsx");
+    if !employees_xlsx.exists() {
+        handler.write_from_csv(
+            employees_csv.to_string_lossy().as_ref(),
+            employees_xlsx.to_string_lossy().as_ref(),
             None,
         )?;
     }
@@ -86,4 +86,3 @@ Cherry,300\n",
     crate::cli::runtime::log(format!("Generated examples under {}", dir.display()));
     Ok(())
 }
-

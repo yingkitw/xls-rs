@@ -34,7 +34,6 @@ impl std::error::Error for XlsRsError {
     }
 }
 
-
 /// Error context with location information
 #[derive(Debug, Default, Clone)]
 pub struct ErrorContext {

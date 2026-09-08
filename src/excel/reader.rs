@@ -2,10 +2,10 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use crate::limits::{METADATA_CACHE_SIZE, DEFAULT_ESTIMATED_ROWS};
+use crate::limits::{DEFAULT_ESTIMATED_ROWS, METADATA_CACHE_SIZE};
 
-use crate::traits::DataReader;
 use crate::excel::xlsx_reader::XlsxReader as NativeXlsxReader;
+use crate::traits::DataReader;
 
 /// Helper function to execute operations on sheet data
 fn with_sheet_data<R, F>(path: &str, sheet_name: &str, f: F) -> Result<R>
@@ -82,12 +82,22 @@ impl CellRange {
         match parts.len() {
             1 => {
                 let (row, col) = parse_cell_ref(parts[0])?;
-                Ok(Self { start_row: row, start_col: col, end_row: row, end_col: col })
+                Ok(Self {
+                    start_row: row,
+                    start_col: col,
+                    end_row: row,
+                    end_col: col,
+                })
             }
             2 => {
                 let (start_row, start_col) = parse_cell_ref(parts[0])?;
                 let (end_row, end_col) = parse_cell_ref(parts[1])?;
-                Ok(Self { start_row, start_col, end_row, end_col })
+                Ok(Self {
+                    start_row,
+                    start_col,
+                    end_row,
+                    end_col,
+                })
             }
             _ => anyhow::bail!("Invalid cell range format: {s}. Expected e.g. A1:C10"),
         }
@@ -108,7 +118,8 @@ fn parse_cell_ref(s: &str) -> Result<(usize, usize)> {
     for ch in col_str.chars() {
         col = col * 26 + (ch.to_ascii_uppercase() as usize - b'A' as usize + 1);
     }
-    let row = row_str.parse::<usize>()
+    let row = row_str
+        .parse::<usize>()
         .with_context(|| format!("Invalid row number in cell reference: {s}"))?;
     Ok((row - 1, col - 1))
 }
@@ -142,9 +153,7 @@ impl ExcelHandler {
                     } else {
                         available.join(", ")
                     };
-                    anyhow::bail!(
-                        "Sheet '{name}' not found in workbook. Available sheets: {list}"
-                    );
+                    anyhow::bail!("Sheet '{name}' not found in workbook. Available sheets: {list}");
                 }
             }
             None => available
@@ -164,8 +173,12 @@ impl ExcelHandler {
             .with_context(|| format!("Failed to open Excel file: {path}"))?;
         let sheet_names = workbook.sheet_names();
 
-        let metadata = ExcelMetadata { sheet_names, modified_time };
-        self.metadata_cache.insert(path.to_string(), metadata.clone());
+        let metadata = ExcelMetadata {
+            sheet_names,
+            modified_time,
+        };
+        self.metadata_cache
+            .insert(path.to_string(), metadata.clone());
         Ok(metadata)
     }
 
@@ -191,7 +204,11 @@ impl ExcelHandler {
         parse_cell_ref(cell)
     }
 
-    pub fn read_sheet_data(&self, path: &str, sheet_name: Option<&str>) -> Result<Vec<Vec<String>>> {
+    pub fn read_sheet_data(
+        &self,
+        path: &str,
+        sheet_name: Option<&str>,
+    ) -> Result<Vec<Vec<String>>> {
         let metadata = self.get_metadata(path)?;
         let sheet_name = Self::resolve_sheet_selection(sheet_name, &metadata.sheet_names)?;
         with_sheet_data(path, &sheet_name, |rows| Ok(rows.to_vec()))
@@ -208,7 +225,8 @@ impl ExcelHandler {
 
         let workbook = NativeXlsxReader::from_path(path)
             .with_context(|| format!("Failed to open Excel file: {path}"))?;
-        let sheet = workbook.get_sheet_by_name(&sheet_name)
+        let sheet = workbook
+            .get_sheet_by_name(&sheet_name)
             .with_context(|| format!("Failed to read sheet: {sheet_name}"))?;
 
         let estimated_rows = range.end_row.saturating_sub(range.start_row) + 1;

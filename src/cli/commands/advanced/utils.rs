@@ -1,15 +1,15 @@
 //! Utility command handlers (completions, config, styled export)
 
+use anyhow::{Context, Result};
 use xls_rs::{
     config::Config,
     converter::Converter,
     excel::{
+        ExcelHandler, WriteOptions,
         chart::{ChartConfig, DataChartType},
         types::CellStyle,
-        ExcelHandler, WriteOptions,
     },
 };
-use anyhow::{Context, Result};
 
 /// Handle the config_init command
 ///
@@ -145,12 +145,7 @@ pub fn handle_add_sparkline(
     sheet: Option<String>,
 ) -> Result<()> {
     let handler = ExcelHandler::new();
-    handler.add_sparkline_formula(
-        &output,
-        &data_range,
-        &sparkline_cell,
-        sheet.as_deref(),
-    )?;
+    handler.add_sparkline_formula(&output, &data_range, &sparkline_cell, sheet.as_deref())?;
 
     crate::cli::runtime::log(format!("Added sparkline to {}", output));
 
@@ -206,8 +201,7 @@ pub fn handle_apply_formula_range(
 
     crate::cli::runtime::log(format!(
         "Applied formula to {} cell(s) in {}",
-        cells_affected,
-        output
+        cells_affected, output
     ));
 
     Ok(())

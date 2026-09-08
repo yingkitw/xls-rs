@@ -6,16 +6,14 @@
 use std::fs::File;
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
-use zip::ZipArchive;
 use xls_rs::excel::xlsx_writer::{RowData, XlsxWriter};
 use xls_rs::excel::{CellStyle, WriteOptions};
+use zip::ZipArchive;
 
 /// Validate that a ZIP file has the correct XLSX structure
 fn validate_xlsx_structure<P: AsRef<Path>>(path: P) -> Result<(), String> {
-    let file = File::open(path.as_ref())
-        .map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut zip = ZipArchive::new(file)
-        .map_err(|e| format!("Not a valid ZIP file: {}", e))?;
+    let file = File::open(path.as_ref()).map_err(|e| format!("Failed to open file: {}", e))?;
+    let mut zip = ZipArchive::new(file).map_err(|e| format!("Not a valid ZIP file: {}", e))?;
 
     // Check for required files
     let required_files = vec![
@@ -42,17 +40,17 @@ fn validate_xlsx_structure<P: AsRef<Path>>(path: P) -> Result<(), String> {
 
 /// Validate XML content in XLSX file
 fn validate_xml_content<P: AsRef<Path>>(path: P) -> Result<(), String> {
-    let file = File::open(path.as_ref())
-        .map_err(|e| format!("Failed to open file: {}", e))?;
-    let mut zip = ZipArchive::new(file)
-        .map_err(|e| format!("Not a valid ZIP file: {}", e))?;
+    let file = File::open(path.as_ref()).map_err(|e| format!("Failed to open file: {}", e))?;
+    let mut zip = ZipArchive::new(file).map_err(|e| format!("Not a valid ZIP file: {}", e))?;
 
     // Validate workbook.xml
     {
-        let mut workbook_file = zip.by_name("xl/workbook.xml")
+        let mut workbook_file = zip
+            .by_name("xl/workbook.xml")
             .map_err(|e| format!("Failed to open workbook.xml: {}", e))?;
         let mut workbook_content = String::new();
-        workbook_file.read_to_string(&mut workbook_content)
+        workbook_file
+            .read_to_string(&mut workbook_content)
             .map_err(|e| format!("Failed to read workbook.xml: {}", e))?;
 
         if !workbook_content.contains("<sheets>") {
@@ -65,10 +63,12 @@ fn validate_xml_content<P: AsRef<Path>>(path: P) -> Result<(), String> {
 
     // Validate worksheet
     {
-        let mut worksheet_file = zip.by_name("xl/worksheets/sheet1.xml")
+        let mut worksheet_file = zip
+            .by_name("xl/worksheets/sheet1.xml")
             .map_err(|e| format!("Failed to open worksheet: {}", e))?;
         let mut worksheet_content = String::new();
-        worksheet_file.read_to_string(&mut worksheet_content)
+        worksheet_file
+            .read_to_string(&mut worksheet_content)
             .map_err(|e| format!("Failed to read worksheet: {}", e))?;
 
         if !worksheet_content.contains("<worksheet") {
@@ -101,7 +101,11 @@ fn test_xlsx_structure_valid() {
     file.write_all(&buffer.into_inner()).unwrap();
 
     let result = validate_xlsx_structure(temp_path);
-    assert!(result.is_ok(), "XLSX structure validation failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "XLSX structure validation failed: {:?}",
+        result.err()
+    );
 
     std::fs::remove_file(temp_path).ok();
 }
@@ -129,7 +133,11 @@ fn test_xlsx_xml_content_valid() {
     file.write_all(&buffer.into_inner()).unwrap();
 
     let result = validate_xml_content(temp_path);
-    assert!(result.is_ok(), "XLSX XML validation failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "XLSX XML validation failed: {:?}",
+        result.err()
+    );
 
     std::fs::remove_file(temp_path).ok();
 }
@@ -174,7 +182,11 @@ fn test_xlsx_with_freeze_and_autofilter() {
 
     // Validate structure
     let result = validate_xlsx_structure(temp_path);
-    assert!(result.is_ok(), "XLSX structure validation failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "XLSX structure validation failed: {:?}",
+        result.err()
+    );
 
     // Validate XML contains freeze panes and autofilter
     {
@@ -218,7 +230,11 @@ fn test_xlsx_with_formulas() {
     file.write_all(&buffer.into_inner()).unwrap();
 
     let result = validate_xlsx_structure(temp_path);
-    assert!(result.is_ok(), "XLSX structure validation failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "XLSX structure validation failed: {:?}",
+        result.err()
+    );
 
     // Validate formula cell
     {
@@ -337,7 +353,11 @@ fn test_xlsx_special_characters() {
     file.write_all(&buffer.into_inner()).unwrap();
 
     let result = validate_xlsx_structure(temp_path);
-    assert!(result.is_ok(), "XLSX structure validation failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "XLSX structure validation failed: {:?}",
+        result.err()
+    );
 
     // Validate XML escaping
     {
@@ -379,7 +399,11 @@ fn test_xlsx_empty_cells() {
     file.write_all(&buffer.into_inner()).unwrap();
 
     let result = validate_xlsx_structure(temp_path);
-    assert!(result.is_ok(), "XLSX structure validation failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "XLSX structure validation failed: {:?}",
+        result.err()
+    );
 
     // Empty cells should not create <c> elements (they're implicit)
     {

@@ -176,7 +176,10 @@ impl XlsxStyleTable {
                     let id = attrs.get("numFmtId").and_then(|s| s.parse::<u32>().ok());
                     let code = attrs.get("formatCode").cloned().unwrap_or_default();
                     if let Some(id) = id {
-                        let info = NumFmtInfo { id, code: code.clone() };
+                        let info = NumFmtInfo {
+                            id,
+                            code: code.clone(),
+                        };
                         table.num_fmts.push(info);
                         table.num_fmt_by_id.insert(id, code);
                     }
@@ -283,10 +286,22 @@ impl XlsxStyleTable {
                     let xf_start = scanner.pos;
                     let tag_name = scanner.read_tag_name(xf_start);
                     let (attrs, _) = scanner.parse_attributes(xf_start + tag_name.len());
-                    let num_fmt_id = attrs.get("numFmtId").and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
-                    let font_id = attrs.get("fontId").and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
-                    let fill_id = attrs.get("fillId").and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
-                    let border_id = attrs.get("borderId").and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+                    let num_fmt_id = attrs
+                        .get("numFmtId")
+                        .and_then(|s| s.parse::<u32>().ok())
+                        .unwrap_or(0);
+                    let font_id = attrs
+                        .get("fontId")
+                        .and_then(|s| s.parse::<u32>().ok())
+                        .unwrap_or(0);
+                    let fill_id = attrs
+                        .get("fillId")
+                        .and_then(|s| s.parse::<u32>().ok())
+                        .unwrap_or(0);
+                    let border_id = attrs
+                        .get("borderId")
+                        .and_then(|s| s.parse::<u32>().ok())
+                        .unwrap_or(0);
 
                     let is_self_closing = scanner.is_self_closing(xf_start);
                     scanner.skip_open_tag();
@@ -326,9 +341,15 @@ impl XlsxStyleTable {
         let mut style = XlsxCellStyle::default();
 
         if let Some(f) = font {
-            if f.bold { style.bold = Some(true); }
-            if f.italic { style.italic = Some(true); }
-            if f.underline { style.underline = Some(true); }
+            if f.bold {
+                style.bold = Some(true);
+            }
+            if f.italic {
+                style.italic = Some(true);
+            }
+            if f.underline {
+                style.underline = Some(true);
+            }
             if !f.name.is_empty() && f.name != "Calibri" {
                 style.font_name = Some(f.name.clone());
             }
@@ -447,10 +468,21 @@ fn parse_font(scanner: &mut XmlScanner) -> FontInfo {
                         }
                         scanner.skip_open_tag();
                     }
-                    "b" => { info.bold = true; scanner.skip_open_tag(); }
-                    "i" => { info.italic = true; scanner.skip_open_tag(); }
-                    "u" => { info.underline = true; scanner.skip_open_tag(); }
-                    _ => { scanner.skip_open_tag(); }
+                    "b" => {
+                        info.bold = true;
+                        scanner.skip_open_tag();
+                    }
+                    "i" => {
+                        info.italic = true;
+                        scanner.skip_open_tag();
+                    }
+                    "u" => {
+                        info.underline = true;
+                        scanner.skip_open_tag();
+                    }
+                    _ => {
+                        scanner.skip_open_tag();
+                    }
                 }
             }
         }
@@ -497,7 +529,10 @@ fn parse_fill(scanner: &mut XmlScanner) -> FillInfo {
                                     break;
                                 }
                                 match scanner.find_any_open_tag() {
-                                    None => { scanner.pos = save2; break; }
+                                    None => {
+                                        scanner.pos = save2;
+                                        break;
+                                    }
                                     Some((sub_name, sub_start)) => {
                                         if let Some(end) = pf_end
                                             && sub_start >= end
@@ -505,7 +540,8 @@ fn parse_fill(scanner: &mut XmlScanner) -> FillInfo {
                                             scanner.pos = save2;
                                             break;
                                         }
-                                        let (sub_attrs, _) = scanner.parse_attributes(sub_start + sub_name.len());
+                                        let (sub_attrs, _) =
+                                            scanner.parse_attributes(sub_start + sub_name.len());
                                         if sub_name == "fgColor"
                                             && let Some(rgb) = sub_attrs.get("rgb")
                                         {
@@ -517,7 +553,9 @@ fn parse_fill(scanner: &mut XmlScanner) -> FillInfo {
                             }
                         }
                     }
-                    _ => { scanner.skip_open_tag(); }
+                    _ => {
+                        scanner.skip_open_tag();
+                    }
                 }
             }
         }
@@ -578,7 +616,10 @@ fn parse_border(scanner: &mut XmlScanner) -> BorderInfo {
                                 break;
                             }
                             match scanner.find_any_open_tag() {
-                                None => { scanner.pos = save2; break; }
+                                None => {
+                                    scanner.pos = save2;
+                                    break;
+                                }
                                 Some((sub_name, sub_start)) => {
                                     if let Some(end) = side_end
                                         && sub_start >= end
@@ -586,12 +627,13 @@ fn parse_border(scanner: &mut XmlScanner) -> BorderInfo {
                                         scanner.pos = save2;
                                         break;
                                     }
-                                    let (sub_attrs, _) = scanner.parse_attributes(sub_start + sub_name.len());
-                                        if sub_name == "color"
-                                            && let Some(rgb) = sub_attrs.get("rgb")
-                                        {
-                                            side.color = Some(rgb.clone());
-                                        }
+                                    let (sub_attrs, _) =
+                                        scanner.parse_attributes(sub_start + sub_name.len());
+                                    if sub_name == "color"
+                                        && let Some(rgb) = sub_attrs.get("rgb")
+                                    {
+                                        side.color = Some(rgb.clone());
+                                    }
                                     scanner.skip_open_tag();
                                 }
                             }
@@ -636,7 +678,11 @@ fn parse_alignment(scanner: &mut XmlScanner) -> AlignmentInfo {
                     if let Some(v) = attrs.get("vertical") {
                         info.vertical = Some(v.clone());
                     }
-                    if attrs.get("wrapText").map(|s| s == "1" || s.eq_ignore_ascii_case("true")).unwrap_or(false) {
+                    if attrs
+                        .get("wrapText")
+                        .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
+                        .unwrap_or(false)
+                    {
                         info.wrap_text = true;
                     }
                     scanner.skip_open_tag();
@@ -772,8 +818,14 @@ mod tests {
         assert_eq!(table.cell_xfs[1].num_fmt_id, 164);
         assert_eq!(table.cell_xfs[1].font_id, 1);
         assert_eq!(table.cell_xfs[1].fill_id, 2);
-        assert_eq!(table.cell_xfs[1].alignment.horizontal.as_deref(), Some("center"));
-        assert_eq!(table.cell_xfs[1].alignment.vertical.as_deref(), Some("center"));
+        assert_eq!(
+            table.cell_xfs[1].alignment.horizontal.as_deref(),
+            Some("center")
+        );
+        assert_eq!(
+            table.cell_xfs[1].alignment.vertical.as_deref(),
+            Some("center")
+        );
         // xf[2] — date format + border + wrap
         assert_eq!(table.cell_xfs[2].num_fmt_id, 14);
         assert_eq!(table.cell_xfs[2].border_id, 1);

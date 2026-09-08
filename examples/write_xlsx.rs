@@ -2,7 +2,7 @@
 //! `XlsxWriter` API. Demonstrates multi-sheet creation, mixed cell types,
 //! formulas, merged cells, freeze panes, auto-filter, and unicode strings.
 //!
-//! Run with: `cargo run --example write_xls`
+//! Run with: `cargo run --example write_xlsx`
 
 use xls_rs::excel::{RowData, WriteOptions, XlsxWriter};
 

@@ -19,18 +19,15 @@ const DEFAULT_COLORS: &[&str] = &[
 /// Get color for a series index, using custom colors if provided
 fn series_color(config: &ChartConfig, idx: usize) -> String {
     if let Some(ref colors) = config.colors
-        && let Some(c) = colors.get(idx) {
-            return c.clone();
-        }
+        && let Some(c) = colors.get(idx)
+    {
+        return c.clone();
+    }
     DEFAULT_COLORS[idx % DEFAULT_COLORS.len()].to_string()
 }
 
 /// Generate the chart XML (xl/charts/chart{n}.xml)
-pub fn generate_chart_xml(
-    config: &ChartConfig,
-    data: &[Vec<String>],
-    sheet_name: &str,
-) -> String {
+pub fn generate_chart_xml(config: &ChartConfig, data: &[Vec<String>], sheet_name: &str) -> String {
     let mut xml = String::with_capacity(4096);
     xml.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
     xml.push_str(r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">"#);
@@ -92,7 +89,10 @@ fn generate_axis_chart(
     xml.push_str(&format!("<{}>", tag));
 
     // Bar direction
-    if matches!(config.chart_type, DataChartType::Bar | DataChartType::Column) {
+    if matches!(
+        config.chart_type,
+        DataChartType::Bar | DataChartType::Column
+    ) {
         let dir = if config.chart_type == DataChartType::Bar {
             "bar"
         } else {
@@ -109,8 +109,12 @@ fn generate_axis_chart(
 
     for (ser_idx, &val_col) in config.value_columns.iter().enumerate() {
         let color = series_color(config, ser_idx);
-        xml.push_str(&format!(r#"<c:ser><c:idx val="{}"/><c:order val="{}"/>"#, ser_idx, ser_idx));
-        xml.push_str(&format!(r#"<c:tx><c:strRef><c:f>'{}'!{}{}</c:f></c:strRef></c:tx>"#,
+        xml.push_str(&format!(
+            r#"<c:ser><c:idx val="{}"/><c:order val="{}"/>"#,
+            ser_idx, ser_idx
+        ));
+        xml.push_str(&format!(
+            r#"<c:tx><c:strRef><c:f>'{}'!{}{}</c:f></c:strRef></c:tx>"#,
             escape_xml(sheet_name),
             col_num_to_letter(val_col + 1),
             1
@@ -180,7 +184,8 @@ fn generate_pie_chart(
     // Pie charts typically have one value column
     let val_col = config.value_columns.first().copied().unwrap_or(1);
     xml.push_str(r#"<c:ser><c:idx val="0"/><c:order val="0"/>"#);
-    xml.push_str(&format!(r#"<c:tx><c:strRef><c:f>'{}'!{}{}</c:f></c:strRef></c:tx>"#,
+    xml.push_str(&format!(
+        r#"<c:tx><c:strRef><c:f>'{}'!{}{}</c:f></c:strRef></c:tx>"#,
         escape_xml(sheet_name),
         col_num_to_letter(val_col + 1),
         1
@@ -222,7 +227,10 @@ fn generate_scatter_chart(
     for (ser_idx, &val_col) in config.value_columns.iter().enumerate() {
         let color = series_color(config, ser_idx);
 
-        xml.push_str(&format!(r#"<c:ser><c:idx val="{}"/><c:order val="{}"/>"#, ser_idx, ser_idx));
+        xml.push_str(&format!(
+            r#"<c:ser><c:idx val="{}"/><c:order val="{}"/>"#,
+            ser_idx, ser_idx
+        ));
         xml.push_str(&format!(
             r#"<c:spPr><a:ln><a:solidFill><a:srgbClr val="{}"/></a:solidFill></a:ln></c:spPr>"#,
             color
@@ -265,13 +273,20 @@ fn generate_cat_ref(
     xml.push_str(r#"<c:cat><c:strRef>"#);
     xml.push_str(&format!(
         r#"<c:f>'{}'!${}$2:${}${}</c:f>"#,
-        sheet_esc, col_letter, col_letter, data_rows + 1
+        sheet_esc,
+        col_letter,
+        col_letter,
+        data_rows + 1
     ));
     xml.push_str(r#"<c:strCache>"#);
     xml.push_str(&format!(r#"<c:ptCount val="{}"/>"#, data_rows));
     for (i, row) in data.iter().skip(1).enumerate() {
         if let Some(val) = row.get(cat_col) {
-            xml.push_str(&format!(r#"<c:pt idx="{}"><c:v>{}</c:v></c:pt>"#, i, escape_xml(val)));
+            xml.push_str(&format!(
+                r#"<c:pt idx="{}"><c:v>{}</c:v></c:pt>"#,
+                i,
+                escape_xml(val)
+            ));
         }
     }
     xml.push_str(r#"</c:strCache></c:strRef></c:cat>"#);
@@ -293,13 +308,20 @@ fn generate_val_ref(
     xml.push_str(r#"<c:val><c:numRef>"#);
     xml.push_str(&format!(
         r#"<c:f>'{}'!${}$2:${}${}</c:f>"#,
-        sheet_esc, col_letter, col_letter, data_rows + 1
+        sheet_esc,
+        col_letter,
+        col_letter,
+        data_rows + 1
     ));
     xml.push_str(r#"<c:numCache>"#);
     xml.push_str(&format!(r#"<c:ptCount val="{}"/>"#, data_rows));
     for (i, row) in data.iter().skip(1).enumerate() {
         if let Some(val) = row.get(val_col) {
-            xml.push_str(&format!(r#"<c:pt idx="{}"><c:v>{}</c:v></c:pt>"#, i, escape_xml(val)));
+            xml.push_str(&format!(
+                r#"<c:pt idx="{}"><c:v>{}</c:v></c:pt>"#,
+                i,
+                escape_xml(val)
+            ));
         }
     }
     xml.push_str(r#"</c:numCache></c:numRef></c:val>"#);
@@ -321,13 +343,20 @@ fn generate_num_ref_inner(
     xml.push_str(r#"<c:numRef>"#);
     xml.push_str(&format!(
         r#"<c:f>'{}'!${}$2:${}${}</c:f>"#,
-        sheet_esc, col_letter, col_letter, data_rows + 1
+        sheet_esc,
+        col_letter,
+        col_letter,
+        data_rows + 1
     ));
     xml.push_str(r#"<c:numCache>"#);
     xml.push_str(&format!(r#"<c:ptCount val="{}"/>"#, data_rows));
     for (i, row) in data.iter().skip(1).enumerate() {
         if let Some(val) = row.get(col) {
-            xml.push_str(&format!(r#"<c:pt idx="{}"><c:v>{}</c:v></c:pt>"#, i, escape_xml(val)));
+            xml.push_str(&format!(
+                r#"<c:pt idx="{}"><c:v>{}</c:v></c:pt>"#,
+                i,
+                escape_xml(val)
+            ));
         }
     }
     xml.push_str(r#"</c:numCache></c:numRef>"#);
@@ -345,10 +374,16 @@ pub fn generate_drawing_xml(chart_rid: &str, width_emu: u64, height_emu: u64) ->
     xml.push_str(r#"<xdr:graphicFrame macro="">"#);
     xml.push_str(r#"<xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>"#);
     xml.push_str(r#"<xdr:xfrm><a:off x="0" y="0"/>"#);
-    xml.push_str(&format!(r#"<a:ext cx="{}" cy="{}"/>"#, width_emu, height_emu));
+    xml.push_str(&format!(
+        r#"<a:ext cx="{}" cy="{}"/>"#,
+        width_emu, height_emu
+    ));
     xml.push_str(r#"</xdr:xfrm>"#);
     xml.push_str(r#"<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">"#);
-    xml.push_str(&format!(r#"<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="{}"/>"#, chart_rid));
+    xml.push_str(&format!(
+        r#"<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="{}"/>"#,
+        chart_rid
+    ));
     xml.push_str(r#"</a:graphicData></a:graphic>"#);
     xml.push_str(r#"</xdr:graphicFrame>"#);
     xml.push_str(r#"<xdr:clientData/>"#);
@@ -366,8 +401,7 @@ pub fn add_chart_to_zip<W: Write + Seek>(
     sheet_name: &str,
 ) -> Result<()> {
     let chart_idx = sheet_idx + 1;
-    let opts = FileOptions::<()>::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+    let opts = FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
 
     // Pixel to EMU conversion (1 pixel = 9525 EMU)
     let width_emu = config.width as u64 * 9525;
@@ -380,8 +414,7 @@ pub fn add_chart_to_zip<W: Write + Seek>(
 
     // 2. xl/drawings/drawing{n}.xml
     let drawing_xml = generate_drawing_xml("rId1", width_emu, height_emu);
-    let opts = FileOptions::<()>::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+    let opts = FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
     zip.start_file(format!("xl/drawings/drawing{}.xml", chart_idx), opts)?;
     zip.write_all(drawing_xml.as_bytes())?;
 
@@ -395,9 +428,11 @@ pub fn add_chart_to_zip<W: Write + Seek>(
         ),
         chart_idx
     );
-    let opts = FileOptions::<()>::default()
-        .compression_method(zip::CompressionMethod::Deflated);
-    zip.start_file(format!("xl/drawings/_rels/drawing{}.xml.rels", chart_idx), opts)?;
+    let opts = FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file(
+        format!("xl/drawings/_rels/drawing{}.xml.rels", chart_idx),
+        opts,
+    )?;
     zip.write_all(drawing_rels.as_bytes())?;
 
     // Worksheet rels are now created centrally in xml_gen.rs add_worksheet_rels

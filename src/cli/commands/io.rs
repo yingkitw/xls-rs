@@ -3,15 +3,11 @@
 //! Implements read, write, convert, and related I/O operations.
 
 use crate::cli::OutputFormat;
-use xls_rs::{
-    converter::Converter,
-    excel::ExcelHandler,
-    excel::reader::CellRange,
-    formula::FormulaEvaluator,
-    handler_registry::HandlerRegistry,
-    helpers::filter_by_range,
-};
 use anyhow::{Context, Result};
+use xls_rs::{
+    converter::Converter, excel::ExcelHandler, excel::reader::CellRange, formula::FormulaEvaluator,
+    handler_registry::HandlerRegistry, helpers::filter_by_range,
+};
 
 /// I/O command handler
 #[derive(Default)]
@@ -132,12 +128,12 @@ impl IoCommandHandler {
         crate::cli::runtime::ensure_can_write(&output)?;
         let evaluator = FormulaEvaluator::new();
 
-        if input.ends_with(".csv") {
-            evaluator.apply_to_csv(&input, &output, &formula, &cell)?
-        } else if input.ends_with(".xls") || input.ends_with(".xlsx") {
+        if input.ends_with(".xlsx") {
             evaluator.apply_to_excel(&input, &output, &formula, &cell, sheet.as_deref())?
+        } else if input.ends_with(".csv") || input.ends_with(".xls") {
+            anyhow::bail!("Unsupported format: {}. Only XLSX is supported.", input)
         } else {
-            anyhow::bail!("Unsupported file format for formula. Use .csv, .xls, or .xlsx");
+            anyhow::bail!("Unsupported file format for formula. Use .xlsx");
         };
 
         Ok(())
@@ -276,13 +272,16 @@ impl IoCommandHandler {
         let stdout = std::io::stdout();
         let mut writer = stdout.lock();
         for row in data {
-            let escaped: Vec<String> = row.iter().map(|cell| {
-                if cell.contains(',') || cell.contains('"') || cell.contains('\n') {
-                    format!("\"{}\"", cell.replace('"', "\"\""))
-                } else {
-                    cell.clone()
-                }
-            }).collect();
+            let escaped: Vec<String> = row
+                .iter()
+                .map(|cell| {
+                    if cell.contains(',') || cell.contains('"') || cell.contains('\n') {
+                        format!("\"{}\"", cell.replace('"', "\"\""))
+                    } else {
+                        cell.clone()
+                    }
+                })
+                .collect();
             writeln!(writer, "{}", escaped.join(","))?;
         }
         writer.flush().context("Failed to flush stdout")?;
@@ -326,7 +325,10 @@ impl IoCommandHandler {
                 let value = row.get(i).map(|s| s.as_str()).unwrap_or("");
                 obj.insert(header.clone(), serde_json::json!(value));
             }
-            println!("{}", serde_json::to_string(&serde_json::Value::Object(obj))?);
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::Value::Object(obj))?
+            );
         }
         Ok(())
     }

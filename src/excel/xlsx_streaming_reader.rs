@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::io::{BufReader, Read};
 use zip::ZipArchive;
 
-use super::xlsx_reader::{parse_cell_ref, XmlScanner, XlsxCellValue};
+use super::xlsx_reader::{XlsxCellValue, XmlScanner, parse_cell_ref};
 use super::xlsx_style_reader::XlsxStyleTable;
 
 /// Streaming XLSX reader that yields rows one at a time.
@@ -59,7 +59,11 @@ impl XlsxStreamingReader {
             let target = rels_map.get(rid).cloned().unwrap_or_else(|| {
                 format!(
                     "worksheets/sheet{}.xml",
-                    sheets_info.iter().position(|(n, _)| n == name).map(|i| i + 1).unwrap_or(1)
+                    sheets_info
+                        .iter()
+                        .position(|(n, _)| n == name)
+                        .map(|i| i + 1)
+                        .unwrap_or(1)
                 )
             });
             let sheet_path = if let Some(stripped) = target.strip_prefix('/') {
@@ -103,6 +107,7 @@ impl XlsxStreamingReader {
             shared_strings,
             buffer: Vec::with_capacity(8192),
             done: false,
+            dimension_cols: None,
         })
     }
 
@@ -136,41 +141,34 @@ impl XlsxStreamingReader {
             }
             scanner.skip_open_tag();
 
+            // Collect every <t> inside this <si> — a plain entry has one,
+            // a rich-text entry has several <r><t> runs. Bounded to the <si>
+            // so runs never leak between entries.
+            let si_end = scanner
+                .find_close_tag("si", scanner.pos)
+                .unwrap_or(scanner.data.len());
             let mut text = String::new();
-            let save = scanner.pos;
-            if scanner.find_open_tag("t").is_some() {
+            while scanner.find_open_tag_within("t", si_end).is_some() {
                 let t_start = scanner.pos;
                 if !scanner.is_self_closing(t_start) {
                     scanner.skip_open_tag();
-                    text.push_str(&scanner.read_text_until_close("t"));
+                    text.push_str(&scanner.read_text_verbatim_until_close("t"));
                 } else {
                     scanner.skip_open_tag();
-                }
-            } else {
-                scanner.pos = save;
-                while scanner.find_open_tag("r").is_some() {
-                    let r_start = scanner.pos;
-                    if scanner.is_self_closing(r_start) {
-                        scanner.skip_open_tag();
-                        continue;
-                    }
-                    scanner.skip_open_tag();
-                    let save_r = scanner.pos;
-                    if scanner.find_open_tag("t").is_some() {
-                        let t_start = scanner.pos;
-                        if !scanner.is_self_closing(t_start) {
-                            scanner.skip_open_tag();
-                            text.push_str(&scanner.read_text_until_close("t"));
-                        } else {
-                            scanner.skip_open_tag();
-                        }
-                    } else {
-                        scanner.pos = save_r;
-                    }
                 }
             }
 
             strings.push(text);
+
+            // Advance past this <si>'s closing tag so the next iteration
+            // finds the following entry.
+            match scanner.find_close_tag("si", scanner.pos) {
+                Some(close) => {
+                    scanner.pos = close;
+                    scanner.skip_open_tag();
+                }
+                None => break,
+            }
         }
 
         Ok(strings)
@@ -266,6 +264,10 @@ pub struct RowIterator<'a> {
     shared_strings: &'a [String],
     buffer: Vec<u8>,
     done: bool,
+    /// Sheet width from `<dimension ref="A1:C2">` (which precedes
+    /// `<sheetData>`). Rows are padded to this width with `Empty` so shapes
+    /// match the full-materialization reader on ragged sheets.
+    dimension_cols: Option<usize>,
 }
 
 impl<'a> RowIterator<'a> {
@@ -277,13 +279,20 @@ impl<'a> RowIterator<'a> {
         }
 
         loop {
+            // The <dimension> element precedes <sheetData>; capture it before
+            // its bytes get discarded during the scan for rows.
+            if self.dimension_cols.is_none() {
+                self.try_capture_dimension();
+            }
+
             // Look for `<row` in the buffer
             if let Some(row_start) = find_subslice(&self.buffer, b"<row") {
                 // Verify it's actually a <row tag (followed by space, >, /, etc.)
                 let after = row_start + 4;
                 if after < self.buffer.len() {
                     let c = self.buffer[after];
-                    if c != b' ' && c != b'>' && c != b'/' && c != b'\t' && c != b'\n' && c != b'\r' {
+                    if c != b' ' && c != b'>' && c != b'/' && c != b'\t' && c != b'\n' && c != b'\r'
+                    {
                         // Not a <row tag — discard this prefix and continue
                         self.buffer.drain(..after);
                         continue;
@@ -329,6 +338,37 @@ impl<'a> RowIterator<'a> {
                 }
             }
         }
+    }
+
+    /// Capture the sheet width from `<dimension ref="A1:C2">` if present in
+    /// the buffer. Runs until it succeeds; a no-op once captured or if the
+    /// first row has already been reached (dimension is gone from the buffer).
+    fn try_capture_dimension(&mut self) {
+        let Some(dim_pos) = find_subslice(&self.buffer, b"<dimension") else {
+            return;
+        };
+        // Bounded scan for the end of this tag
+        let Some(tag_end) = find_subslice_from(&self.buffer, b">", dim_pos) else {
+            return;
+        };
+        let tag = &self.buffer[dim_pos..=tag_end];
+        let Some(ref_pos) = find_subslice(tag, b"ref=\"") else {
+            self.dimension_cols = Some(0); // present but no ref — don't retry
+            return;
+        };
+        let after = &tag[ref_pos + 5..];
+        let Some(end_q) = after.iter().position(|&b| b == b'"') else {
+            self.dimension_cols = Some(0);
+            return;
+        };
+        let ref_str = String::from_utf8_lossy(&after[..end_q]);
+        if let Some(colon) = ref_str.find(':') {
+            let (_, col) = crate::excel::xlsx_reader::parse_cell_ref(&ref_str[colon + 1..]);
+            self.dimension_cols = Some(col as usize + 1);
+            return;
+        }
+        let (_, col) = crate::excel::xlsx_reader::parse_cell_ref(&ref_str);
+        self.dimension_cols = Some(col as usize + 1);
     }
 
     fn fill_buffer(&mut self) -> bool {
@@ -389,11 +429,17 @@ impl<'a> RowIterator<'a> {
             }
             scanner.skip_open_tag();
 
+            // Bound child-tag searches to this cell so formula cells without a
+            // cached <v> can't steal values from subsequent cells.
+            let cell_end = scanner
+                .find_close_tag("c", scanner.pos)
+                .unwrap_or(scanner.data.len());
+
             let mut value = XlsxCellValue::Empty;
             match cell_type.as_str() {
                 "s" => {
                     let save = scanner.pos;
-                    if scanner.find_open_tag("v").is_some() {
+                    if scanner.find_open_tag_within("v", cell_end).is_some() {
                         let v_start = scanner.pos;
                         if !scanner.is_self_closing(v_start) {
                             scanner.skip_open_tag();
@@ -427,12 +473,14 @@ impl<'a> RowIterator<'a> {
                 }
                 "b" => {
                     let save = scanner.pos;
-                    if scanner.find_open_tag("v").is_some() {
+                    if scanner.find_open_tag_within("v", cell_end).is_some() {
                         let v_start = scanner.pos;
                         if !scanner.is_self_closing(v_start) {
                             scanner.skip_open_tag();
                             let text = scanner.read_text_until_close("v");
-                            value = XlsxCellValue::Bool(text == "1" || text.eq_ignore_ascii_case("true"));
+                            value = XlsxCellValue::Bool(
+                                text == "1" || text.eq_ignore_ascii_case("true"),
+                            );
                         } else {
                             scanner.skip_open_tag();
                         }
@@ -442,7 +490,7 @@ impl<'a> RowIterator<'a> {
                 }
                 "e" => {
                     let save = scanner.pos;
-                    if scanner.find_open_tag("v").is_some() {
+                    if scanner.find_open_tag_within("v", cell_end).is_some() {
                         let v_start = scanner.pos;
                         if !scanner.is_self_closing(v_start) {
                             scanner.skip_open_tag();
@@ -457,7 +505,7 @@ impl<'a> RowIterator<'a> {
                 }
                 "str" => {
                     let save = scanner.pos;
-                    if scanner.find_open_tag("v").is_some() {
+                    if scanner.find_open_tag_within("v", cell_end).is_some() {
                         let v_start = scanner.pos;
                         if !scanner.is_self_closing(v_start) {
                             scanner.skip_open_tag();
@@ -472,7 +520,7 @@ impl<'a> RowIterator<'a> {
                 }
                 _ => {
                     let save = scanner.pos;
-                    if scanner.find_open_tag("v").is_some() {
+                    if scanner.find_open_tag_within("v", cell_end).is_some() {
                         let v_start = scanner.pos;
                         if !scanner.is_self_closing(v_start) {
                             scanner.skip_open_tag();
@@ -511,7 +559,14 @@ impl<'a> Iterator for RowIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let row_xml = self.extract_next_row()?;
-        Some(Self::parse_row(&row_xml, self.shared_strings))
+        let mut row = Self::parse_row(&row_xml, self.shared_strings);
+        // Pad to the declared sheet width so shapes match the full reader.
+        if let Some(width) = self.dimension_cols {
+            while row.len() < width {
+                row.push(XlsxCellValue::Empty);
+            }
+        }
+        Some(row)
     }
 }
 

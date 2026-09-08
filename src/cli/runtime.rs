@@ -40,9 +40,10 @@ pub fn debug(msg: impl AsRef<str>) {
 pub fn load_cli_config() -> Result<Config> {
     let r = get();
     if let Some(ref p) = r.config_path
-        && p.exists() {
-            return Config::load_from(&p.to_string_lossy());
-        }
+        && p.exists()
+    {
+        return Config::load_from(&p.to_string_lossy());
+    }
     Config::load()
 }
 
@@ -103,4 +104,3 @@ pub fn ensure_safe_input(path: &str) -> anyhow::Result<()> {
 
     Ok(())
 }
-

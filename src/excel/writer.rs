@@ -4,8 +4,8 @@ use std::io::BufWriter;
 
 use super::reader::ExcelHandler;
 use super::types::WriteOptions;
-use super::xlsx_writer::{CellData, RowData, XlsxWriter};
 use super::xlsx_reader::XlsxReader as NativeXlsxReader;
+use super::xlsx_writer::{CellData, RowData, XlsxWriter};
 use crate::traits::{DataWriteOptions, DataWriter};
 
 /// Write mode for range operations
@@ -74,7 +74,7 @@ impl ExcelHandler {
         }
 
         let file = File::create(excel_path)?;
-        let mut buf_writer = BufWriter::new(file);
+        let mut buf_writer = BufWriter::with_capacity(crate::limits::BUFFER_CAPACITY, file);
         writer.save(&mut buf_writer)?;
 
         Ok(())
@@ -100,7 +100,7 @@ impl ExcelHandler {
         }
 
         let file = File::create(path)?;
-        let mut buf_writer = BufWriter::new(file);
+        let mut buf_writer = BufWriter::with_capacity(crate::limits::BUFFER_CAPACITY, file);
         writer.save(&mut buf_writer)?;
 
         Ok(())
@@ -130,7 +130,10 @@ impl ExcelHandler {
         });
 
         let file = File::create(excel_path)?;
-        writer.save(BufWriter::new(file))?;
+        writer.save(BufWriter::with_capacity(
+            crate::limits::BUFFER_CAPACITY,
+            file,
+        ))?;
         Ok(())
     }
 
@@ -160,7 +163,10 @@ impl ExcelHandler {
         });
 
         let file = File::create(excel_path)?;
-        writer.save(BufWriter::new(file))?;
+        writer.save(BufWriter::with_capacity(
+            crate::limits::BUFFER_CAPACITY,
+            file,
+        ))?;
         Ok(())
     }
 
@@ -173,7 +179,14 @@ impl ExcelHandler {
         start_col: u16,
         sheet_name: Option<&str>,
     ) -> Result<()> {
-        self.write_range_with_mode(path, data, start_row, start_col, sheet_name, WriteMode::Expand)
+        self.write_range_with_mode(
+            path,
+            data,
+            start_row,
+            start_col,
+            sheet_name,
+            WriteMode::Expand,
+        )
     }
 
     /// Write data to a specific range with specified write mode
@@ -187,9 +200,15 @@ impl ExcelHandler {
         mode: WriteMode,
     ) -> Result<()> {
         match mode {
-            WriteMode::Expand => self.write_range_expand(path, data, start_row, start_col, sheet_name),
-            WriteMode::Preserve => self.write_range_preserve(path, data, start_row, start_col, sheet_name),
-            WriteMode::Overwrite => self.write_range_overwrite(path, data, start_row, start_col, sheet_name),
+            WriteMode::Expand => {
+                self.write_range_expand(path, data, start_row, start_col, sheet_name)
+            }
+            WriteMode::Preserve => {
+                self.write_range_preserve(path, data, start_row, start_col, sheet_name)
+            }
+            WriteMode::Overwrite => {
+                self.write_range_overwrite(path, data, start_row, start_col, sheet_name)
+            }
         }
     }
 
@@ -227,7 +246,7 @@ impl ExcelHandler {
         }
 
         let file = File::create(path)?;
-        let mut buf_writer = BufWriter::new(file);
+        let mut buf_writer = BufWriter::with_capacity(crate::limits::BUFFER_CAPACITY, file);
         writer.save(&mut buf_writer)?;
 
         Ok(())
@@ -258,17 +277,15 @@ impl ExcelHandler {
         let mut existing_data: Vec<Vec<String>> = Vec::new();
 
         if std::path::Path::new(path).exists()
-            && let Ok(workbook) = NativeXlsxReader::from_path(path) {
-                let sheet_names = workbook.sheet_names();
-                let sheet_name = sheet_names
-                    .first()
-                    .map(|s| s.as_str())
-                    .unwrap_or("Sheet1");
+            && let Ok(workbook) = NativeXlsxReader::from_path(path)
+        {
+            let sheet_names = workbook.sheet_names();
+            let sheet_name = sheet_names.first().map(|s| s.as_str()).unwrap_or("Sheet1");
 
-                if let Some(sheet) = workbook.get_sheet_by_name(sheet_name) {
-                    existing_data = sheet.to_string_vec();
-                }
+            if let Some(sheet) = workbook.get_sheet_by_name(sheet_name) {
+                existing_data = sheet.to_string_vec();
             }
+        }
 
         // Ensure existing data is large enough
         let required_rows = (start_row as usize + data.len()).max(existing_data.len());
@@ -308,7 +325,7 @@ impl ExcelHandler {
         writer.add_data(&existing_data);
 
         let file = File::create(path)?;
-        let mut buf_writer = BufWriter::new(file);
+        let mut buf_writer = BufWriter::with_capacity(crate::limits::BUFFER_CAPACITY, file);
         writer.save(&mut buf_writer)?;
 
         Ok(())
@@ -338,18 +355,14 @@ impl DataWriter for ExcelHandler {
         for col_idx in 0..data.first().map(|r| r.len()).unwrap_or(0) {
             let max_width = data
                 .iter()
-                .map(|row| {
-                    row.get(col_idx)
-                        .map(|s| s.len())
-                        .unwrap_or(0)
-                })
+                .map(|row| row.get(col_idx).map(|s| s.len()).unwrap_or(0))
                 .max()
                 .unwrap_or(10);
             writer.set_column_width(col_idx, (max_width + 2) as f64);
         }
 
         let file = File::create(path)?;
-        let mut buf_writer = BufWriter::new(file);
+        let mut buf_writer = BufWriter::with_capacity(crate::limits::BUFFER_CAPACITY, file);
         writer.save(&mut buf_writer)?;
 
         Ok(())
@@ -377,10 +390,7 @@ impl DataWriter for ExcelHandler {
 
         if let Ok(workbook) = NativeXlsxReader::from_path(path) {
             let sheet_names = workbook.sheet_names();
-            let sheet_name = sheet_names
-                .first()
-                .map(|s| s.as_str())
-                .unwrap_or("Sheet1");
+            let sheet_name = sheet_names.first().map(|s| s.as_str()).unwrap_or("Sheet1");
 
             if let Some(sheet) = workbook.get_sheet_by_name(sheet_name) {
                 existing_data = sheet.to_string_vec();
@@ -396,7 +406,7 @@ impl DataWriter for ExcelHandler {
         writer.add_data(&existing_data);
 
         let file = File::create(path)?;
-        let mut buf_writer = BufWriter::new(file);
+        let mut buf_writer = BufWriter::with_capacity(crate::limits::BUFFER_CAPACITY, file);
         writer.save(&mut buf_writer)?;
 
         Ok(())
@@ -406,20 +416,6 @@ impl DataWriter for ExcelHandler {
         let path_lower = path.to_lowercase();
         path_lower.ends_with(".xlsx")
     }
-}
-
-fn auto_widths(data: &[Vec<String>]) -> Vec<f64> {
-    let ncols = data.first().map(|r| r.len()).unwrap_or(0);
-    (0..ncols)
-        .map(|col_idx| {
-            let max_width = data
-                .iter()
-                .map(|row| row.get(col_idx).map(|s| s.len()).unwrap_or(0))
-                .max()
-                .unwrap_or(10);
-            (max_width + 2) as f64
-        })
-        .collect()
 }
 
 fn parse_csv_line(line: &str) -> Vec<String> {

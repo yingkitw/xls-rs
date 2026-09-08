@@ -3,15 +3,14 @@
 //! This module pre-compiles and caches frequently used regex patterns
 //! to avoid repeated compilation overhead.
 
-use std::sync::OnceLock;
 use regex::Regex;
+use std::sync::OnceLock;
 
 /// Cell reference regex (A1, B2, AA10, etc.)
 pub fn cell_reference_regex() -> &'static Regex {
     static CELL_REF: OnceLock<Regex> = OnceLock::new();
-    CELL_REF.get_or_init(|| {
-        Regex::new(r#"([A-Za-z]+)(\d+)"#).expect("Invalid cell reference regex")
-    })
+    CELL_REF
+        .get_or_init(|| Regex::new(r#"([A-Za-z]+)(\d+)"#).expect("Invalid cell reference regex"))
 }
 
 /// WHERE clause parsing regex
@@ -19,8 +18,9 @@ pub fn where_clause_regex() -> &'static Regex {
     static WHERE_CLAUSE: OnceLock<Regex> = OnceLock::new();
     WHERE_CLAUSE.get_or_init(|| {
         Regex::new(
-            r#"(\w+)\s*(>=|<=|!=|<>|=|>|<|contains|starts_with|ends_with)\s*['"]?([^'"]+)['"]?"#
-        ).expect("Invalid where clause regex")
+            r#"(\w+)\s*(>=|<=|!=|<>|=|>|<|contains|starts_with|ends_with)\s*['"]?([^'"]+)['"]?"#,
+        )
+        .expect("Invalid where clause regex")
     })
 }
 
@@ -28,57 +28,44 @@ pub fn where_clause_regex() -> &'static Regex {
 pub fn email_regex() -> &'static Regex {
     static EMAIL: OnceLock<Regex> = OnceLock::new();
     EMAIL.get_or_init(|| {
-        Regex::new(
-            r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        ).expect("Invalid email regex")
+        Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+            .expect("Invalid email regex")
     })
 }
 
 /// URL validation regex
 pub fn url_regex() -> &'static Regex {
     static URL: OnceLock<Regex> = OnceLock::new();
-    URL.get_or_init(|| {
-        Regex::new(
-            r"^https?://[^\s/$.?#].[^\s]*$"
-        ).expect("Invalid URL regex")
-    })
+    URL.get_or_init(|| Regex::new(r"^https?://[^\s/$.?#].[^\s]*$").expect("Invalid URL regex"))
 }
 
 /// Numeric regex (matches integers and floats)
 pub fn numeric_regex() -> &'static Regex {
     static NUMERIC: OnceLock<Regex> = OnceLock::new();
-    NUMERIC.get_or_init(|| {
-        Regex::new(r"^-?\d+\.?\d*$").expect("Invalid numeric regex")
-    })
+    NUMERIC.get_or_init(|| Regex::new(r"^-?\d+\.?\d*$").expect("Invalid numeric regex"))
 }
 
 /// Date format detection regex (YYYY-MM-DD, DD/MM/YYYY, etc.)
 pub fn date_regex() -> &'static Regex {
     static DATE: OnceLock<Regex> = OnceLock::new();
     DATE.get_or_init(|| {
-        Regex::new(
-            r"^\d{4}-\d{2}-\d{2}$|^\d{2}/\d{2}/\d{4}$|^\d{2}-\d{2}-\d{4}$"
-        ).expect("Invalid date regex")
+        Regex::new(r"^\d{4}-\d{2}-\d{2}$|^\d{2}/\d{2}/\d{4}$|^\d{2}-\d{2}-\d{4}$")
+            .expect("Invalid date regex")
     })
 }
 
 /// Phone number regex (flexible international format)
 pub fn phone_regex() -> &'static Regex {
     static PHONE: OnceLock<Regex> = OnceLock::new();
-    PHONE.get_or_init(|| {
-        Regex::new(
-            r"^[\d\s\-\+\(\)]{7,20}$"
-        ).expect("Invalid phone regex")
-    })
+    PHONE.get_or_init(|| Regex::new(r"^[\d\s\-\+\(\)]{7,20}$").expect("Invalid phone regex"))
 }
 
 /// UUID regex
 pub fn uuid_regex() -> &'static Regex {
     static UUID: OnceLock<Regex> = OnceLock::new();
     UUID.get_or_init(|| {
-        Regex::new(
-            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-        ).expect("Invalid UUID regex")
+        Regex::new(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+            .expect("Invalid UUID regex")
     })
 }
 

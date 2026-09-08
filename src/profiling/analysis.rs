@@ -164,7 +164,7 @@ impl super::profiler::DataProfiler {
 
         let mut sorted_lengths = lengths.clone();
         sorted_lengths.sort_unstable();
-        let median_length = if sorted_lengths.len().is_multiple_of(2) {
+        let median_length = if sorted_lengths.len() % 2 == 0 {
             let mid = sorted_lengths.len() / 2;
             (sorted_lengths[mid - 1] + sorted_lengths[mid]) / 2
         } else {
@@ -204,8 +204,10 @@ impl super::profiler::DataProfiler {
         let mean = numbers.iter().sum::<f64>() / numbers.len() as f64;
 
         let mut sorted_numbers = numbers.clone();
-        sorted_numbers.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
-        let median = if sorted_numbers.len().is_multiple_of(2) {
+        // total_cmp: NaN-safe (cells containing the literal "NaN" parse as
+        // f64::NAN, which would panic a partial_cmp().unwrap() here)
+        sorted_numbers.sort_unstable_by(|a, b| a.total_cmp(b));
+        let median = if sorted_numbers.len() % 2 == 0 {
             let mid = sorted_numbers.len() / 2;
             (sorted_numbers[mid - 1] + sorted_numbers[mid]) / 2.0
         } else {
@@ -425,5 +427,23 @@ impl super::profiler::DataProfiler {
             title_case,
             mixed_case,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::profiler::DataProfiler;
+
+    #[test]
+    fn test_numeric_stats_with_nan_does_not_panic() {
+        // Regression: the literal string "NaN" parses as f64::NAN, which made
+        // sort_unstable_by(partial_cmp().unwrap()) panic. Must sort NaN-safely.
+        let profiler = DataProfiler::new();
+        let data = vec!["3".to_string(), "NaN".to_string(), "1".to_string()];
+        let stats = profiler.calculate_numeric_stats(&data);
+        assert!(
+            stats.is_some(),
+            "numeric stats must be produced for numeric-ish data"
+        );
     }
 }

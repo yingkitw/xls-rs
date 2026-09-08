@@ -1,7 +1,8 @@
 [package]
 name = "xls-rs"
-version = "0.1.16"
+version = "0.1.17"
 edition = "2024"
+rust-version = "1.85"
 license = "Apache-2.0"
 repository = "https://github.com/yingkitw/xls-rs"
 readme = "README.md"
@@ -15,10 +16,6 @@ categories = [
     "encoding",
 ]
 description = "The pure-Rust XLSX toolkit. Read, write, and manipulate Excel XLSX files from CLI or library. Native XLSX writer with charts, styles, conditional formatting, and formulas. No Microsoft Excel, Python, or JVM dependency."
-
-
-[package.metadata]
-# Primary: xlsx, excel, spreadsheet, rust
 
 [package.metadata.docs.rs]
 all-features = true

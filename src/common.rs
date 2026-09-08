@@ -16,22 +16,14 @@ pub mod format {
             .unwrap_or_default();
 
         match ext.as_str() {
-            "csv" => "csv",
-            "xlsx" | "xls" => "excel",
-            "ods" => "ods",
-            "parquet" => "parquet",
-            "avro" => "avro",
-            "json" => "json",
+            "xlsx" | "xlsm" => "xlsx",
             _ => "unknown",
         }
     }
 
-    /// Check if format is supported
+    /// Check if format is supported (XLSX only)
     pub fn is_supported(format: &str) -> bool {
-        matches!(
-            format,
-            "csv" | "excel" | "ods" | "parquet" | "avro" | "json"
-        )
+        format == "xlsx"
     }
 }
 
